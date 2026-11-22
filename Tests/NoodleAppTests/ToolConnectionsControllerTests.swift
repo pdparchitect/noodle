@@ -40,6 +40,8 @@ import XCTest
         let configuration = ToolConnectionConfiguration(endpoint: URL(string: "https://example.com/mcp")!)
         let tool = ToolDefinition(id: "fixture", name: "Fixture", summary: "Fixture tools",
             defaultInstructions: "Keep accounts separate", iconName: "tools", configuration: .connection(configuration))
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use(ToolCatalog.noodle + [tool])
         let first = try f.controller.addPreset(tool, configuration: configuration)
         let second = try f.controller.addPreset(tool, configuration: configuration)
         XCTAssertNotEqual(first.id, second.id)
@@ -357,6 +359,33 @@ import XCTest
         XCTAssertTrue(log.text.contains(reason), log.text)
         XCTAssertFalse(log.text.contains(ActivityAdapter.secret), log.text)
         XCTAssertEqual(log.entries.count, 2, "Listing tools before every call is not activity: \(log.text)")
+    }
+
+    /// A call or check whose service rate limited some of its requests says how many were retried on its own line, and
+    /// one without retries says nothing more, so retries add no lines of their own.
+    func testACallOrCheckSaysHowManyRequestsItRetried() async throws {
+        let f = try fixture(), adapter = RetryingAdapter()
+        var account = try f.account()
+        account.adapter = "retrying"
+        f.controller.serve(["retrying": adapter])
+        await f.service.useAdapters(["retrying": adapter])
+        try f.controller.save(account)
+        try f.controller.assign([account.id], to: f.a)
+        try f.start([f.a])
+        await f.controller.readSignIns()
+        let session = try f.session(f.a).token
+        _ = try await f.exchange(ToolBridgeRequest(session: session, action: .call, provider: account.skillName,
+                                                   tool: "lookup", arguments: Data("{}".utf8)))
+        let log = f.controller.activity.log(for: account.id)
+        try await f.waitUntil { log.text.contains("called lookup") }
+        XCTAssertTrue(log.text.contains("s, 2 requests retried)"), log.text)
+        let now = Date()
+        await f.controller.checkWatched(at: now) { _, _ in }
+        await f.controller.checkWatched(at: now.addingTimeInterval(300)) { _, _ in }
+        XCTAssertTrue(log.text.contains("Checked for alerts: nothing new (2 requests retried)"), log.text)
+        adapter.retrying = false
+        await f.controller.checkWatched(at: now.addingTimeInterval(600)) { _, _ in }
+        XCTAssertTrue(log.entries.contains { $0.title == "Checked for alerts: nothing new" }, log.text)
     }
 
     /// The bots a connection is assigned to are told once it is signed in again after failing, so one waiting on it can
@@ -792,6 +821,27 @@ private struct ActivityAdapter: ToolConnectionAdapter {
     func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
         guard tool == "lookup" else { throw NSError(domain: "service", code: 403, userInfo: [NSLocalizedDescriptionKey: Self.secret]) }
         return Data(#"{"content":[{"type":"text","text":"clean"}],"isError":false}"#.utf8)
+    }
+}
+
+/// An app's adapter with a feed whose service rate limits two of the requests of each call and check while the test
+/// says so.
+private final class RetryingAdapter: ToolConnectionAdapter, @unchecked Sendable {
+    private let lock = NSLock()
+    private var limited = true
+    var retrying: Bool { get { lock.withLock { limited } } set { lock.withLock { limited = newValue } } }
+    var watchedTool: String? { "read-alerts" }
+    func tools(for connection: ToolConnection) async throws -> Data {
+        Data(#"{"tools":[{"name":"lookup","inputSchema":{"type":"object"}},{"name":"read-alerts","inputSchema":{"type":"object"}}]}"#.utf8)
+    }
+    private func retry() { if retrying { Retries.counting?.add(); Retries.counting?.add() } }
+    func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
+        retry()
+        return Data(#"{"content":[{"type":"text","text":"clean"}],"isError":false}"#.utf8)
+    }
+    func alerts(since: Date, connection: ToolConnection, access: ToolConnectionAccess) async throws -> [ServiceAlert] {
+        retry()
+        return []
     }
 }
 

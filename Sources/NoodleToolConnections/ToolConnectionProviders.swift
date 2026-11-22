@@ -10,6 +10,8 @@ public struct ToolConnectionCall: Sendable {
     public let duration: Duration
     /// Why it failed, already safe to show; nil when it did not.
     public let failure: String?
+    /// The requests it sent again after its service rate limited them or could not answer.
+    public var retries = 0
 }
 
 /// Keeps one tool provider registered per saved connection. Each call reads the connection
@@ -49,14 +51,16 @@ public struct ToolConnectionCall: Sendable {
                 summary: connection.description, appInstructions: said[id, default: ""],
                 userInstructions: connection.instructions) { [weak self] agent, action, tool, arguments, uri, authorized in
                 guard let current = await current(id) else { throw ToolConnectionServiceError.revoked }
-                let started = ContinuousClock.now
+                let started = ContinuousClock.now, retries = Retries()
                 func report(_ failure: String?) async {
                     await self?.onCall?(ToolConnectionCall(connection: id, agent: agent, action: action, tool: tool,
-                                                           duration: ContinuousClock.now - started, failure: failure))
+                                                           duration: ContinuousClock.now - started, failure: failure, retries: retries.total))
                 }
                 do {
-                    let result = try await service.perform(MCPBridgeRequest(session: "", connectionID: id, action: action, tool: tool, arguments: arguments, uri: uri),
-                                                           connection: current, authorized: authorized)
+                    let result = try await Retries.$counting.withValue(retries) {
+                        try await service.perform(MCPBridgeRequest(session: "", connectionID: id, action: action, tool: tool, arguments: arguments, uri: uri),
+                                                  connection: current, authorized: authorized)
+                    }
                     await report(nil)
                     return result
                 } catch {

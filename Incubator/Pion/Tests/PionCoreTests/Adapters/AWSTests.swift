@@ -208,4 +208,82 @@ final class AWSTests: XCTestCase {
         XCTAssertTrue(findings.text.contains("payroll-exports is public"), findings.text)
         XCTAssertEqual(try json(service.requests.last)["analyzerArn"] as? String, "arn:aws:access-analyzer:eu-west-1:1:analyzer/account")
     }
+
+    /// Who holds which permissions in an account, through users' groups too, with full administrators named first:
+    /// AdministratorAccess, or any policy allowing every action on every resource.
+    func testIAMAccessShowsWhoHoldsWhatAndWhoIsAFullAdministrator() async throws {
+        let service = FakeService()
+        let everything = #"{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"*","Resource":"*"}]}"#
+            .addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        let readOnly = #"{"Version":"2012-10-17","Statement":{"Effect":"Allow","Action":["s3:Get*"],"Resource":"*"}}"#
+            .addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        service.sequences["action:GetAccountAuthorizationDetails"] = [(200, """
+        <GetAccountAuthorizationDetailsResponse><GetAccountAuthorizationDetailsResult>
+        <UserDetailList>
+          <member><UserName>mallory</UserName><Arn>arn:aws:iam::1:user/mallory</Arn><GroupList><member>Admins</member></GroupList>
+            <AttachedManagedPolicies/><UserPolicyList/></member>
+          <member><UserName>avery</UserName><Arn>arn:aws:iam::1:user/avery</Arn><GroupList/>
+            <AttachedManagedPolicies><member><PolicyName>ReadOnlyAccess</PolicyName><PolicyArn>arn:aws:iam::aws:policy/ReadOnlyAccess</PolicyArn></member></AttachedManagedPolicies>
+            <UserPolicyList><member><PolicyName>logs</PolicyName><PolicyDocument>\(readOnly)</PolicyDocument></member></UserPolicyList></member>
+        </UserDetailList>
+        <GroupDetailList>
+          <member><GroupName>Admins</GroupName><AttachedManagedPolicies><member><PolicyName>AdministratorAccess</PolicyName>
+            <PolicyArn>arn:aws:iam::aws:policy/AdministratorAccess</PolicyArn></member></AttachedManagedPolicies><GroupPolicyList/></member>
+        </GroupDetailList>
+        <RoleDetailList/>
+        <IsTruncated>true</IsTruncated><Marker>page-2</Marker>
+        </GetAccountAuthorizationDetailsResult></GetAccountAuthorizationDetailsResponse>
+        """), (200, """
+        <GetAccountAuthorizationDetailsResponse><GetAccountAuthorizationDetailsResult>
+        <UserDetailList/><GroupDetailList/>
+        <RoleDetailList>
+          <member><RoleName>deploy</RoleName><Arn>arn:aws:iam::1:role/deploy</Arn><AttachedManagedPolicies>
+            <member><PolicyName>Everything</PolicyName><PolicyArn>arn:aws:iam::1:policy/Everything</PolicyArn></member></AttachedManagedPolicies>
+            <RolePolicyList/></member>
+        </RoleDetailList>
+        <Policies>
+          <member><PolicyName>Everything</PolicyName><Arn>arn:aws:iam::1:policy/Everything</Arn><DefaultVersionId>v2</DefaultVersionId>
+            <PolicyVersionList><member><Document>\(everything)</Document><VersionId>v2</VersionId><IsDefaultVersion>true</IsDefaultVersion></member></PolicyVersionList></member>
+        </Policies>
+        <IsTruncated>false</IsTruncated>
+        </GetAccountAuthorizationDetailsResult></GetAccountAuthorizationDetailsResponse>
+        """)]
+        let access = try await callTool(AWS.adapter, "iam-access", "{}", on: service, in: aws)
+        XCTAssertFalse(access.isError, access.text)
+        let lines = access.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines.contains { $0.contains("Full administrators (2)") }, access.text)
+        XCTAssertTrue(lines.contains { $0.contains("user mallory") && $0.contains("AdministratorAccess (through group Admins)") }, access.text)
+        XCTAssertTrue(lines.contains { $0.contains("role deploy") && $0.contains("Everything") }, access.text)
+        XCTAssertTrue(lines.contains { $0.contains("user avery") && $0.contains("ReadOnlyAccess") && $0.contains("logs (inline)") }, access.text)
+        XCTAssertFalse(lines.first { $0.contains("user avery") }?.contains("administrator") ?? true, access.text)
+        XCTAssertEqual(queryItems(service.requests.last)["Marker"], "page-2")
+        let principals = try XCTUnwrap(access.structured?["principals"] as? [[String: Any]])
+        XCTAssertEqual(principals.filter { $0["fullAdministrator"] as? Bool == true }.compactMap { $0["name"] as? String }.sorted(), ["deploy", "mallory"])
+    }
+
+    /// Who can become each role: another account, or anyone, reaches whatever the role reaches.
+    func testIAMAccessSaysWhoCanAssumeEachRole() async throws {
+        let service = FakeService()
+        func encoded(_ json: String) -> String { json.addingPercentEncoding(withAllowedCharacters: .alphanumerics)! }
+        let vendor = encoded(#"{"Statement":[{"Effect":"Allow","Principal":{"AWS":"arn:aws:iam::999999999999:root"},"Action":"sts:AssumeRole"}]}"#)
+        let lambda = encoded(#"{"Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}"#)
+        let open = encoded(#"{"Statement":[{"Effect":"Allow","Principal":"*","Action":"sts:AssumeRole"}]}"#)
+        let github = encoded(#"{"Statement":[{"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::111111111111:oidc-provider/token.actions.githubusercontent.com"},"Action":"sts:AssumeRoleWithWebIdentity"}]}"#)
+        func role(_ name: String, _ trust: String) -> String {
+            "<member><RoleName>\(name)</RoleName><Arn>arn:aws:iam::111111111111:role/\(name)</Arn><AssumeRolePolicyDocument>\(trust)</AssumeRolePolicyDocument><AttachedManagedPolicies/><RolePolicyList/></member>"
+        }
+        service.answers["action:GetAccountAuthorizationDetails"] = (200, """
+        <GetAccountAuthorizationDetailsResponse><GetAccountAuthorizationDetailsResult><UserDetailList/><GroupDetailList/>
+        <RoleDetailList>\(role("vendor-audit", vendor))\(role("worker", lambda))\(role("open", open))\(role("deploy", github))</RoleDetailList>
+        <IsTruncated>false</IsTruncated></GetAccountAuthorizationDetailsResult></GetAccountAuthorizationDetailsResponse>
+        """)
+        let access = try await callTool(AWS.adapter, "iam-access", "{}", on: service, in: aws)
+        XCTAssertFalse(access.isError, access.text)
+        let lines = access.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines.contains { $0.contains("role vendor-audit") && $0.contains("assumable by another account 999999999999") }, access.text)
+        XCTAssertTrue(lines.contains { $0.contains("role worker") && $0.contains("assumable by lambda.amazonaws.com") }, access.text)
+        XCTAssertTrue(lines.contains { $0.contains("role open") && $0.contains("assumable by anyone") }, access.text)
+        XCTAssertTrue(lines.contains { $0.contains("role deploy") && $0.contains("token.actions.githubusercontent.com") }, access.text)
+    }
 }
+

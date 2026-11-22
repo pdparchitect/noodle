@@ -14,11 +14,11 @@ public struct ServiceAlert: Sendable, Equatable {
 
 /// What the app has seen of each watched account's alerts, so an agent is woken only for what is new.
 ///
-/// An account first watched starts from then, so its past is not news. Each check after reads back an hour from the
-/// newest alert seen, as services list some alerts after their time, and leaves out the IDs it has seen already.
+/// An account first watched starts from then, so its past is not news. Each check after reads back from the newest
+/// alert seen, an hour unless its service says it lists alerts later, and leaves out the IDs it has seen already.
 public struct AlertWatch: Codable, Equatable, Sendable {
-    /// How far each check reads back from the newest alert seen.
-    static let overlap: TimeInterval = 3_600
+    /// How far each check reads back from the newest alert seen, unless the service says otherwise.
+    public static let overlap: TimeInterval = 3_600
     /// How long what was on a board is remembered after it leaves, so one going and coming back is not news.
     static let boardMemory: TimeInterval = 7 * 86_400
 
@@ -42,30 +42,32 @@ public struct AlertWatch: Codable, Equatable, Sendable {
 
     /// Checks `account` at `now` with `fetch`, which reads what its service raised from a time on. Returns what is new, or
     /// nil when nothing is or when the account is first watched.
-    public mutating func check(_ account: UUID, at now: Date,
+    public mutating func check(_ account: UUID, at now: Date, lookBack: TimeInterval = overlap,
                                fetch: (Date) async throws -> [ServiceAlert]) async throws -> News? {
-        guard let since = since(account, at: now) else { return nil }
-        return take(try await fetch(since), for: account)
+        guard let since = since(account, at: now, lookBack: lookBack) else { return nil }
+        return take(try await fetch(since), for: account, lookBack: lookBack)
     }
 
-    /// When the next check of `account` reads from, or nil when it is first watched, which starts it from `now`.
-    public mutating func since(_ account: UUID, at now: Date) -> Date? {
+    /// When the next check of `account` reads from, `lookBack` before the newest alert seen, or nil when it is first
+    /// watched, which starts it from `now`.
+    public mutating func since(_ account: UUID, at now: Date, lookBack: TimeInterval = overlap) -> Date? {
         guard let watched = accounts[account] else {
             accounts[account] = Account(start: now)
             return nil
         }
         let newest = watched.seen.values.max() ?? watched.start
-        return max(watched.start, newest.addingTimeInterval(-Self.overlap))
+        return max(watched.start, newest.addingTimeInterval(-lookBack))
     }
 
-    /// Takes in what a check of `account` found, read from `since(_:at:)`, and says what of it is new.
-    public mutating func take(_ found: [ServiceAlert], for account: UUID) -> News? {
+    /// Takes in what a check of `account` found, read from `since(_:at:lookBack:)` with the same `lookBack`, and says
+    /// what of it is new.
+    public mutating func take(_ found: [ServiceAlert], for account: UUID, lookBack: TimeInterval = overlap) -> News? {
         guard var watched = accounts[account] else { return nil }
         let new = found.filter { $0.time >= watched.start && watched.seen[$0.id] == nil }
         for alert in found where alert.time >= watched.start { watched.seen[alert.id] = alert.time }
         // Older than the next check reads from, an alert cannot come back to be told apart.
         if let latest = watched.seen.values.max() {
-            watched.seen = watched.seen.filter { $0.value >= latest.addingTimeInterval(-Self.overlap) }
+            watched.seen = watched.seen.filter { $0.value >= latest.addingTimeInterval(-lookBack) }
         }
         accounts[account] = watched
         guard let first = new.map(\.time).min(), let last = new.map(\.time).max() else { return nil }
@@ -170,6 +172,8 @@ public struct MCPTrigger: Sendable {
         case failed(String)
     }
 
+    /// The requests each account's last check sent again, after its service rate limited them or could not answer.
+    public private(set) var retried: [UUID: Int] = [:]
     /// The app's adapters, by the name connections give; those with a feed are watched.
     public var adapters: [String: any ToolConnectionAdapter] = [:]
     /// The boards watched on MCP servers, by the catalogue entry their connections are made from.
@@ -245,13 +249,16 @@ public struct MCPTrigger: Sendable {
         let watched = keeping.union(accounts.map(\.connection.id))
         watch.keep(only: watched)
         boardsRead = boardsRead.filter { watched.contains($0.key) }
+        retried = [:]
         for (connection, agents) in accounts where !agents.isEmpty {
+            let retries = Retries()
+            defer { if retries.total > 0 { retried[connection.id] = retries.total } }
             do {
                 if let trigger = trigger(for: connection) {
                     if let read = boardsRead[connection.id], now.timeIntervalSince(read) < trigger.interval { continue }
                     let request = MCPBridgeRequest(session: "", connectionID: connection.id, action: .call, tool: trigger.tool,
                                                    arguments: trigger.arguments)
-                    let found = try trigger.entries(try await call(connection, request))
+                    let found = try trigger.entries(try await Retries.$counting.withValue(retries) { try await call(connection, request) })
                     let new = watch.board(connection.id, at: now, found: found)
                     boardsRead[connection.id] = now
                     guard let new else { checked[connection.id] = .nothingNew; continue }
@@ -261,9 +268,10 @@ public struct MCPTrigger: Sendable {
                     continue
                 }
                 guard let tool = watchedTool(for: connection) else { continue }
-                guard let since = watch.since(connection.id, at: now) else { checked[connection.id] = .started; continue }
-                let found = try await alerts(connection, since)
-                guard let news = watch.take(found, for: connection.id) else { checked[connection.id] = .nothingNew; continue }
+                let lookBack = connection.adapter.flatMap { adapters[$0] }?.alertLookBack ?? AlertWatch.overlap
+                guard let since = watch.since(connection.id, at: now, lookBack: lookBack) else { checked[connection.id] = .started; continue }
+                let found = try await Retries.$counting.withValue(retries) { try await alerts(connection, since) }
+                guard let news = watch.take(found, for: connection.id, lookBack: lookBack) else { checked[connection.id] = .nothingNew; continue }
                 checked[connection.id] = .found("\(news.count)\(news.capped ? "+" : "") new alert\(news.count == 1 && !news.capped ? "" : "s")")
                 let note = AlertWatch.note(news, account: connection.name, skill: connection.skillName, tool: tool)
                 for agent in agents { wake(agent, note) }

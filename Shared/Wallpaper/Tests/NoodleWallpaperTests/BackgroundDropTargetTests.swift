@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 import XCTest
-import NoodleWallpaper
+@testable import NoodleWallpaper
 
 @MainActor final class BackgroundDropTargetTests: XCTestCase {
     func testDecorativePreviewAcceptsFileDropsWithoutChangingItsSize() async throws {
@@ -47,6 +47,57 @@ import NoodleWallpaper
             XCTAssertNil(state.failure)
             XCTAssertFalse(state.busy)
         }
+    }
+
+    /// ⌘V and the preview's Paste take what was copied while the sheet is open, ahead of the conversation behind it.
+    func testPasteTakesACopiedPictureAndIsOffWithNothingUsable() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("BackgroundPasteTargetTests-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("picture.png")
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 16, pixelsHigh: 16,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        for x in 0..<16 { for y in 0..<16 { bitmap.setColor(.systemTeal, atX: x, y: y) } }
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: source)
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        let general = BackgroundPasteView.pasteboard
+        BackgroundPasteView.pasteboard = pasteboard
+        defer { BackgroundPasteView.pasteboard = general }
+
+        let state = DropState()
+        let host = NSHostingView(rootView: PreviewFixture(state: state, height: 210))
+        let window = NSWindow(contentRect: .init(x: 120, y: 120, width: 520, height: 640),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.close(); window.contentView = nil }
+        window.orderFront(nil)
+        try await Task.sleep(for: .milliseconds(150))
+        host.layoutSubtreeIfNeeded()
+        let target = try XCTUnwrap(findView(host) { $0 is BackgroundPasteView } as? BackgroundPasteView)
+        XCTAssertTrue(window.firstResponder === target, "Paste goes to the sheet, not to the conversation behind it")
+
+        let paste = NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        pasteboard.clearContents()
+        pasteboard.setString("ordinary text", forType: .string)
+        XCTAssertFalse(target.validateMenuItem(paste), "text can't be a background")
+        let menu = try XCTUnwrap(target.menu(for: NSEvent.mouseEvent(with: .rightMouseDown, location: .init(x: 30, y: 30),
+            modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!))
+        let item = try XCTUnwrap(menu.items.first { $0.title == "Paste" })
+        XCTAssertTrue(item.target === target)
+        XCTAssertFalse(target.validateMenuItem(item))
+
+        pasteboard.clearContents()
+        XCTAssertTrue(pasteboard.writeObjects([source as NSURL]))
+        XCTAssertTrue(target.validateMenuItem(paste))
+        target.paste(nil)
+        for _ in 0..<100 where state.file == nil && state.failure == nil {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(state.file?.kind, .image, state.failure ?? "Paste did not reach the preview")
+        XCTAssertFalse(state.busy)
     }
 
     private func findView(_ view: NSView, matching predicate: (NSView) -> Bool) -> NSView? {

@@ -17,7 +17,8 @@ public enum AWS {
         defaultInstructions: """
         Use AWS to investigate an organisation's accounts: look up CloudTrail events by user, event name, source, resource or access key; \
         list GuardDuty, Security Hub and IAM Access Analyzer findings; trace an access key to its owner and last use; read \
-        the credential report for every user's password, keys and MFA; find EC2 instances by ID or IP address and security \
+        the credential report for every user's password, keys and MFA; see who holds which permissions with iam-access, \
+        full administrators first; find EC2 instances by ID or IP address and security \
         groups open to the internet; and query CloudWatch Logs Insights, such as VPC Flow Logs. It covers every account the \
         sign-in may use: list them with accounts, and name the account in each lookup, by ID or name, unless there is only \
         one; an access key's own account is found for you. Most services are regional: name another region when the \
@@ -42,7 +43,7 @@ public enum AWS {
     ]
 
     public static let adapter = OperationAdapter(operations: [Accounts(), CloudTrailEvents(), GuardDutyFindings(), SecurityHubFindings(), AccessKey(),
-                                                              CredentialReport(), AccessAnalyzerFindings(), Instances(), OpenSecurityGroups(),
+                                                              CredentialReport(), IAMAccess(), AccessAnalyzerFindings(), Instances(), OpenSecurityGroups(),
                                                               LogsInsights()])
 
     /// The client for one AWS service, as the connection's role in the account named, in the region asked for or the
@@ -315,6 +316,130 @@ extension AWS {
             let lines = csv.split(whereSeparator: \.isNewline).map { $0.split(separator: ",", omittingEmptySubsequences: false).map(String.init) }
             guard let columns = lines.first else { throw ServiceError.unreadable }
             return try ServiceTable(columns: columns, rows: lines.dropFirst().map { $0.map { CellValue.text($0) } }).result()
+        }
+    }
+
+    /// Who holds which permissions in an account, from IAM's authorization details, which SecurityAudit may read: each
+    /// user with what reaches it through its groups, and each role, with full administrators first. A full administrator
+    /// holds AdministratorAccess, or any policy that allows every action on every resource.
+    struct IAMAccess: ServiceOperation {
+        struct Input: Decodable, Sendable { let account: String? }
+        static let name = "iam-access"
+        static let summary = "Who holds which permissions in an account: each IAM user, with its groups' policies, and each role, with who can assume it, full administrators first."
+        static let input = JSONSchema.object(["account": AWS.accountInput])
+
+        struct Principal: Encodable {
+            let kind: String, name: String, arn: String?
+            let policies: [String]
+            let fullAdministrator: Bool
+            /// For a role: who may become it, as its trust policy says.
+            var assumableBy: [String] = []
+        }
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            let iam = try await AWS.account(input.account, on: service).at(host: "iam.amazonaws.com")
+            var users: [XMLNode] = [], groups: [XMLNode] = [], roles: [XMLNode] = [], managed: [XMLNode] = []
+            var marker: String?
+            // An account answers in pages; a few cover any but the largest.
+            for _ in 0..<20 {
+                var query: [String: String?] = ["Action": "GetAccountAuthorizationDetails", "Version": "2010-05-08", "MaxItems": "1000",
+                                                "Filter.member.1": "User", "Filter.member.2": "Group", "Filter.member.3": "Role",
+                                                "Filter.member.4": "LocalManagedPolicy"]
+                if let marker { query["Marker"] = marker }
+                let page = try await iam.xml([], query: query)
+                guard let result = page.child("GetAccountAuthorizationDetailsResult") else { throw ServiceError.unreadable }
+                users += result.child("UserDetailList")?.children ?? []
+                groups += result.child("GroupDetailList")?.children ?? []
+                roles += result.child("RoleDetailList")?.children ?? []
+                managed += result.child("Policies")?.children ?? []
+                guard result.value("IsTruncated") == "true", let next = result.value("Marker") else { marker = nil; break }
+                marker = next
+            }
+            // A customer managed policy grants what its default version says.
+            let allowsEverything: [String: Bool] = Dictionary(managed.compactMap { policy in
+                let document = policy.child("PolicyVersionList")?.children.first { $0.value("IsDefaultVersion") == "true" }?.value("Document")
+                return policy.value("Arn").map { ($0, document.map(Self.allowsEverything) ?? false) }
+            }, uniquingKeysWith: { first, _ in first })
+            func attached(_ node: XMLNode) -> [(name: String, everything: Bool)] {
+                (node.child("AttachedManagedPolicies")?.children ?? []).compactMap { policy in
+                    guard let name = policy.value("PolicyName") else { return nil }
+                    let arn = policy.value("PolicyArn") ?? ""
+                    return (name, arn.hasSuffix(":policy/AdministratorAccess") || allowsEverything[arn] == true)
+                }
+            }
+            func inline(_ node: XMLNode, _ list: String) -> [(name: String, everything: Bool)] {
+                (node.child(list)?.children ?? []).compactMap { policy in
+                    policy.value("PolicyName").map { ("\($0) (inline)", policy.value("PolicyDocument").map(Self.allowsEverything) ?? false) }
+                }
+            }
+            let groupPolicies = Dictionary(groups.compactMap { group in
+                group.value("GroupName").map { ($0, attached(group) + inline(group, "GroupPolicyList")) }
+            }, uniquingKeysWith: { first, _ in first })
+            var principals = users.compactMap { user -> Principal? in
+                guard let name = user.value("UserName") else { return nil }
+                let through = (user.child("GroupList")?.children ?? []).compactMap { $0.text.isEmpty ? nil : $0.text }.flatMap { group in
+                    (groupPolicies[group] ?? []).map { ("\($0.name) (through group \(group))", $0.everything) }
+                }
+                let held = attached(user) + inline(user, "UserPolicyList") + through
+                return Principal(kind: "user", name: name, arn: user.value("Arn"), policies: held.map(\.name), fullAdministrator: held.contains { $0.everything })
+            }
+            principals += roles.compactMap { role in
+                guard let name = role.value("RoleName") else { return nil }
+                let held = attached(role) + inline(role, "RolePolicyList")
+                let account = role.value("Arn").map(Self.account)
+                return Principal(kind: "role", name: name, arn: role.value("Arn"), policies: held.map(\.name), fullAdministrator: held.contains { $0.everything },
+                                 assumableBy: role.value("AssumeRolePolicyDocument").map { Self.trusted($0, account: account) } ?? [])
+            }
+            let admins = principals.filter(\.fullAdministrator), others = principals.filter { !$0.fullAdministrator }
+            func line(_ principal: Principal) -> String {
+                "\(principal.kind) \(principal.name): \(principal.policies.isEmpty ? "no policies" : principal.policies.joined(separator: ", "))"
+                    + (principal.assumableBy.isEmpty ? "" : "; assumable by " + principal.assumableBy.joined(separator: ", "))
+            }
+            var text = ["Full administrators (\(admins.count)):"] + admins.map { "- " + line($0) }
+            text += ["Everyone else (\(others.count)):"] + others.prefix(100).map { "- " + line($0) }
+            if others.count > 100 { text.append("\(others.count - 100) more; read them from the structured result.") }
+            struct Kept: Encodable { let principals: [Principal] }
+            return try ServiceResult(text: text.joined(separator: "\n"), structured: Kept(principals: admins + others))
+        }
+
+        /// The account an ARN is in, its fifth field, after the region that IAM leaves empty; an account ID alone is itself.
+        static func account(_ arn: String) -> String {
+            let fields = arn.split(separator: ":", omittingEmptySubsequences: false)
+            return fields.count > 4 ? String(fields[4]) : arn
+        }
+
+        /// Who a role's trust policy, as IAM gives it URL-encoded, lets become the role: anyone, another account, a service
+        /// or an identity provider. Another account or anyone reaches whatever the role reaches.
+        static func trusted(_ encoded: String, account: String?) -> [String] {
+            guard let json = encoded.removingPercentEncoding,
+                  let document = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return [] }
+            let statements = (document["Statement"] as? [[String: Any]]) ?? (document["Statement"] as? [String: Any]).map { [$0] } ?? []
+            func values(_ value: Any?) -> [String] { (value as? [String]) ?? (value as? String).map { [$0] } ?? [] }
+            var trusted: [String] = []
+            for statement in statements where statement["Effect"] as? String == "Allow" {
+                if statement["Principal"] as? String == "*" { trusted.append("anyone"); continue }
+                guard let principal = statement["Principal"] as? [String: Any] else { continue }
+                for arn in values(principal["AWS"]) {
+                    let other = arn == "*" ? nil : Self.account(arn)
+                    if arn == "*" { trusted.append("anyone") }
+                    else if let other, other != account { trusted.append("another account \(other)") }
+                    else { trusted.append(arn) }
+                }
+                trusted += values(principal["Service"]) + values(principal["Federated"]).map { $0.split(separator: "/", maxSplits: 1).last.map(String.init) ?? $0 }
+            }
+            return Array(NSOrderedSet(array: trusted)) as? [String] ?? trusted
+        }
+
+        /// Whether a policy document, as IAM gives it URL-encoded, allows every action on every resource.
+        static func allowsEverything(_ encoded: String) -> Bool {
+            guard let json = encoded.removingPercentEncoding,
+                  let document = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return false }
+            let statements = (document["Statement"] as? [[String: Any]]) ?? (document["Statement"] as? [String: Any]).map { [$0] } ?? []
+            func values(_ value: Any?) -> [String] { (value as? [String]) ?? (value as? String).map { [$0] } ?? [] }
+            return statements.contains { statement in
+                statement["Effect"] as? String == "Allow" && values(statement["Action"]).contains { $0 == "*" || $0 == "*:*" }
+                    && values(statement["Resource"]).contains("*")
+            }
         }
     }
 

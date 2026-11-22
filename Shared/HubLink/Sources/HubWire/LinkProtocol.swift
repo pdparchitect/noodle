@@ -173,6 +173,9 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     case markRead(LinkReadMark)
     /// Pins or unpins one of this user's conversations, for all their devices. The Hub pushes `pinChanged`.
     case pin(LinkPin)
+    /// Approves or declines a call one of this user's bots is holding for them, listed in `LinkBot.approvals`.
+    /// An approved one runs on the Hub before this answers `done`; the bot is woken with the outcome.
+    case decideApproval(LinkApprovalDecision)
     /// Sets how one of this user's groups notifies them, for all their devices. The Hub pushes
     /// `notificationsChanged`. Only a Hub whose status says `mutesGroups` knows it.
     case setNotifications(LinkNotificationsChange)
@@ -410,7 +413,7 @@ public struct LinkBackground: Codable, Equatable, Sendable {
     public var preset: String?
     /// The picture or video, by a name that changes whenever it does, so a device fetches each once.
     public var media: String?
-    /// `image`, `video` or `dynamicImage`, as Noodle names them.
+    /// `image`, `video`, `dynamicImage` or `shader`, as Noodle names them.
     public var mediaKind: String?
 
     public init(preset: String? = nil, media: String? = nil, mediaKind: String? = nil) {
@@ -425,13 +428,15 @@ public struct LinkBackground: Codable, Equatable, Sendable {
         guard let media else { return nil }
         let parts = media.split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 2, UUID(uuidString: String(parts[0])) != nil,
-              ["jpg", "heic", "heif", "mov", "mp4", "m4v"].contains(parts[1]) else { return nil }
+              ["jpg", "heic", "heif", "mov", "mp4", "m4v", "metal"].contains(parts[1]) else { return nil }
         return media
     }
 
-    /// The name a device keeps the small copy under: a video plays as MP4, anything else is a JPEG.
+    /// The name a device keeps the small copy under: a video plays as MP4, a shader stays Metal source,
+    /// anything else is a JPEG.
     public var compactFilename: String? {
-        mediaFilename.map { "\($0.prefix { $0 != "." }).\(mediaKind == "video" ? "mp4" : "jpg")" }
+        let suffix = mediaKind == "video" ? "mp4" : mediaKind == "shader" ? "metal" : "jpg"
+        return mediaFilename.map { "\($0.prefix { $0 != "." }).\(suffix)" }
     }
 }
 
@@ -1393,11 +1398,14 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
     public var suspendedUntil: Date?
     /// For its owner: the tasks it has open or waiting, oldest first. Empty for someone it is shared with.
     public var tasks: [LinkTask]
+    /// For its owner: the calls it is holding for their approval, oldest first. Empty for someone it is shared with,
+    /// and from a Hub without approvals.
+    public var approvals: [LinkApproval]
 
     public init(id: UUID, conversationID: UUID, draft: LinkBotDraft, createdAt: Date, phase: LinkBotPhase? = nil,
                 readUpTo: Date? = nil, status: String? = nil, archivedAt: Date? = nil, background: LinkBackground? = nil,
                 sharedWith: [UUID] = [], owner: String? = nil, canCall: Bool = false, pinnedAt: Date? = nil, pause: LinkBotPause? = nil,
-                suspendedUntil: Date? = nil, tasks: [LinkTask] = []) {
+                suspendedUntil: Date? = nil, tasks: [LinkTask] = [], approvals: [LinkApproval] = []) {
         self.id = id
         self.conversationID = conversationID
         self.draft = draft
@@ -1414,11 +1422,12 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         self.pause = pause
         self.suspendedUntil = suspendedUntil
         self.tasks = tasks
+        self.approvals = approvals
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, conversationID, draft, createdAt, phase, readUpTo, status, archivedAt, background, sharedWith, owner, canCall, pinnedAt, pause,
-             suspendedUntil, tasks
+             suspendedUntil, tasks, approvals
     }
 
     public init(from decoder: Decoder) throws {
@@ -1439,7 +1448,62 @@ public struct LinkBot: Codable, Equatable, Identifiable, Sendable {
         pause = (try? c.decodeIfPresent(LinkBotPause.self, forKey: .pause)) ?? nil
         suspendedUntil = try c.decodeIfPresent(Date.self, forKey: .suspendedUntil)
         tasks = try c.decode(.tasks, or: [])
+        approvals = try c.decode(.approvals, or: [])
     }
+}
+
+/// A call a bot holds for its owner's approval, as their devices show it: exactly what will run, from the call
+/// itself, and the bot's reason, which is its own words. The owner decides with `decideApproval`.
+public struct LinkApproval: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID
+    /// Where the bot asked: the conversation it named, or its own.
+    public var conversationID: UUID
+    /// The tool's connection, such as Google Workspace Containment, the tool and its own description.
+    public var providerTitle: String
+    public var tool: String
+    public var toolDescription: String
+    /// The call's input exactly as it will be sent, as JSON.
+    public var input: String
+    public var reason: String
+    public var createdAt: Date
+
+    public init(id: UUID, conversationID: UUID, providerTitle: String, tool: String, toolDescription: String = "", input: String,
+                reason: String, createdAt: Date) {
+        self.id = id; self.conversationID = conversationID; self.providerTitle = providerTitle; self.tool = tool
+        self.toolDescription = toolDescription; self.input = input; self.reason = reason; self.createdAt = createdAt
+    }
+
+    /// The input as one line per value, for the person to read before deciding.
+    public var inputLines: [(name: String, value: String)] {
+        guard let object = try? JSONSerialization.jsonObject(with: Data(input.utf8)) as? [String: Any] else { return [] }
+        return object.keys.sorted().map { key in
+            if let text = object[key] as? String { return (key, text) }
+            let data = object[key].flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys, .fragmentsAllowed]) }
+            return (key, data.map { String(decoding: $0, as: UTF8.self) } ?? "")
+        }
+    }
+}
+
+extension LinkApproval {
+    /// What a device tells its person as a list of held calls comes, against the IDs it knew pending: the new ones,
+    /// oldest first, to announce once; the IDs decided or gone since, to take back; and the IDs pending now, to keep.
+    public static func changes(listed: [LinkApproval], known: Set<UUID>) -> (new: [LinkApproval], gone: Set<UUID>, pending: Set<UUID>) {
+        let pending = Set(listed.map(\.id))
+        return (listed.filter { !known.contains($0.id) }.sorted { $0.createdAt < $1.createdAt }, known.subtracting(pending), pending)
+    }
+
+    /// One notification per held call, so deciding it anywhere takes back just that one.
+    public static func notificationIdentifier(_ id: UUID) -> String { "approval-\(id.uuidString)" }
+    public var notificationIdentifier: String { Self.notificationIdentifier(id) }
+}
+
+/// The owner's decision on a call one of their bots holds.
+public struct LinkApprovalDecision: Codable, Equatable, Sendable {
+    public var botID: UUID
+    public var approvalID: UUID
+    public var approve: Bool
+
+    public init(botID: UUID, approvalID: UUID, approve: Bool) { self.botID = botID; self.approvalID = approvalID; self.approve = approve }
 }
 
 /// A piece of work a bot keeps, as its owner's devices show it. Only the bot changes it; a device
@@ -1481,11 +1545,15 @@ public struct LinkGroupDraft: Codable, Equatable, Sendable {
     public var publicDescription: String
     /// Bots of the same user, at least one.
     public var botIDs: [UUID]
+    /// The bot that leads the group, one of `botIDs`: it hears its user's messages a moment before the others, and
+    /// may add and remove bots. Nil when the group has no lead.
+    public var leadID: UUID?
 
-    public init(name: String, publicDescription: String = "", botIDs: [UUID]) {
+    public init(name: String, publicDescription: String = "", botIDs: [UUID], leadID: UUID? = nil) {
         self.name = name
         self.publicDescription = publicDescription
         self.botIDs = botIDs
+        self.leadID = leadID
     }
 }
 

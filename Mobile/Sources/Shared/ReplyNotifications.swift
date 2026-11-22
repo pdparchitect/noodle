@@ -2,6 +2,7 @@ import CloudKit
 import Foundation
 import HubLink
 import os
+import UserNotifications
 
 /// The group the app shares with its notification and share extensions, named in each Info.plist.
 enum AppGroup {
@@ -20,6 +21,8 @@ struct NotificationRoute: Equatable, Sendable {
     let conversation: UUID
     /// Whether to call the bot once its conversation is open, as its widget's call button asks.
     var call = false
+    /// A call a bot holds for the person, to show once its conversation is open, as its notification asks.
+    var approval: UUID? = nil
 }
 
 /// What the phone gave each Hub to leave word of unread replies under.
@@ -129,5 +132,61 @@ enum ReplyNotification {
         if case .bot(let id) = reply.author { speaker = bots.first { $0.id == id } }
         let body = target.isGroup && speaker != nil ? "\(speaker!.draft.name): \(text)" : text
         return Content(title: target.name, body: body, text: text, sender: speaker.map(BotFace.init), target: target)
+    }
+}
+
+/// A call a bot holds for the person, as a notification with Approve and Decline, whether the app posts it as it hears
+/// from the Hub or the notification extension makes it from the Hub's ping. The Hub pings each held call under its own
+/// ID where a reply's ping names its conversation, so the extension asks the Hub which it is.
+enum HeldCallNotification {
+    static let category = "approval"
+    static let approveAction = "approve", declineAction = "decline"
+    static let approvalKey = "approval", botKey = "bot"
+
+    /// Exactly what will run, from the call itself, and the bot's reason. Tapping it opens the call in full.
+    static func content(_ approval: LinkApproval, botID: UUID, botName: String, topic: String) -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = botName
+        content.subtitle = "Asks to run \(approval.tool) on \(approval.providerTitle)"
+        let input = approval.inputLines.map { "\($0.name): \($0.value)" }.joined(separator: "\n")
+        content.body = MessageSegment.notificationText([input, approval.reason].filter { !$0.isEmpty }.joined(separator: "\n"))
+        content.sound = .default
+        content.categoryIdentifier = category
+        content.threadIdentifier = approval.conversationID.uuidString
+        content.userInfo = [LinkPush.topicField: topic, LinkPush.conversationField: approval.conversationID.uuidString,
+                            approvalKey: approval.id.uuidString, botKey: botID.uuidString]
+        return content
+    }
+
+    /// The held call a Hub's ping names, and its bot; nil when the ping is a reply's, or the Hub cannot be reached.
+    @MainActor static func held(for route: NotificationRoute, hubs: URL) async -> (approval: LinkApproval, bot: LinkBot)? {
+        guard let directory = PushTopic.directory(of: route.topic, in: hubs),
+              case .bots(let bots)? = try? await HubPairing(directory: directory, deviceName: "").request(.bots) else { return nil }
+        for bot in bots where bot.owner == nil {
+            if let approval = bot.approvals.first(where: { $0.id == route.conversation }) { return (approval, bot) }
+        }
+        return nil
+    }
+
+    /// The held call whose ping the Hub took back, once decided on any device: no longer pending here. Nil when the
+    /// ping was a reply's.
+    static func withdrawn(_ withdrawal: PushWithdrawal, hubs: URL) -> UUID? {
+        guard let directory = PushTopic.directory(of: withdrawal.topic, in: hubs) else { return nil }
+        let pending = AppBadge.pendingApprovals(in: directory)
+        guard let id = pending.first(where: { LinkPush.recordName(topic: withdrawal.topic, conversation: $0) == withdrawal.recordName }) else {
+            return nil
+        }
+        AppBadge.setPendingApprovals(pending.subtracting([id]), in: directory)
+        return id
+    }
+
+    /// Takes away the notifications of calls no longer held, whichever way they came.
+    static func remove(_ ids: Set<UUID>) async {
+        guard !ids.isEmpty else { return }
+        let center = UNUserNotificationCenter.current()
+        let shown = await center.deliveredNotifications().filter { notification in
+            (notification.request.content.userInfo[approvalKey] as? String).flatMap(UUID.init(uuidString:)).map(ids.contains) ?? false
+        }
+        center.removeDeliveredNotifications(withIdentifiers: shown.map(\.request.identifier) + ids.map(LinkApproval.notificationIdentifier))
     }
 }

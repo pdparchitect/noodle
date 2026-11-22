@@ -114,10 +114,17 @@ enum LinkWireSamples {
         LinkTask(id: id(0x42), title: "Ask Bo", state: .waiting, waitingOn: .bot(id(0x02)), conversationID: id(0x12), updatedAt: date(30)),
     ]
 
+    static let approvals = [
+        LinkApproval(id: id(0x43), conversationID: id(0x11), providerTitle: "Google Workspace Containment", tool: "suspend",
+                     toolDescription: "Suspend a user", input: #"{"user":"m.okafor@kestrel.example"}"#,
+                     reason: "Signed in from a known-bad IP", createdAt: date(40)),
+    ]
+
     static var fullBot: LinkBot {
         LinkBot(id: id(0x01), conversationID: id(0x11), draft: fullDraft, createdAt: date(), phase: .ready, readUpTo: date(100),
                 status: "Reading papers", archivedAt: date(200), background: background, sharedWith: [id(0x50), id(0x51)],
-                owner: nil, canCall: true, pinnedAt: date(300), pause: pause, suspendedUntil: date(400), tasks: tasks)
+                owner: nil, canCall: true, pinnedAt: date(300), pause: pause, suspendedUntil: date(400), tasks: tasks,
+                approvals: approvals)
     }
 
     static let minimalBot = LinkBot(id: id(0x02), conversationID: id(0x12), draft: minimalDraft, createdAt: date())
@@ -290,6 +297,7 @@ enum LinkWireSamples {
             S.request("react", .react(LinkReactionChange(conversationID: id(0x11), messageID: id(0x80), emoji: "👍", present: true))),
             S.request("markRead", .markRead(LinkReadMark(conversationID: id(0x11), messageID: id(0x80)))),
             S.request("pin", .pin(LinkPin(conversationID: id(0x11), pinned: false))),
+            S.request("decideApproval", .decideApproval(LinkApprovalDecision(botID: id(0x01), approvalID: id(0x43), approve: true))),
             S.request("setNotifications", .setNotifications(LinkNotificationsChange(conversationID: id(0x60), notifications: .muted))),
             S.request("setNotifications.default", .setNotifications(LinkNotificationsChange(conversationID: id(0x60),
                                                                                              notifications: .default))),

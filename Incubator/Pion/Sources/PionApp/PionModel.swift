@@ -65,6 +65,8 @@ import UniformTypeIdentifiers
     private func viewing(_ id: UUID) -> Bool { isViewing?(id) ?? (selection == id) }
     /// Each agent's tasks, as the messenger keeps them.
     private(set) var tasksByAgent: [UUID: [AgentTask]] = [:]
+    /// The agents' calls held for the champion's approval.
+    let approvals = AgentApprovalDesk()
     /// Whether the main window shows the welcome: offered once to someone with no agents, then from Help > Welcome.
     private(set) var showsWelcome = false
     /// How groups notify the champion, kept where Noodle keeps it.
@@ -76,6 +78,8 @@ import UniformTypeIdentifiers
     @ObservationIgnored var onMessagesArrived: (([ChatMessage]) -> Void)?
     /// A conversation that notifies less than before, whose shown replies the app takes back.
     @ObservationIgnored var onNotificationsNarrowed: ((UUID) -> Void)?
+    /// A call an agent held for the champion's approval; the app shows it.
+    @ObservationIgnored var onApprovalHeld: ((AgentApproval, AgentRecord) -> Void)?
     /// An Investigation an agent opened, which the champion hears of at once; the app shows it.
     @ObservationIgnored var onAgentOpenedInvestigation: ((Investigation, AgentRecord) -> Void)?
     /// What the champion sent, with the files' names, for a call in that conversation to hear about.
@@ -132,8 +136,12 @@ import UniformTypeIdentifiers
         defaults = harnessDefaults
         messenger = MessengerBroker(repository: repository)
         messenger.refusingPosts = { [store] id in Self.postsRefused(in: id, store: store) }
+        messenger.onGroupMembersChanged = { [weak self] before, after, lead in
+            Task { @MainActor in self?.leadChangedMembers(from: before, to: after, by: lead) }
+        }
         store.onChange = { [weak self] in Task { @MainActor in self?.reloadPion() } }
         messenger.onTasksChanged = { [weak self] id in Task { @MainActor in self?.reloadTasks(of: id) } }
+        connectApprovals()
         messenger.onWakesChanged = { [weak self] id in
             Task { @MainActor in guard let self else { return }; self.runtime.refreshWakes(for: id, repository: self.repository) }
         }
@@ -238,7 +246,8 @@ import UniformTypeIdentifiers
         if toolBroker == nil {
             // Every agent has the case tool; the broker refuses conversations it is not in.
             let assignments = toolAssignments
-            let broker = ToolBridgeBroker(registry: tools, host: .repository(repository) { assignments.assignments(for: $0) }) {
+            let held: @Sendable (UUID) -> Void = { [weak self] id in Task { @MainActor in self?.approvals.reload(agent: id) } }
+            let broker = ToolBridgeBroker(registry: tools, host: .repository(repository, approvalsChanged: held) { assignments.assignments(for: $0) }) {
                 assignments.assignments(for: $0)
             }
             broker.onSkillsChanged = { [weak self] id in
@@ -325,6 +334,7 @@ import UniformTypeIdentifiers
         budgets.onChange = { [weak self] in self?.applyBudgets() }
         budgets.load(everyAgent, repository: repository)
         tasksByAgent = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, (try? repository.currentTasks(agentID: $0.id)) ?? []) })
+        approvals.reload(Dictionary(uniqueKeysWithValues: agents.map { ($0.id, (try? repository.currentApprovals(agentID: $0.id)) ?? []) }))
     }
 
     private func reloadWorkspace() {
@@ -743,7 +753,7 @@ import UniformTypeIdentifiers
     func refreshBadge() { badge = nil; updateBadge() }
 
     private func updateBadge() {
-        let count = badgedConversationIDs.count
+        let count = badgedConversationIDs.count + approvals.pendingCount
         guard count != badge else { return }
         badge = count
         onBadge?(count)
@@ -1013,6 +1023,30 @@ import UniformTypeIdentifiers
 
     /// Each conversation's voice recorder, kept while Pion runs so switching away does not lose a recording.
     @ObservationIgnored var voiceRecorders: [UUID: AnyObject] = [:]
+
+    // MARK: Approvals, as in Noodle
+
+    /// A held call shows in the sidebar and the Dock, and goes into the Investigation's audit log with how it was decided.
+    /// The app adds the notification.
+    private func connectApprovals() {
+        approvals.agent = { [weak self] id in self?.agent(id) }
+        approvals.load = { [repository] id in (try? repository.currentApprovals(agentID: id)) ?? [] }
+        approvals.decide = { [weak self] approval, agent, approve in
+            guard let self, let broker = self.toolBroker else { throw AgentApprovalError("Pion is not running its agents' tools.") }
+            return try await broker.decide(approval: approval.id, of: agent.id, approve: approve, by: self.champion, repository: self.repository)
+        }
+        approvals.onPending = { [weak self] approval, agent in
+            self?.store.logApproval(approval, agent: agent.id, agentName: agent.displayName)
+            self?.onApprovalHeld?(approval, agent)
+        }
+        approvals.onDecided = { [weak self] approval, agent in
+            guard let self else { return }
+            self.store.logApproval(approval, agent: agent.id, agentName: agent.displayName)
+            if !self.isScripted { self.runtime.wake(agent.id, note: approval.outcomeNote, repository: self.repository) }
+        }
+        approvals.onCountChanged = { [weak self] in self?.updateBadge() }
+        approvals.onError = { [weak self] in self?.problem = $0 }
+    }
 
     // MARK: Tasks, listed and answered as in Noodle
 
@@ -1292,6 +1326,25 @@ import UniformTypeIdentifiers
         return updated
     }
 
+    /// After a group's lead added or removed a member through Messenger: an Investigation's audit log says which,
+    /// in the lead's name, and the members are woken as after the champion's edit.
+    func leadChangedMembers(from before: BotConversation, to after: BotConversation, by lead: UUID) {
+        let names = { (ids: Set<UUID>) in ids.compactMap { self.agent($0)?.displayName }.sorted().joined(separator: ", ") }
+        let added = names(Set(after.participantIDs).subtracting(before.participantIDs))
+        let removed = names(Set(before.participantIDs).subtracting(after.participantIDs))
+        if store.investigation(after.id) != nil {
+            do {
+                try store.update(after.id, by: .agent(lead), now: now) { _ in
+                    (added.isEmpty ? [] : [("staff", "Added \(added).")]) + (removed.isEmpty ? [] : [("staff", "Removed \(removed).")])
+                }
+            } catch { problem = error.localizedDescription }
+        }
+        reload()
+        readTranscript(after.id)
+        synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: after))
+        wakeMembersAfterEdit(from: before, to: after)
+    }
+
     /// When each agent last opened Investigations, so one cannot open them without end.
     private var agentOpenings: [UUID: [Date]] = [:]
 
@@ -1304,14 +1357,7 @@ import UniformTypeIdentifiers
         guard recent.count < 3 else {
             throw CaseError("You have opened three Investigations in the last hour. Ask the champion before opening another.")
         }
-        var staff: Set<UUID> = []
-        for name in opening.team {
-            guard let member = agents.first(where: { $0.displayName.caseInsensitiveCompare(name) == .orderedSame }) else {
-                throw CaseError("No agent is called \(name). The agents are " + agents.map(\.displayName).sorted().joined(separator: ", ") + ".")
-            }
-            staff.insert(member.id)
-        }
-        let investigation = try open(Draft(title: opening.title, objective: opening.objective, lead: agentID, staff: staff),
+        let investigation = try open(Draft(title: opening.title, objective: opening.objective, lead: agentID),
                                      openedBy: .agent(agentID))
         agentOpenings[agentID] = recent + [now]
         onAgentOpenedInvestigation?(investigation, opener)

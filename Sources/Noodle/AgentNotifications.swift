@@ -15,6 +15,11 @@ import UserNotifications
     static let signInKey = "signIn"
     static let callKey = "call"
     static let alertKey = "alert"
+    nonisolated static let approvalKey = "approval"
+    nonisolated static let agentKey = "agent"
+    /// A held call's banner offers its decision; either needs the Mac unlocked.
+    static let approvalCategory = "approval"
+    nonisolated static let approveAction = "approve", declineAction = "decline"
     /// One at a time: a call rings again by replacing it.
     private static let ringingIdentifier = "ringing"
 
@@ -38,6 +43,10 @@ import UserNotifications
     static func configure(delegate: any UNUserNotificationCenterDelegate) {
         let center = UNUserNotificationCenter.current()
         center.delegate = delegate
+        center.setNotificationCategories([UNNotificationCategory(identifier: approvalCategory, actions: [
+            UNNotificationAction(identifier: approveAction, title: "Approve", options: [.authenticationRequired]),
+            UNNotificationAction(identifier: declineAction, title: "Decline", options: [.authenticationRequired]),
+        ], intentIdentifiers: [])])
         center.requestAuthorization(options: [.alert, .sound, .badge]) { _, error in
             if let error {
                 logger.error("Notification authorization failed: \(error.localizedDescription, privacy: .public)")
@@ -141,12 +150,33 @@ import UserNotifications
         add(content, identifier: "alert-\(conversationID.uuidString)", agent: agent, pictureName: UUID().uuidString)
     }
 
+    /// A call a bot is waiting on the person to approve. It shows even with the app in front, and is time-sensitive, as
+    /// the bot cannot go on until someone decides; it is taken back once decided.
+    static func postApproval(_ approval: AgentApproval, from agent: AgentRecord) {
+        let content = UNMutableNotificationContent()
+        content.title = agent.displayName
+        content.subtitle = "Asks to run \(approval.tool) on \(approval.providerTitle)"
+        let input = approval.inputLines.map { "\($0.name): \($0.value)" }.joined(separator: "\n")
+        content.body = MessageSegment.notificationText([input, approval.reason].filter { !$0.isEmpty }.joined(separator: "\n"))
+        content.sound = .default
+        content.interruptionLevel = .timeSensitive
+        content.categoryIdentifier = approvalCategory
+        var info: [String: Any] = [approvalKey: approval.id.uuidString, agentKey: agent.id.uuidString]
+        if let conversation = approval.conversationID { info[conversationIDKey] = conversation.uuidString }
+        content.userInfo = info
+        add(content, identifier: "approval-\(approval.id.uuidString)", agent: agent, pictureName: UUID().uuidString)
+    }
+
+    static func withdrawApproval(_ id: UUID) {
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["approval-\(id.uuidString)"])
+    }
+
     /// How a banner shows while the app is in front: a ringing call only rings, since its panel shows who calls; a
     /// sign-in or an alert always shows; anything else only while the app is away.
     static func presentation(of notification: UNNotification) -> UNNotificationPresentationOptions {
         let info = notification.request.content.userInfo
         if info[callKey] != nil { return [.sound] }
-        return info[signInKey] != nil || info[alertKey] != nil || shouldPresentActivity ? [.banner, .sound] : []
+        return info[signInKey] != nil || info[alertKey] != nil || info[approvalKey] != nil || shouldPresentActivity ? [.banner, .sound] : []
     }
 
     /// What a clicked banner is about.
@@ -154,12 +184,20 @@ import UserNotifications
         let conversationID: UUID?
         let messageID: UUID?
         let isSignIn: Bool
+        /// A held call's banner: which call of which bot, and the decision when one of its buttons was chosen.
+        var approval: (id: UUID, agent: UUID)? = nil
+        var approve: Bool? = nil
     }
 
     nonisolated static func click(in response: UNNotificationResponse) -> Click {
         let info = response.notification.request.content.userInfo
-        return Click(conversationID: (info[conversationIDKey] as? String).flatMap(UUID.init),
-                     messageID: (info[messageIDKey] as? String).flatMap(UUID.init), isSignIn: info[signInKey] != nil)
+        var click = Click(conversationID: (info[conversationIDKey] as? String).flatMap(UUID.init),
+                          messageID: (info[messageIDKey] as? String).flatMap(UUID.init), isSignIn: info[signInKey] != nil)
+        if let id = (info[approvalKey] as? String).flatMap(UUID.init), let agent = (info[agentKey] as? String).flatMap(UUID.init) {
+            click.approval = (id, agent)
+            click.approve = response.actionIdentifier == approveAction ? true : response.actionIdentifier == declineAction ? false : nil
+        }
+        return click
     }
 
     private static func add(_ content: UNMutableNotificationContent, identifier: String, agent: AgentRecord, pictureName: String) {

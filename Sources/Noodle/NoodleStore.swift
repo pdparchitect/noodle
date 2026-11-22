@@ -46,6 +46,8 @@ final class NoodleStore {
     private(set) var agents: [AgentRecord] = []
     /// Each bot's tasks here, as it keeps them through Messenger.
     private(set) var tasksByAgent: [UUID: [AgentTask]] = [:]
+    /// The bots' calls held for the person's approval.
+    let approvals: AgentApprovalDesk
     private(set) var conversations: [BotConversation] = [] {
         didSet {
             let old = conversationsByID
@@ -325,7 +327,12 @@ final class NoodleStore {
         self.toolAssignments = toolAssignments
         // The broker exists before the controllers, so revocations reach them through this box.
         let revocations = ToolRevocations()
-        let toolHost = ToolHostServices.repository(self.repository, revoked: { revocations.handle($0, $1, $2) }) { toolAssignments.assignments(for: $0) }
+        let approvals = AgentApprovalDesk()
+        self.approvals = approvals
+        let toolHost = ToolHostServices.repository(self.repository, revoked: { revocations.handle($0, $1, $2) },
+                                                   approvalsChanged: { id in Task { @MainActor in approvals.reload(agent: id) } }) {
+            toolAssignments.assignments(for: $0)
+        }
         self.toolHost = toolHost
         tools = ToolBridgeBroker(registry: toolProviders, host: toolHost) { toolAssignments.assignments(for: $0) }
         connectionsController = ToolConnectionsController(repository: self.repository)
@@ -407,6 +414,12 @@ final class NoodleStore {
             Task { @MainActor in self?.reloadTasks(of: id); self?.thisMac.hub?.bots.tasksChanged(of: id) }
         }
         messenger.noodletHasPreview = { [applets] url in await applets.hasPreview(url) }
+        messenger.onGroupMembersChanged = { [weak self] before, after, _ in
+            Task { @MainActor in
+                do { try self?.groupEdited(from: before, to: after) } catch { self?.errorMessage = error.localizedDescription }
+            }
+        }
+        connectApprovals()
         thisMac.onBotsEdited = { [weak self] in self?.reload() }
         // A call from a bot here was answered, declined or missed on the owner's phone.
         thisMac.onCallStopped = { [weak self] in self?.stopRinging($0) }
@@ -970,6 +983,7 @@ final class NoodleStore {
             }
             conversations = try repository.loadConversations().filter(\.isShownHere)
             tasksByAgent = Dictionary(uniqueKeysWithValues: agents.map { ($0.id, (try? repository.currentTasks(agentID: $0.id)) ?? []) })
+            approvals.reload(Dictionary(uniqueKeysWithValues: agents.map { ($0.id, (try? repository.currentApprovals(agentID: $0.id)) ?? []) }))
             backgrounds = Dictionary(uniqueKeysWithValues: conversations.map {
                 ($0.id, (try? repository.loadBackground(conversationID: $0.id)) ?? ConversationBackground())
             })
@@ -1717,14 +1731,9 @@ final class NoodleStore {
         }
     }
 
-    /// Groups on a Noodle Hub have no lead yet: their bots are woken on the Hub.
-    func canLead(_ conversation: BotConversation) -> Bool {
-        conversation.kind == .group && hubMirror(forConversation: conversation.id) == nil
-    }
-
-    /// Makes a bot the group's lead, or leaves the group without one.
-    func setLead(_ agentID: UUID?, of conversation: BotConversation) {
-        guard canLead(conversation) else { return }
+    /// Makes a bot one of this Mac's own groups' lead, or leaves the group without one. A Hub's group takes its lead
+    /// with the rest of its edit.
+    private func setLead(_ agentID: UUID?, of conversation: BotConversation) {
         do {
             let updated = try repository.setGroupLead(conversationID: conversation.id, agentID: agentID, existingAgents: agents)
             if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
@@ -1743,14 +1752,17 @@ final class NoodleStore {
         named name: String,
         publicDescription: String,
         participantIDs: Set<UUID>,
+        lead: UUID?? = nil,
         folders: [AgentFolder]? = nil
     ) -> Bool {
+        // Left out, the lead stays as it is.
+        let lead = lead ?? conversation.lead
         if let hub = hubMirror(forConversation: conversation.id) {
             groupBeingEdited = nil
             Task {
                 do {
                     try await hub.updateGroup(conversation.id, named: name, publicDescription: publicDescription,
-                                              agentIDs: Array(participantIDs))
+                                              agentIDs: Array(participantIDs), lead: lead)
                     refreshAppShortcuts()
                 } catch {
                     errorMessage = error.localizedDescription
@@ -1767,25 +1779,28 @@ final class NoodleStore {
                 existingAgents: agents,
                 folders: folders
             )
-            let before = conversations.first { $0.id == conversation.id } ?? conversation
-            if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
-                conversations[index] = updated
-                conversations.sort { $0.updatedAt > $1.updatedAt }
-            }
-            restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
-            if BotConversation.editWakesMembers(from: before, to: updated) {
-                messagesByConversation[conversation.id] = try repository.loadMessages(
-                    conversationID: conversation.id
-                )
-                runtime.notify(participants(for: updated), repository: repository)
-            }
+            try groupEdited(from: conversations.first { $0.id == conversation.id } ?? conversation, to: updated)
+            if updated.lead != lead { setLead(lead, of: updated) }
             groupBeingEdited = nil
-            refreshAppShortcuts()
             return true
         } catch {
             errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    /// After a group's edit is saved, by the person or by its lead: its bots learn of it, as a new member does.
+    private func groupEdited(from before: BotConversation, to updated: BotConversation) throws {
+        if let index = conversations.firstIndex(where: { $0.id == updated.id }) {
+            conversations[index] = updated
+            conversations.sort { $0.updatedAt > $1.updatedAt }
+        }
+        restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
+        if BotConversation.editWakesMembers(from: before, to: updated) {
+            messagesByConversation[updated.id] = try repository.loadMessages(conversationID: updated.id)
+            runtime.notify(participants(for: updated), repository: repository)
+        }
+        refreshAppShortcuts()
     }
 
     @discardableResult
@@ -2223,9 +2238,48 @@ final class NoodleStore {
         unread.badged(notifications(of:))
     }
 
+    /// Conversations waiting to be read, and calls waiting for the person's approval.
     func updateDockBadge() {
-        let badged = badgedConversationIDs
-        NSApplication.shared.dockTile.badgeLabel = badged.isEmpty ? nil : String(badged.count)
+        let count = badgedConversationIDs.count + approvals.pendingCount
+        NSApplication.shared.dockTile.badgeLabel = count == 0 ? nil : String(count)
+    }
+
+    /// Where a held call shows, how it is decided, and who hears of it.
+    private func connectApprovals() {
+        approvals.agent = { [weak self] id in self?.agents.first { $0.id == id } }
+        approvals.load = { [repository] id in (try? repository.currentApprovals(agentID: id)) ?? [] }
+        approvals.decide = { [weak self] approval, agent, approve in
+            guard let self else { return approval }
+            // A bot on a Hub holds its calls there, which runs them and tells the bot.
+            if let mirror = self.hubMirror(forAgent: agent.id) {
+                try await mirror.decideApproval(approval.id, localAgentID: agent.id, approve: approve)
+                var decided = approval
+                decided.state = approve ? .running : .declined
+                return decided
+            }
+            return try await self.tools.decide(approval: approval.id, of: agent.id, approve: approve, by: self.ownerName(),
+                                               repository: self.repository)
+        }
+        approvals.withdrawNotification = { AgentNotifications.withdrawApproval($0) }
+        approvals.onPending = { approval, agent in AgentNotifications.postApproval(approval, from: agent) }
+        approvals.onDecided = { [weak self] approval, agent in
+            guard let self, self.hubMirror(forAgent: agent.id) == nil else { return }
+            self.runtime.wake(agent.id, note: approval.outcomeNote, repository: self.repository)
+        }
+        approvals.onCountChanged = { [weak self] in self?.updateDockBadge() }
+        approvals.onError = { [weak self] in self?.errorMessage = $0 }
+        // The owner's devices this Mac serves list a bot's held calls with it, and can decide them.
+        approvals.onAgentChanged = { [weak self] id in self?.thisMac.hub?.bots.approvalsChanged(of: id) }
+        thisMac.decideApproval = { [weak self] id, agent, approve in
+            guard let self else { throw AgentApprovalError("Noodle is closing.") }
+            return try await self.approvals.settle(id, of: agent, approve: approve)
+        }
+    }
+
+    func openConversation(for approval: AgentApproval, of agentID: UUID) {
+        let conversation = approval.conversationID.flatMap { id in conversations.first { $0.id == id } }
+            ?? conversations.first { $0.kind == .direct && $0.participantIDs == [agentID] }
+        if let conversation { selectedConversationID = conversation.id }
     }
 
     func markConversationRead(_ conversationID: UUID?) {
@@ -2687,11 +2741,16 @@ final class NoodleStore {
     }
 
     func useAttachmentAsBackground(_ attachment: ConversationAttachment) async {
-        guard await downloadedFile(attachment) != nil else { return }
+        guard let file = await downloadedFile(attachment) else { return }
         let repository = repository
         do {
             let saved = try await Task.detached {
-                try repository.setBackground(from: attachment)
+                // A shader is checked and compiled as one chosen in the background editor is.
+                guard ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.originalFilename)) else {
+                    return try repository.setBackground(from: attachment)
+                }
+                return try repository.setBackground(conversationID: attachment.conversationID,
+                                                    file: try await PreparedBackgroundFile.prepare(file))
             }.value
             // Keep the action bound to its source chat even if selection changes during decoding.
             backgrounds[attachment.conversationID] = saved

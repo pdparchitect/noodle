@@ -20,6 +20,8 @@ public actor ToolConnectionService {
     private var authenticating: Set<UUID> = []
     private var serverIcons: [UUID: [Icon]] = [:]
     private var adapters: [String: any ToolConnectionAdapter] = [:]
+    /// Each adapted connection's share of a service that takes only so many requests at once, kept across its calls.
+    var gates: [UUID: RequestGate] = [:]
     /// The accounts each Identity Center sign-in covers, as last listed, and when.
     private var awsAccountLists: [UUID: (accounts: [AWSAccount], listed: Date)] = [:]
     /// Each Identity Center connection's role keys, by account, while they last.
@@ -153,6 +155,7 @@ public actor ToolConnectionService {
         }
         queues[id] = nil
         queueTickets[id] = nil
+        gates[id] = nil
         serverIcons[id] = nil
         try credentials.remove(id)
         try tokens.remove(id)
@@ -633,7 +636,17 @@ public actor ToolConnectionService {
         let credentials = connection.keepsSecret || Self.signsInThroughBrowser(connection)
         let authorization = credentials ? try await authorization(for: connection, epoch: epoch, deadline: deadline) : nil
         try checkActive(connection.id, epoch: epoch, deadline: deadline)
-        return ToolConnectionAccess(endpoint: connection.endpoint, authorization: authorization, configuration: httpConfiguration)
+        return ToolConnectionAccess(endpoint: connection.endpoint, authorization: authorization, gate: gate(for: connection),
+                                    configuration: httpConfiguration)
+    }
+
+    /// The connection's gate, when its adapter's service takes only so many requests at once.
+    private func gate(for connection: ToolConnection) -> RequestGate? {
+        guard let limit = connection.adapter.flatMap({ adapters[$0] })?.simultaneousRequests else { return nil }
+        if let gate = gates[connection.id] { return gate }
+        let gate = RequestGate(limit: limit)
+        gates[connection.id] = gate
+        return gate
     }
 
     /// What an adapted connection's service raised from `since` on, as its adapter's feed reads it with the connection's
@@ -668,7 +681,8 @@ public actor ToolConnectionService {
             guard await authorized() else { throw ToolConnectionServiceError.revoked }
             try checkActive(connection.id, epoch: epoch, deadline: deadline)
             guard let tool = request.tool, !tool.isEmpty else { throw ToolConnectionServiceError.invalidMetadata }
-            let access = ToolConnectionAccess(endpoint: connection.endpoint, authorization: authorization, configuration: httpConfiguration)
+            let access = ToolConnectionAccess(endpoint: connection.endpoint, authorization: authorization, gate: gate(for: connection),
+                                              configuration: httpConfiguration)
             return try await adapter.call(tool, arguments: request.arguments ?? Data("{}".utf8), connection: connection, access: access)
         case .resources:
             return Data(#"{"resources":[]}"#.utf8)

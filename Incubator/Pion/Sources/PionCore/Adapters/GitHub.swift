@@ -10,7 +10,8 @@ public enum GitHub {
         id: "07d106a4-0e2c-47b1-a743-3c71161e56e4", name: "GitHub", summary: "An organisation's audit log, members and outside collaborators, and secret scanning, code scanning and Dependabot alerts.",
         defaultInstructions: """
         Use GitHub to see what happened in an organisation: search its audit log for who did what and when, such as \
-        repo.destroy, org.add_member or protected_branch changes; list its members and outside collaborators; and list \
+        repo.destroy, org.add_member or protected_branch changes; list its members, which are owners, and its outside \
+        collaborators; list its teams with their members, as teams carry access to repositories; and list \
         its open security alerts: secrets found in its code, with whether each is still valid, code scanning results and \
         vulnerable dependencies. The audit log needs GitHub Enterprise Cloud. Record each finding as evidence. These tools \
         only read: recommend removing access, rotating a secret or fixing code to the champion.
@@ -35,7 +36,9 @@ public enum GitHub {
         "Sign in as an owner or security manager of the organisation, who can read its security alerts. The audit log needs GitHub Enterprise Cloud.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [AuditLog(), People(), SecurityAlerts()], trigger: NewSecurityAlerts())
+    /// Paced, as teams asks for each team's members and GitHub limits requests at once.
+    public static let adapter = OperationAdapter(operations: [AuditLog(), People(), Teams(), SecurityAlerts()], trigger: NewSecurityAlerts(),
+                                                 simultaneousRequests: 8)
 }
 
 extension GitHub {
@@ -95,17 +98,20 @@ extension GitHub {
     struct People: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "people"
-        static let summary = "The organisation's members and its outside collaborators."
+        static let summary = "The organisation's members, which of them are owners, and its outside collaborators."
         static let input = JSONSchema.object([:])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             struct Person: Codable { let login: String; let site_admin: Bool? }
-            struct People: Encodable { let members: [Person]; let outsideCollaborators: [Person] }
+            struct People: Encodable { let members: [Person]; let owners: [String]; let outsideCollaborators: [Person] }
             let members = try await service.get(["members"], query: ["per_page": "100"], as: [Person].self)
+            // Owners can do anything in the organisation, so an audit of who holds what starts with them.
+            let owners = try await service.get(["members"], query: ["per_page": "100", "role": "admin"], as: [Person].self).map(\.login)
             let outside = try await service.get(["outside_collaborators"], query: ["per_page": "100"], as: [Person].self)
             let text = "\(members.count) member\(members.count == 1 ? "" : "s"): \(members.map(\.login).joined(separator: ", "))."
+                + " \(owners.count) owner\(owners.count == 1 ? "" : "s"): \(owners.isEmpty ? "none listed" : owners.joined(separator: ", "))."
                 + (outside.isEmpty ? " No outside collaborators." : " \(outside.count) outside collaborator\(outside.count == 1 ? "" : "s"): \(outside.map(\.login).joined(separator: ", ")).")
-            return try ServiceResult(text: text, structured: People(members: members, outsideCollaborators: outside))
+            return try ServiceResult(text: text, structured: People(members: members, owners: owners, outsideCollaborators: outside))
         }
     }
 
@@ -216,3 +222,37 @@ extension GitHub {
         }
     }
 }
+
+extension GitHub {
+    /// Teams and their members, from read:org: a team carries access to repositories, so who is in which team says what
+    /// a member reaches. Which repositories each team holds needs a scope that also writes, so it is not read.
+    struct Teams: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "teams"
+        static let summary = "The organisation's teams, with their members and the team each sits within."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            struct Parent: Codable { let slug: String? }
+            struct Team: Codable { let slug: String; let name: String?; let privacy: String?; let parent: Parent? }
+            struct Member: Codable { let login: String }
+            let teams = try await service.get(["teams"], query: ["per_page": "100"], as: [Team].self)
+            let members = try await withThrowingTaskGroup(of: (String, [String]).self) { group in
+                for team in teams {
+                    group.addTask { (team.slug, try await service.get(["teams", team.slug, "members"], query: ["per_page": "100"], as: [Member].self).map(\.login)) }
+                }
+                return try await group.reduce(into: [String: [String]]()) { $0[$1.0] = $1.1 }
+            }
+            let names = Dictionary(teams.map { ($0.slug, $0.name ?? $0.slug) }, uniquingKeysWith: { first, _ in first })
+            let text = teams.isEmpty ? "The organisation has no teams." : teams.map { team in
+                let within = team.parent?.slug.map { ", within \(names[$0] ?? $0)" } ?? ""
+                let secret = team.privacy == "secret" ? ", secret" : ""
+                let held = members[team.slug] ?? []
+                return "\(team.name ?? team.slug)\(within)\(secret) (\(held.count)): \(held.isEmpty ? "no members" : held.joined(separator: ", "))"
+            }.joined(separator: "\n")
+            struct Kept: Encodable { let team: Team; let members: [String] }
+            return try ServiceResult(text: text, structured: ["teams": teams.map { Kept(team: $0, members: members[$0.slug] ?? []) }])
+        }
+    }
+}
+

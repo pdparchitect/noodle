@@ -190,6 +190,20 @@ public enum MessengerCLI {
             case .listTasks:
                 return .json(try repository.listTasks(agentID: agentID))
 
+            case .listApprovals:
+                return .json(try repository.currentApprovals(agentID: agentID))
+
+            case .listBots:
+                return .json(try repository.knownBots(for: agentID))
+
+            case .addParticipant(let conversationID, let bot):
+                _ = try repository.changeGroupMembers(conversationID: conversationID, by: agentID, adding: bot)
+                return .json(try repository.participantRoster(for: agentID, conversationID: conversationID))
+
+            case .removeParticipant(let conversationID, let bot):
+                _ = try repository.changeGroupMembers(conversationID: conversationID, by: agentID, removing: bot)
+                return .json(try repository.participantRoster(for: agentID, conversationID: conversationID))
+
             case .setStatus(let status):
                 return .json(MessengerStatus(status: try repository.setAgentStatus(status, agentID: agentID).status))
 
@@ -374,6 +388,17 @@ public enum MessengerCLI {
                 action = .updateTask(id: id, state: state, waitingOn: waitingOn, title: title, note: note)
             case .listTasks:
                 action = .listTasks
+            case .listApprovals:
+                action = .listApprovals
+            case .listBots:
+                action = .listBots
+            case .addParticipant, .removeParticipant:
+                let adding = command == .addParticipant
+                guard let rawBot = Self.option(command.rawValue, in: values), let bot = UUID(uuidString: rawBot),
+                      let rawConversation = Self.option("--conversation", in: values),
+                      let conversationID = UUID(uuidString: rawConversation) else { throw MessengerCLIError.invalidArguments }
+                action = adding ? .addParticipant(conversationID: conversationID, agentID: bot)
+                    : .removeParticipant(conversationID: conversationID, agentID: bot)
             case .send:
                 guard let rawConversation = Self.option("--conversation", in: values),
                       let conversationID = UUID(uuidString: rawConversation) else {
@@ -549,7 +574,7 @@ private enum MessengerCLIError: LocalizedError {
     }
 }
 
-private extension MessengerCommandResult {
+extension MessengerCommandResult {
     static func json<Value: Encodable>(_ value: Value) -> MessengerCommandResult {
         do {
             let encoder = JSONEncoder()
@@ -589,6 +614,12 @@ public enum MessengerAction: Codable, Sendable {
         /// Nil fields stay as they are; see `WorkspaceRepository.updateTask`.
         case updateTask(id: UUID, state: AgentTask.State?, waitingOn: MessageAuthor?, title: String?, note: String?)
         case listTasks
+        case listApprovals
+        /// The bots a lead knows; see `WorkspaceRepository.knownBots`.
+        case listBots
+        /// A lead changing a group it leads; see `WorkspaceRepository.changeGroupMembers`.
+        case addParticipant(conversationID: UUID, agentID: UUID)
+        case removeParticipant(conversationID: UUID, agentID: UUID)
         /// Handled by the CLI through the tool bridge; never sent to the Messenger broker.
         case tool(arguments: [String])
         case help

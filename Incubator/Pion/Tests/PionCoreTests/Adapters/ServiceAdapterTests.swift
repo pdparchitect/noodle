@@ -95,4 +95,13 @@ final class ServiceAdapterTests: XCTestCase {
         }
         XCTAssertTrue(service.requests.isEmpty, "a request went out for a value that leaves its path")
     }
+
+    /// Audits that ask once per user, team or admin keep to a few requests at a time, so a large org does not trip the
+    /// service's limit on requests at once.
+    func testAdaptersThatAskOncePerItemPaceThemselves() {
+        XCTAssertEqual(CrowdStrike.adapter.simultaneousRequests, 8)
+        XCTAssertEqual(GitHub.adapter.simultaneousRequests, 8)
+        XCTAssertEqual(Okta.adapter.simultaneousRequests, 8)
+    }
 }
+

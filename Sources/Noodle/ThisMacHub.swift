@@ -36,6 +36,8 @@ import Observation
     /// Runs when a call from a bot here stopped ringing on the owner's devices: answered or declined on
     /// one, or not answered in time.
     @ObservationIgnored var onCallStopped: ((_ id: UUID) -> Void)?
+    /// Carries out the owner's decision, made on one of their devices, on a call a bot here holds.
+    @ObservationIgnored var decideApproval: ((_ approval: UUID, _ agent: UUID, _ approve: Bool) async throws -> AgentApproval)?
 
     @ObservationIgnored private let repository: WorkspaceRepository
     @ObservationIgnored private let runtime: AgentRuntimeCoordinator
@@ -106,6 +108,10 @@ import Observation
                 return try await share($0, $1, $2)
             }
             hub.bots.onCallStopped = { [weak self] in self?.onCallStopped?($0) }
+            hub.bots.decideElsewhere = { [weak self] id, agent, approve in
+                guard let decide = self?.decideApproval else { throw LinkError("Noodle is closing.") }
+                return try await decide(id, agent, approve)
+            }
             self.hub = hub
             key = hub.link.key.x963.base64EncodedString()
             await hub.start()

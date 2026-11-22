@@ -19,6 +19,8 @@ extension PionDelegate: UNUserNotificationCenterDelegate {
             AgentNotifications.post(replies: messages, agent: { model.agent($0) }, conversation: { model.conversation($0) })
         }
         model.onNotificationsNarrowed = { AgentNotifications.withdraw(conversation: $0) }
+        model.approvals.withdrawNotification = { AgentNotifications.withdrawApproval($0) }
+        model.onApprovalHeld = { AgentNotifications.postApproval($0, from: $1) }
         // An agent opening an Investigation shows even with Pion in front, whether or not the agent posts in it.
         model.onAgentOpenedInvestigation = { investigation, agent in
             AgentNotifications.postAlert(from: agent, subtitle: "Opened \(investigation.reference) \(investigation.title)",
@@ -48,7 +50,14 @@ extension PionDelegate: UNUserNotificationCenterDelegate {
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
         let click = AgentNotifications.click(in: response)
         let conversationID = click.conversationID, messageID = click.messageID, signIn = click.isSignIn
+        let approval = click.approval, approve = click.approve
         Task { @MainActor in
+            // A held call's Approve or Decline decides it without opening anything.
+            if let approval, let approve {
+                model.approvals.decide(approval.id, of: approval.agent, approve: approve)
+                completionHandler()
+                return
+            }
             if signIn {
                 settings.selectedTab = .harnesses
                 NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)

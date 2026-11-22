@@ -37,4 +37,11 @@ final class SentinelTests: XCTestCase {
         XCTAssertTrue(body["timespan"]?.hasPrefix("2026-11-19T09:00:00Z/") == true, body["timespan"] ?? "")
         XCTAssertEqual(Sentinel.adapter.watchedTool, "query")
     }
+
+    /// What an account did in Microsoft 365 and the directory is in Sentinel's tables when their connectors are on.
+    func testItsInstructionsSayWhereMicrosoft365AndDirectoryActivityAre() {
+        for table in ["OfficeActivity", "AuditLogs", "SigninLogs", "FileDownloaded"] {
+            XCTAssertTrue(Sentinel.preset.defaultInstructions.contains(table), table)
+        }
+    }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import SwiftUI
 import NoodleCore
 import ProductIdentity
@@ -384,18 +385,99 @@ enum ToolSetupStepsWindow {
 }
 
 public struct ToolCatalogIcon: View {
+    @Environment(\.displayScale) private var displayScale
     let tool: ToolDefinition
     let size: CGFloat
+
+    init(tool: ToolDefinition, size: CGFloat) {
+        self.tool = tool
+        self.size = size
+    }
 
     static func image(for tool: ToolDefinition) -> NSImage? {
         guard let url = Bundle.main.url(forResource: tool.iconName, withExtension: "icon", subdirectory: "ToolIcons") else { return nil }
         return NSImage(contentsOf: url)
     }
 
+    /// Downsample before SwiftUI composites the icon. The same point size needs a
+    /// different bitmap when the window moves between standard and Retina displays.
+    private static let thumbnails: NSCache<NSArray, NSImage> = {
+        let cache = NSCache<NSArray, NSImage>()
+        cache.totalCostLimit = 8 * 1024 * 1024
+        cache.countLimit = 256
+        return cache
+    }()
+
+    static func thumbnail(data: Data? = nil, tool: ToolDefinition? = nil, size: CGFloat, scale: CGFloat, trimMargins: Bool = false) -> NSImage? {
+        let pixels = max(1, Int((size * scale).rounded()))
+        let key: NSArray
+        let source: CGImageSource?
+        if let data {
+            key = [data as NSData, pixels, trimMargins]
+            if let cached = thumbnails.object(forKey: key) { return cached }
+            source = CGImageSourceCreateWithData(data as CFData, nil)
+        } else if let tool, let url = Bundle.main.url(forResource: tool.iconName, withExtension: "icon", subdirectory: "ToolIcons") {
+            key = [url as NSURL, pixels, trimMargins]
+            if let cached = thumbnails.object(forKey: key) { return cached }
+            source = CGImageSourceCreateWithURL(url as CFURL, nil)
+        } else {
+            return nil
+        }
+        // ICO files can put a 16-pixel frame first. Decode the largest frame as
+        // the source, then sample it once at the resolution the view will display.
+        if let source {
+            var index = 0
+            if CGImageSourceGetType(source) as String? == "com.microsoft.ico" {
+                var largest = 0
+                for frame in 0..<CGImageSourceGetCount(source) {
+                    let info = CGImageSourceCopyPropertiesAtIndex(source, frame, nil) as? [CFString: Any]
+                    let width = info?[kCGImagePropertyPixelWidth] as? Int ?? 0
+                    if width > largest {
+                        index = frame
+                        largest = width
+                    }
+                }
+            }
+            let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                                             kCGImageSourceCreateThumbnailWithTransform: true,
+                                             kCGImageSourceThumbnailMaxPixelSize: trimMargins ? max(256, pixels * 2) : pixels]
+            if let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, index, options as CFDictionary) {
+                let cg = trimMargins ? visibleArtwork(thumbnail) : thumbnail
+                let image = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+                thumbnails.setObject(image, forKey: key, cost: cg.bytesPerRow * cg.height)
+                return image
+            }
+        }
+        // AppKit also accepts vector artwork supplied by a custom connection.
+        return data.flatMap(NSImage.init(data:)) ?? tool.flatMap(image(for:))
+    }
+
+    /// Fit the painted artwork, ignoring transparent padding supplied by the vendor.
+    /// Measuring alpha keeps opaque artwork intact and preserves the proportions of wordmarks.
+    private static func visibleArtwork(_ image: CGImage) -> CGImage {
+        let w = image.width, h = image.height
+        guard let mask = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                   space: CGColorSpaceCreateDeviceRGB(),
+                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue),
+              let bytes = mask.data?.assumingMemoryBound(to: UInt8.self) else { return image }
+        mask.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        var left = w, right = -1, top = h, bottom = -1
+        for y in 0..<h {
+            for x in 0..<w where bytes[y * mask.bytesPerRow + x * 4 + 3] > 8 {
+                left = min(left, x)
+                right = max(right, x)
+                top = min(top, y)
+                bottom = y
+            }
+        }
+        guard right >= left, bottom >= top else { return image }
+        return image.cropping(to: CGRect(x: left, y: top, width: right - left + 1, height: bottom - top + 1)) ?? image
+    }
+
     public var body: some View {
         Group {
-            if let image = Self.image(for: tool) {
-                Image(nsImage: image).resizable().scaledToFit()
+            if let image = Self.thumbnail(tool: tool, size: size, scale: displayScale) {
+                Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
             } else {
                 Text(String(tool.name.prefix(1))).font(.system(size: size * 0.55, weight: .semibold))
                     .frame(width: size, height: size)

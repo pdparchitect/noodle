@@ -374,13 +374,15 @@ import Observation
                 watchStatus[connection.id] = WatchStatus(previous: watchStatus[connection.id], checked: now, result: result, woke: woke,
                                                          interval: watcher.trigger(for: connection)?.interval ?? AlertWatcher.interval.seconds)
             }
+            let retried = Retries.shown(watcher.retried[connection.id] ?? 0)
+            let retries = retried.isEmpty ? "" : " (\(retried))"
             switch checked[connection.id] {
             case .started?: recordActivity(connection.id, "Watching for alerts from now on")
-            case .nothingNew?: recordActivity(connection.id, "Checked for alerts: nothing new")
+            case .nothingNew?: recordActivity(connection.id, "Checked for alerts: nothing new" + retries)
             case .found(let what)?:
                 let woke = holders.compactMap { names[$0] }.formatted(.list(type: .and))
-                recordActivity(connection.id, "Found \(what); woke \(woke)")
-            case .failed(let reason)?: recordActivity(connection.id, "Could not check for alerts", detail: reason)
+                recordActivity(connection.id, "Found \(what); woke \(woke)" + retries)
+            case .failed(let reason)?: recordActivity(connection.id, "Could not check for alerts" + retries, detail: reason)
             case nil: break
             }
         }
@@ -438,7 +440,8 @@ import Observation
         }
         guard let asked else { return }
         let seconds = Double(call.duration.components.seconds) + Double(call.duration.components.attoseconds) / 1e18
-        let took = " (\(seconds.formatted(.number.precision(.fractionLength(1)))) s)"
+        let retried = Retries.shown(call.retries)
+        let took = " (\(seconds.formatted(.number.precision(.fractionLength(1)))) s\(retried.isEmpty ? "" : ", " + retried))"
         if let failure = call.failure { fail(call.connection, "\(bot): \(asked.failed)" + took, because: failure) }
         else { recordActivity(call.connection, "\(bot) \(asked.done)" + took) }
     }

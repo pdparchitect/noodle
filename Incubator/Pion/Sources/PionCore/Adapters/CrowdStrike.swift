@@ -10,7 +10,8 @@ public enum CrowdStrike {
         defaultInstructions: """
         Use CrowdStrike Falcon to see an endpoint as its sensor does: find a host by name or IP address, with its status, \
         whether it is contained and when it was last seen, and list alerts by host, severity and time, with the process, \
-        command line and MITRE technique. Record each finding as evidence, citing the host and alert. These tools only read: \
+        command line and MITRE technique. To audit who holds what, users lists everyone who can use the Falcon console with \
+        their roles, administrators first. Record each finding as evidence, citing the host and alert. These tools only read: \
         recommend containing a host or other responses to the champion.
         """,
         iconName: "crowdstrike",
@@ -24,12 +25,13 @@ public enum CrowdStrike {
 
     static let setup = [
         "In the Falcon console, open **Support and resources › API clients and keys** and choose **Create API client**.",
-        "Name it, such as Pion, and give it only **Hosts: Read** and **Alerts: Read**.",
+        "Name it, such as Pion, and give it only **Hosts: Read**, **Alerts: Read** and **User management: Read**.",
         "Copy the **Client ID** and **Secret** here; the secret is shown only once.",
         "For the Falcon cloud, choose the one your console's address names: `falcon.us-2.crowdstrike.com` is US-2, and `falcon.crowdstrike.com` is US-1.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [FindHost(), Alerts()], trigger: SevereAlerts())
+    /// Paced, as users asks for each user's roles in turn.
+    public static let adapter = OperationAdapter(operations: [FindHost(), Alerts(), Users()], trigger: SevereAlerts(), simultaneousRequests: 8)
 
     /// New high and critical alerts: their IDs found first, then each one's time.
     struct SevereAlerts: ServiceTrigger {
@@ -127,3 +129,46 @@ extension CrowdStrike {
         }
     }
 }
+
+extension CrowdStrike {
+    /// Who can use the Falcon console and with which roles, from User management: Read, administrators first. Falcon
+    /// lists one user's roles at a time.
+    struct Users: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "users"
+        static let summary = "Everyone who can use the Falcon console, with their roles, administrators first."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            let ids = try await service.get(["user-management", "queries", "users", "v1"], query: ["limit": "500"],
+                                            as: Resources<String>.self).resources ?? []
+            guard !ids.isEmpty else { return try ServiceResult(text: "No console users are listed.", structured: ["users": [String]()]) }
+            struct User: Decodable { let uuid: String; let uid: String? }
+            struct Request: Encodable { let ids: [String] }
+            var named: [String: String] = [:]
+            for batch in stride(from: 0, to: ids.count, by: 100).map({ Array(ids[$0..<min($0 + 100, ids.count)]) }) {
+                for user in try await service.post(["user-management", "entities", "users", "GET", "v1"], body: Request(ids: batch),
+                                                   as: Resources<User>.self).resources ?? [] { named[user.uuid] = user.uid ?? user.uuid }
+            }
+            struct Role: Decodable { let role_id: String?; let role_name: String? }
+            let roles = try await withThrowingTaskGroup(of: (String, [String]).self) { group in
+                for id in ids {
+                    group.addTask {
+                        let held = try await service.get(["user-management", "combined", "user-roles", "v1"], query: ["user_uuid": id],
+                                                         as: Resources<Role>.self).resources ?? []
+                        return (id, held.compactMap { $0.role_name ?? $0.role_id })
+                    }
+                }
+                return try await group.reduce(into: [String: [String]]()) { $0[$1.0] = $1.1 }
+            }
+            struct Kept: Encodable { let uuid: String, user: String, roles: [String] }
+            let users = ids.map { Kept(uuid: $0, user: named[$0] ?? $0, roles: roles[$0] ?? []) }
+            func administrator(_ user: Kept) -> Bool { user.roles.contains { $0.contains("Administrator") } }
+            let ordered = users.filter(administrator) + users.filter { !administrator($0) }
+            let text = ordered.map { "\($0.user): \($0.roles.isEmpty ? "no roles" : $0.roles.joined(separator: ", "))" }.joined(separator: "\n")
+            struct Listed: Encodable { let users: [Kept] }
+            return try ServiceResult(text: text, structured: Listed(users: ordered))
+        }
+    }
+}
+

@@ -49,7 +49,7 @@ final class ModelCheckpointProbeTests: XCTestCase {
         let configData = try Data(contentsOf: folder.appendingPathComponent("config.json"))
         let configuration = try JSONDecoder.json5().decode(BaseConfiguration.self, from: configData)
         let language = try await LLMTypeRegistry.shared.createModel(configuration: configData, modelType: configuration.modelType)
-        weights = language.sanitize(weights: weights, metadata: metadata)
+        weights = try language.sanitize(weights: weights, metadata: metadata)
         if let quantization = configuration.perLayerQuantization {
             quantize(model: language) { path, _ in
                 weights["\(path).scales"] != nil ? quantization.quantization(layer: path)?.asTuple : nil

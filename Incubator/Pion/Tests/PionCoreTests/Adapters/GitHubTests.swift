@@ -98,4 +98,28 @@ final class GitHubTests: XCTestCase {
         let down = FakeService()
         do { _ = try await GitHub.adapter.alerts(since: since, connection: github, access: down); XCTFail("No feed answered") } catch {}
     }
+
+    /// Owners can do anything in the organisation, so an audit of who holds what starts with them.
+    func testPeopleSaysWhoTheOwnersAre() async throws {
+        let service = FakeService()
+        service.answers["/orgs/kestrel-labs/members"] = (200, #"[{"login":"avery"},{"login":"mallory"}]"#)
+        service.answers["/orgs/kestrel-labs/members?per_page=100&role=admin"] = (200, #"[{"login":"mallory"}]"#)
+        service.answers["/orgs/kestrel-labs/outside_collaborators"] = (200, "[]")
+        let people = try await callTool(GitHub.adapter, "people", "{}", on: service, in: github)
+        XCTAssertFalse(people.isError, people.text)
+        XCTAssertTrue(people.text.contains("1 owner: mallory"), people.text)
+        XCTAssertEqual(people.structured?["owners"] as? [String], ["mallory"])
+    }
+
+    /// Teams carry access to repositories, so who is in which team says what a member reaches.
+    func testTeamsListTheirMembersAndParents() async throws {
+        let service = FakeService()
+        service.answers["/orgs/kestrel-labs/teams"] = (200, #"[{"slug":"platform","name":"Platform","privacy":"closed","parent":null},{"slug":"payments","name":"Payments","privacy":"secret","parent":{"slug":"platform"}}]"#)
+        service.answers["/orgs/kestrel-labs/teams/platform/members"] = (200, #"[{"login":"avery"}]"#)
+        service.answers["/orgs/kestrel-labs/teams/payments/members"] = (200, #"[{"login":"mallory"},{"login":"jo"}]"#)
+        let teams = try await callTool(GitHub.adapter, "teams", "{}", on: service, in: github)
+        XCTAssertFalse(teams.isError, teams.text)
+        XCTAssertTrue(teams.text.contains("Platform (1): avery"), teams.text)
+        XCTAssertTrue(teams.text.contains("Payments, within Platform, secret (2): mallory, jo"), teams.text)
+    }
 }

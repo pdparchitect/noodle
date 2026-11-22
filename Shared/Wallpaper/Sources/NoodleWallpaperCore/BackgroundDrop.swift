@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 /// Resolve browser and Finder drops into the same owned media used by the picker.
 public enum BackgroundDrop {
-    public static let contentTypes: [UTType] = [.fileURL, .image, .movie, .url]
+    public static let contentTypes: [UTType] = [.fileURL, .image, .movie, .metalShader, .url]
     public static let imageContentTypes: [UTType] = [.fileURL, .image, .url]
     static let maximumBytes: Int64 = 1_073_741_824
 
@@ -32,7 +32,7 @@ public enum BackgroundDrop {
         // Prefer the actual media over a browser's page link or HTML fallback.
         // Videos come before images so a poster cannot replace a dropped movie.
         let types = provider.registeredTypeIdentifiers.compactMap(UTType.init)
-            .filter { $0.conforms(to: .image) || $0.conforms(to: .movie) }
+            .filter { $0.conforms(to: .image) || $0.conforms(to: .movie) || $0.conforms(to: .metalShader) }
             .sorted { priority($0) < priority($1) }
         for type in types {
             try Task.checkCancellation()
@@ -67,7 +67,7 @@ public enum BackgroundDrop {
                                             prepare: (URL) async throws -> Prepared) async throws -> Prepared {
         let directory = try stagingDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let suffix = type.preferredFilenameExtension
+        let suffix = type.conforms(to: .metalShader) ? "metal" : type.preferredFilenameExtension
             ?? URL(fileURLWithPath: provider.suggestedName ?? "").pathExtension
         let target = directory.appendingPathComponent("media").appendingPathExtension(suffix)
         do {
@@ -157,7 +157,7 @@ private enum BackgroundDropError: LocalizedError {
     case directMediaRequired, downloadFailed, noFileRepresentation
     var errorDescription: String? {
         switch self {
-        case .directMediaRequired, .noFileRepresentation: return "Drop a readable image or MP4, M4V or MOV video, or a direct link to one."
+        case .directMediaRequired, .noFileRepresentation: return "Drop a readable image, an MP4, M4V or MOV video or a Metal shader, or a direct link to one."
         case .downloadFailed: return "The background couldn’t be downloaded. Try dropping the image or video itself."
         }
     }

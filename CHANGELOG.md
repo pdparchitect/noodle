@@ -6,6 +6,31 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.93.0] - 2026-11-22
+
+### Added
+
+- Approvals: a bot's call to a tool its service marks destructive, such as suspending a user or deleting something, waits for you instead of running. It shows in a new Approvals section at the top of the sidebar, which stays there while anything waits, with exactly what will run and the bot's reason; approve or decline it there or from its notification, which comes through even with Noodle in front. The Dock counts it too. The bot is told the outcome. Ordinary changes, and tools whose service does not mark them destructive, run as before. Bots on a Hub you joined, and those your phone reaches through This Mac as a Hub, ask the same way, and This Mac as a Hub notifies your phone of each one while it is away.
+- A Metal shader can be a conversation's background, playing behind the messages: right-click a `.metal` file in a conversation and choose Use as Background, or choose, drop or paste one in the background editor. Ask any bot for a shader; SwiftUI colour shaders and fragment shaders both work, and one that doesn't compile shows the compiler's message. It plays at up to 30 frames a second, stops while the window is hidden, and holds still with Reduce Motion or Low Power Mode. It reaches your phone through your Noodle Hub as pictures and videos do.
+- Quick Look plays `.metal` shader files, in conversations and in Finder, and shows a still of each as its thumbnail.
+- Paste a background into the Conversation Background sheet: while it is open, ⌘V, or Paste in the preview's right-click menu, takes a copied picture, video or `.metal` file, or a copied image, and shows it there to apply, as a drop does. Paste is off when nothing copied can be a background, and ⌘V no longer attaches it to the conversation behind the sheet.
+- Copy on a `.metal` file in a conversation copies the file under its own name, ready to paste into the background editor, into Finder or into another conversation.
+- Local Models offers Qwen3.5 122B-A10B for Macs with 96 GB of memory or more, and Qwen3.8 27B Uncensored, with its refusals removed for security and incident response work, from 32 GB.
+- A group's lead can add a bot to the group and take a member out. It can add only bots it already shares a group with, never removes itself, and only changes groups it leads; the group shows each change.
+- Groups on a Noodle Hub can have a lead too: in Group Info, right-click a bot and choose Make Lead, as for groups on this Mac. Your other devices show the same lead.
+
+### Changed
+
+- Tool connections use the same sidebar rows and icon grid as bots and groups. Each shows the tool’s original artwork and connection status.
+- Tool icons in Settings are drawn at the display's own resolution, so they stay sharp on standard and Retina screens, and Sentry's icon has higher-resolution artwork.
+- A tool's name, description and instructions follow its catalogue entry's current ones until you change them, so tools you have not edited pick up renames and improved defaults. A field you changed has a reset button in its corner that puts the default back.
+- Editing a tool asks how it signs in only for an MCP server you added yourself, as a menu under its own heading; a catalogue tool signs in the one way its service supports, and one that needs no sign-in shows none.
+- Local models and image generation run on a newer MLX, with its fixes to Qwen and Gemma tool calls and Qwen's reasoning across turns, and faster prompt reading for Qwen3.5, Qwen3.6 and Qwen3.8.
+
+### Fixed
+
+- An empty space no longer shows a dark stripe down the middle of the sidebar with "No Bots" squeezed inside it.
+
 ## [0.92.0] - 2026-11-21
 
 ### Added

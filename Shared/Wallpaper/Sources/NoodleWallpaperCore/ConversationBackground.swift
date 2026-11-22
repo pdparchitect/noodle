@@ -96,7 +96,8 @@ public struct PresetGradient: View {
 #endif
 
 public enum BackgroundMediaKind: String, Codable, Sendable {
-    case image, video, dynamicImage
+    /// A Metal shader file, drawn live.
+    case image, video, dynamicImage, shader
 }
 
 /// Local appearance only: kept out of message delivery and the agent workspace.
@@ -142,7 +143,7 @@ public enum ConversationBackgroundError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidImage: return "Choose a readable image smaller than 50 MB."
-        case .invalidMedia: return "Choose a readable image or HEIC up to 512 MB, or a playable MP4, M4V or MOV video up to 1 GB. Wallpaper packages and streaming playlists are not supported."
+        case .invalidMedia: return "Choose a readable image or HEIC up to 512 MB, a playable MP4, M4V or MOV video up to 1 GB, or a Metal shader. Wallpaper packages and streaming playlists are not supported."
         }
     }
 }

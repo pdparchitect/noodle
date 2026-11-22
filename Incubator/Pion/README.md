@@ -81,7 +81,9 @@ tools, with a red dot on any that needs you to sign in.
 
 An Investigation is a conversation with its team, with an objective, a status, a severity
 and a case record. One agent leads it; you own it. It starts unassessed until the lead sets
-its severity from the evidence. The toolbar sets its status and edits its title, objective
+its severity from the evidence. The lead can bring in agents it already works with in
+another group or Investigation, and take out those whose part is done; the Audit Log says
+who it added or removed. The toolbar sets its status and edits its title, objective
 and team. **Investigation → Close Investigation…** closes it as a false positive, resolved
 or handed off, with a note; its agents can still read it, but no longer post or record in it.
 
@@ -102,9 +104,10 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 - **Groups** of agents for the work between incidents.
 - **Tasks** waiting on you, at the top of the sidebar.
 - **Woken by alerts**: new high alerts in Microsoft Defender XDR, Microsoft Defender for Cloud, Microsoft Sentinel, CrowdStrike,
-  SentinelOne, Entra ID, Proofpoint, Wiz, Google Cloud, Google Workspace and GitHub, and CVEs joining the top of the
+  SentinelOne, Entra ID, Proofpoint, Wiz, Google Cloud Audit, Google Workspace Audit and GitHub, and CVEs joining the top of the
   cve.now Index, wake the agents those tools are assigned to, who read them and decide how far to look.
-- **Read-only lookups**: agents investigate; changes to a system are yours to make.
+- **Approvals**: agents investigate freely; a change that cuts off access or deletes something
+  waits for you, at the top of the sidebar and in a notification, and runs only once you approve it.
 - **Your own AI**: Codex, Claude Code, Apple Intelligence and more, on your accounts.
 - **Restricted by default**: each agent works in a sandbox of its own on your Mac.
 - **Native and fast**: voice input, attachments, annotations, Quick Look, notifications.
@@ -113,23 +116,26 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 
 Connect your stack in **Settings → Tools**. Each service's form has **Setup Steps**: where in
 the service's console to make its key or account, and the least access to give it. Pion's
-own lookups only read. Add two accounts of the same service side by side, and assign each
+own lookups only read, and their actions wait for your approval. Add two accounts of the same service side by side, and assign each
 to the agents that should use it.
 
 | | |
 | --- | --- |
 | **Reputation and intel** | VirusTotal, Shodan, Censys, GreyNoise, CrowdSec CTI, AbuseIPDB, AlienVault OTX, urlscan.io, Have I Been Pwned, Cloudflare Radar |
-| **Attack surface** | crt.sh, NVD, cve.now, Tenable |
-| **Identity** | Okta, Microsoft Entra ID, Google Workspace |
+| **Attack surface** | crt.sh, DNS, NVD, cve.now, Tenable |
+| **Identity** | Okta, Microsoft Entra ID, Google Workspace Audit, Google Workspace Containment |
 | **Endpoint and email** | CrowdStrike Falcon, Microsoft Defender XDR, SentinelOne, Proofpoint TAP |
 | **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |
-| **Cloud and code** | AWS Security, Google Cloud, Microsoft Azure, Cloudflare Security, Wiz, GitHub |
+| **Cloud and code** | AWS Security, Google Cloud Audit, Microsoft Azure, Cloudflare Security, Wiz, GitHub |
 
 Any MCP server works too. AWS Security signs in through your organisation's IAM Identity
-Center and covers every account you are assigned; Google Cloud and Google Workspace sign
-in with your Google account; GitHub signs in with a code, through an OAuth app your
+Center and covers every account you are assigned; Google Cloud Audit and both Google Workspace
+tools sign in with your Google account; GitHub signs in with a code, through an OAuth app your
 organisation registers. Microsoft Azure uses an app registration's client ID and secret, with
 read-only access to one subscription per account.
+
+Some services have a guide in [docs/tools](docs/tools) explaining the access each tool asks for,
+the least access to set it up with, and its caveats.
 
 ## License
 

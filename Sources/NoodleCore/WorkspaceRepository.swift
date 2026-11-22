@@ -30,6 +30,22 @@ public struct SetAsideAgent: Equatable, Sendable {
     public let helpURL: URL?
 }
 
+/// Why a lead's change to a group's members was refused. A bot it does not know reads the same as one that does not
+/// exist, so refusals never tell it who else is about.
+public enum LeadMembershipError: LocalizedError, Equatable {
+    case leadsNoGroup, notLead, unknownBot, removingSelf, notAMember
+
+    public var errorDescription: String? {
+        switch self {
+        case .leadsNoGroup: "Only a group's lead can list bots, and you lead none. The person chooses each group's lead."
+        case .notLead: "Only the group's lead changes its members. Ask the lead, or the person, if someone should join or leave."
+        case .unknownBot: "You can add only a bot you already share a group with. --list-bots shows them."
+        case .removingSelf: "You lead this group, so you stay in it. Ask the person to choose another lead if you should leave."
+        case .notAMember: "That bot is not in this group."
+        }
+    }
+}
+
 public enum WorkspaceError: LocalizedError, Equatable {
     case emptyName
     case missingAgent(UUID)
@@ -835,6 +851,66 @@ public struct WorkspaceRepository: Sendable {
         now: Date = Date()
     ) throws -> BotConversation {
         let folders = try folders.map(validatedGroupFolders)
+        return try editGroup(conversationID: conversationID, existingAgents: existingAgents, folders: folders, now: now) { _ in
+            (rawName, publicDescription, participantIDs)
+        }.after
+    }
+
+    /// The bots `agentID` knows: those it shares a group with that is not archived, leaving out archived bots.
+    /// Only a bot that leads a group may ask, so others never learn who else is about.
+    public func knownBots(for agentID: UUID) throws -> MessengerKnownBots {
+        let agents = try loadAgents()
+        guard let caller = agents.first(where: { $0.id == agentID }) else { throw WorkspaceError.missingAgent(agentID) }
+        let groups = try loadConversations().filter { $0.kind == .group && $0.archivedAt == nil && $0.participantIDs.contains(agentID) }
+        guard groups.contains(where: { $0.lead == agentID }) else { throw LeadMembershipError.leadsNoGroup }
+        let known = Self.known(by: agentID, in: groups)
+        let bots = agents.filter { known.contains($0.id) && $0.archivedAt == nil }.map {
+            MessengerKnownBot(participant: MessengerIdentity(handle: .bot, agentID: $0.id, displayName: $0.displayName),
+                              publicDescription: $0.publicDescription,
+                              suspendedUntil: $0.isSuspended() ? $0.suspendedUntil : nil)
+        }.sorted { $0.participant.displayName.localizedCaseInsensitiveCompare($1.participant.displayName) == .orderedAscending }
+        return MessengerKnownBots(me: MessengerIdentity(handle: .me, agentID: agentID, displayName: caller.displayName), bots: bots)
+    }
+
+    /// A lead adding a bot it knows to a group it leads, or taking a member other than itself out. Every rule is
+    /// checked under the group's lock, so a lead the person replaced a moment ago changes nothing.
+    public func changeGroupMembers(conversationID: UUID, by leadID: UUID, adding added: UUID? = nil, removing removed: UUID? = nil,
+                                   now: Date = Date()) throws -> (before: BotConversation, after: BotConversation) {
+        let agents = try loadAgents()
+        return try editGroup(conversationID: conversationID, existingAgents: agents, folders: nil, now: now) { group in
+            guard group.participantIDs.contains(leadID) else { throw WorkspaceError.missingConversation(conversationID) }
+            guard group.archivedAt == nil else { throw WorkspaceError.archivedGroup }
+            guard group.lead == leadID else { throw LeadMembershipError.notLead }
+            var members = group.participantIDs
+            if let added, !members.contains(added) {
+                // Read again under the lock: who the lead knows is what its groups say now.
+                let groups = try loadConversations().filter { $0.kind == .group && $0.archivedAt == nil && $0.participantIDs.contains(leadID) }
+                guard Self.known(by: leadID, in: groups).contains(added),
+                      agents.contains(where: { $0.id == added && $0.archivedAt == nil }) else { throw LeadMembershipError.unknownBot }
+                members.append(added)
+            }
+            if let removed {
+                guard removed != leadID else { throw LeadMembershipError.removingSelf }
+                guard members.contains(removed) else { throw LeadMembershipError.notAMember }
+                members.removeAll { $0 == removed }
+            }
+            return (group.displayName, group.publicDescription, members)
+        }
+    }
+
+    private static func known(by agentID: UUID, in groups: [BotConversation]) -> Set<UUID> {
+        Set(groups.flatMap(\.participantIDs)).subtracting([agentID])
+    }
+
+    /// Edits a group under its lock: `edit` reads the group as it is and says its new name, description and members.
+    /// `folders` replaces the group's folders unless it is nil; inside, nil means none.
+    private func editGroup(
+        conversationID: UUID,
+        existingAgents: [AgentRecord],
+        folders: [AgentFolder]??,
+        now: Date,
+        edit: (BotConversation) throws -> (name: String, description: String?, participants: [UUID])
+    ) throws -> (before: BotConversation, after: BotConversation) {
         guard FileManager.default.fileExists(atPath: conversationDirectory(id: conversationID).path) else {
             throw WorkspaceError.missingConversation(conversationID)
         }
@@ -844,6 +920,8 @@ public struct WorkspaceRepository: Sendable {
             }) else {
                 throw WorkspaceError.missingConversation(conversationID)
             }
+            let before = conversation
+            let (rawName, publicDescription, participantIDs) = try edit(conversation)
 
             let name = try ConversationName.validated(rawName)
             let uniqueIDs = Array(Set(participantIDs))
@@ -940,7 +1018,7 @@ public struct WorkspaceRepository: Sendable {
                 }
                 throw saveError
             }
-            return conversation
+            return (before, conversation)
         }
     }
 

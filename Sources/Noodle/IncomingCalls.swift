@@ -70,7 +70,7 @@ extension NoodleStore {
     func stoppedRinging(_ id: UUID) { thisMac.stopRinging(id) }
 }
 
-extension NoodleStore: VoiceCallHost, LocalCallHost, AgentTaskHost, BotBudgetHost {
+extension NoodleStore: VoiceCallHost, LocalCallHost, AgentTaskHost, AgentApprovalHost, BotBudgetHost {
     var callRepository: WorkspaceRepository { repository }
     var callRuntime: AgentRuntimeCoordinator { runtime }
     var isOnCall: Bool { voiceCalls.call != nil }

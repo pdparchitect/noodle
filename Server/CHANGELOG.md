@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-22
+
+### Added
+
+- Approvals: a bot's call to a tool its service marks destructive waits on the server for its owner, who approves or declines it from Noodle on their Mac or phone; an approved one runs once, and the bot is told the outcome.
+
 ## [0.2.0] - 2026-11-21
 
 ### Changed

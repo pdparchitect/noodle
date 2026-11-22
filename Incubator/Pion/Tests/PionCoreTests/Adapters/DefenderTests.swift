@@ -59,4 +59,18 @@ final class DefenderTests: XCTestCase {
         XCTAssertEqual(Defender.adapter.watchedTool, "alerts", "The tool that reads them in full")
         XCTAssertNil(VirusTotal.adapter.watchedTool, "A lookup has nothing to watch")
     }
+
+    /// Who holds which Entra role is in Defender's hunting tables, so an audit of privileges can start there.
+    func testItsInstructionsSayWhereEntraRolesAre() {
+        XCTAssertTrue(Defender.preset.defaultInstructions.contains("IdentityInfo"))
+        XCTAssertTrue(Defender.preset.defaultInstructions.contains("AssignedRoles"))
+    }
+
+    /// What a compromised account touched is in Defender's hunting tables: files on devices, and files and mail in
+    /// Microsoft 365 apps.
+    func testItsInstructionsSayWhereDownloadsAndFileAccessAre() {
+        for table in ["DeviceFileEvents", "CloudAppEvents", "FileDownloaded", "EmailEvents"] {
+            XCTAssertTrue(Defender.preset.defaultInstructions.contains(table), table)
+        }
+    }
 }

@@ -6,7 +6,9 @@ import Foundation
 extension ToolHostServices {
     /// The app's services, backed by its own stores. `assignments` is the same live picture
     /// the broker enforces, so a card can only describe a browser the bot may use.
+    /// `approvalsChanged` hears of each call held for the person, with the bot's ID.
     public static func repository(_ repository: WorkspaceRepository, revoked: @escaping @Sendable (String, String, UUID) -> Void = { _, _, _ in },
+                                  approvalsChanged: @escaping @Sendable (UUID) -> Void = { _ in },
                                   assignments: @escaping @Sendable (UUID) -> ToolAssignments) -> ToolHostServices {
         ToolHostServices(isMember: { agent, conversation in
             (try? repository.participantRoster(for: agent, conversationID: conversation)) != nil
@@ -53,6 +55,10 @@ extension ToolHostServices {
             // Sent, not a draft someone has yet to send.
             let sent = Set(messages.flatMap(\.attachments)), wanted = link.absoluteString.lowercased()
             return attachments.contains { sent.contains($0.id) && $0.url?.absoluteString.lowercased() == wanted }
+        }, hold: { request in
+            let approval = try repository.addApproval(request)
+            approvalsChanged(request.agentID)
+            return approval
         })
     }
 }

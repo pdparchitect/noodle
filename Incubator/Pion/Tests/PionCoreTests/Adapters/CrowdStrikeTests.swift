@@ -65,4 +65,25 @@ final class CrowdStrikeTests: XCTestCase {
         XCTAssertEqual(query["limit"], String(ServiceAlert.most))
         XCTAssertEqual(CrowdStrike.adapter.watchedTool, "alerts")
     }
+
+    /// Who can use the Falcon console and with which roles, administrators first.
+    func testUsersListEveryConsoleUserWithTheirRolesAdministratorsFirst() async throws {
+        let service = FakeService()
+        service.answers["/user-management/queries/users/v1"] = (200, #"{"resources":["u-1","u-2"]}"#)
+        service.answers["/user-management/entities/users/GET/v1"] = (200, #"{"resources":[{"uuid":"u-1","uid":"analyst@kestrel.example"},{"uuid":"u-2","uid":"admin@kestrel.example"}]}"#)
+        service.answers["/user-management/combined/user-roles/v1?user_uuid=u-1"] = (200, #"{"resources":[{"uuid":"u-1","role_id":"falcon_console_guest","role_name":"Falcon Console Guest"}]}"#)
+        service.answers["/user-management/combined/user-roles/v1?user_uuid=u-2"] = (200, #"{"resources":[{"uuid":"u-2","role_id":"falcon_administrator","role_name":"Falcon Administrator"}]}"#)
+        let users = try await callTool(CrowdStrike.adapter, "users", "{}", on: service, in: falconUS)
+        XCTAssertFalse(users.isError, users.text)
+        let lines = users.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines[0].contains("admin@kestrel.example") && lines[0].contains("Falcon Administrator"), users.text)
+        XCTAssertTrue(lines.contains { $0.contains("analyst@kestrel.example") && $0.contains("Falcon Console Guest") }, users.text)
+        let asked = service.requests.first { $0.url?.path == "/user-management/entities/users/GET/v1" }
+        XCTAssertEqual(asked?.httpMethod, "POST")
+        XCTAssertEqual(try XCTUnwrap(JSONSerialization.jsonObject(with: asked?.httpBody ?? Data()) as? [String: [String]])["ids"], ["u-1", "u-2"])
+    }
+
+    func testItsSetupAsksToReadUserManagement() {
+        XCTAssertTrue(CrowdStrike.setup.joined().contains("User management: Read"))
+    }
 }

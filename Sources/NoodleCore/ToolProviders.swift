@@ -121,10 +121,13 @@ public struct ToolHostServices: Sendable {
     public let revoked: @Sendable (_ kind: String, _ id: String, _ agent: UUID) -> Void
     /// Whether `link` is attached to a message sent in a conversation the bot is in.
     public let isPosted: @Sendable (_ link: URL, _ agent: UUID, _ conversation: UUID) -> Bool
+    /// Keeps a call held for the person's approval; nil where no one can be asked, so such calls are refused.
+    public let hold: (@Sendable (AgentApprovalRequest) throws -> AgentApproval)?
     public init(isMember: @escaping @Sendable (UUID, UUID) -> Bool, post: @escaping @Sendable (ToolPost, UUID, UUID) throws -> UUID,
                 revoked: @escaping @Sendable (String, String, UUID) -> Void = { _, _, _ in },
-                isPosted: @escaping @Sendable (URL, UUID, UUID) -> Bool = { _, _, _ in false }) {
-        self.isMember = isMember; self.post = post; self.revoked = revoked; self.isPosted = isPosted
+                isPosted: @escaping @Sendable (URL, UUID, UUID) -> Bool = { _, _, _ in false },
+                hold: (@Sendable (AgentApprovalRequest) throws -> AgentApproval)? = nil) {
+        self.isMember = isMember; self.post = post; self.revoked = revoked; self.isPosted = isPosted; self.hold = hold
     }
     public static let none = ToolHostServices(isMember: { _, _ in false }, post: { _, _, _ in throw ToolProviderError("This \(ProductIdentity.current.name) cannot post for tools.") })
 }
@@ -200,6 +203,8 @@ public struct ToolDescriptor: Equatable, Sendable {
     public let timeout: TimeInterval?
     /// MCP `annotations.idempotentHint`. Absent means a timed-out call must not be repeated.
     public let retryable: Bool
+    /// A tool its server marks destructive, and not read-only: a connection's call to it is held for the person.
+    public let destructive: Bool
 
     public init(mcp object: [String: Any]) throws {
         guard let name = object["name"] as? String, !name.isEmpty, name.utf8.count <= 1024 else {
@@ -240,6 +245,7 @@ public struct ToolDescriptor: Equatable, Sendable {
         }
         timeout = ((object["_meta"] as? [String: Any])?["noodle/timeout"] as? Double).map { min(max($0, 1), 3600) }
         retryable = (object["annotations"] as? [String: Any])?["idempotentHint"] as? Bool ?? false
+        destructive = AgentApproval.asks(annotations: object["annotations"] as? [String: Any])
     }
 
     public static func list(mcp data: Data) throws -> [ToolDescriptor] {

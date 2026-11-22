@@ -248,6 +248,7 @@ final class MessengerDocumentationTests: XCTestCase {
             switch command {
             case .help, .listEffects, .getLatest, .listConversations: options = []
             case .tool: continue // Needs the app's tool bridge; covered by ToolCLITests.
+            case .listBots, .addParticipant, .removeParticipant: continue // Needs a group lead; covered by LeadMembershipTests.
             case .effect: options = ["confetti"] + conversation
             case .listMessages, .listParticipants: options = conversation
             case .react, .unreact: options = conversation + ["--message", message.id.uuidString, "--emoji", "✅"]
@@ -261,7 +262,7 @@ final class MessengerDocumentationTests: XCTestCase {
             case .call: options = ["--reason", "Checking in"]
             case .addTask: options = ["Write the notes"] + conversation
             case .updateTask: options = [taskID, "--state", "waiting", "--on", "user"]
-            case .listTasks: options = []
+            case .listTasks, .listApprovals: options = []
             }
             let result = MessengerCLI.runDirect(arguments: prefix + [command.rawValue] + options, environment: [:])
             XCTAssertEqual(result.exitCode, 0, "\(command): \(result.standardError)")

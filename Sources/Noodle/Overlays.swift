@@ -771,11 +771,9 @@ struct GroupInfoSheet: View {
                                       footnote: "Shared with every bot in this group so they understand its purpose.")
 
                 GroupMemberPicker(agents: store.groupCandidates(on: store.hubMirror(forConversation: conversation.id)),
-                                  selectedIDs: $selectedIDs, lead: store.canLead(conversation) ? $leadID : nil)
+                                  selectedIDs: $selectedIDs, lead: $leadID)
 
-                Text(store.canLead(conversation)
-                     ? "Add at least one bot. Membership changes apply to future messages. Right-click a bot to make it the lead: it hears your messages first."
-                     : "Add at least one bot. Membership changes apply to future messages.")
+                Text("Add at least one bot. Membership changes apply to future messages. Right-click a bot to make it the lead: it hears your messages first.")
                     .font(.caption)
                     .foregroundStyle(!selectedIDs.isEmpty ? Color.secondary : Color.red)
 
@@ -816,10 +814,8 @@ struct GroupInfoSheet: View {
 
     private func save() {
         if store.saveSettings(background: backgroundDraft, for: conversation, saving: {
-            guard store.updateGroup(conversation, named: name, publicDescription: publicDescription, participantIDs: selectedIDs,
-                                    folders: folders) else { return false }
-            if store.canLead(conversation), leadID != conversation.lead { store.setLead(leadID, of: conversation) }
-            return true
+            store.updateGroup(conversation, named: name, publicDescription: publicDescription, participantIDs: selectedIDs,
+                              lead: leadID.flatMap { selectedIDs.contains($0) ? $0 : nil }, folders: folders)
         }) {
             dismiss()
         }

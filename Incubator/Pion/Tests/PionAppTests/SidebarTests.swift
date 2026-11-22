@@ -6,6 +6,30 @@ import XCTest
 /// Noodle's sidebar order in Pion: pins on top in the order pinned and kept across launches, an Unread section
 /// when chosen, and the rest newest message first, with Investigations still by severity.
 @MainActor final class SidebarTests: XCTestCase {
+    func testSwitchingBetweenToolAndConversationRows() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionSidebar-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "PionSidebarSelection-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = PionModel(root: root, messenger: nil, isScripted: true, harnessDefaults: defaults)
+        let window = WindowState()
+        let id = UUID()
+
+        window.selectSidebarItem(.conversation(id), in: model, fromKeyboard: true)
+        XCTAssertEqual(window.sidebarItem(in: model), .conversation(id))
+        XCTAssertTrue(window.selectedFromKeyboard)
+        window.selectSidebarItem(.tool(id), in: model, fromKeyboard: false)
+        XCTAssertEqual(window.sidebarItem(in: model), .tool(id))
+        XCTAssertNil(model.selection)
+        window.selectSidebarItem(.conversation(id), in: model, fromKeyboard: false)
+        XCTAssertNil(window.selectedTool)
+        XCTAssertEqual(model.selection, id)
+        XCTAssertFalse(window.selectedFromKeyboard)
+        window.selectSidebarItem(nil, in: model, fromKeyboard: true)
+        XCTAssertNil(window.sidebarItem(in: model))
+    }
+
     func testPinsSitOnTopAndTheRestIsNewestFirst() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("PionSidebar-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }

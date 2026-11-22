@@ -87,4 +87,52 @@ final class OktaTests: XCTestCase {
         }
         XCTAssertTrue(service.requests.isEmpty)
     }
+
+    // MARK: Breach scope
+
+    /// The apps a user let act for them, with what they may do: each one keeps working after a password change.
+    func testAUsersGrantsSayWhichAppsActForThemAndWithWhatScopes() async throws {
+        let service = FakeService()
+        service.answers["/api/v1/users/00u1/grants"] = (200, #"[{"id":"oag1","clientId":"0oa-crm","scopeId":"scp1","status":"ACTIVE","source":"END_USER","created":"2026-11-14T09:00:00.000Z","issuer":"https://acme.okta.com","_embedded":{"scope":{"name":"okta.users.read"}}}]"#)
+        let grants = try await callTool(Okta.adapter, "user-grants", #"{"user":"00u1"}"#, on: service, in: acme)
+        XCTAssertFalse(grants.isError, grants.text)
+        XCTAssertTrue(grants.text.contains("0oa-crm") && grants.text.contains("okta.users.read") && grants.text.contains("granted by the user"), grants.text)
+        XCTAssertEqual(queryItems(service.requests.last)["expand"], "scope")
+    }
+
+    /// Who holds an admin role, and which: the accounts that can change the org.
+    func testAdminRolesListEachAdminWithTheirRoles() async throws {
+        let service = FakeService()
+        service.answers["/api/v1/iam/assignees/users"] = (200, #"{"value":[{"id":"00u1"},{"id":"00u2"}]}"#)
+        service.answers["/api/v1/users/00u1/roles"] = (200, #"[{"id":"ra1","type":"SUPER_ADMIN","label":"Super Administrator","status":"ACTIVE","assignmentType":"USER"}]"#)
+        service.answers["/api/v1/users/00u2/roles"] = (200, #"[{"id":"ra2","type":"READ_ONLY_ADMIN","label":"Read Only Administrator","status":"ACTIVE","assignmentType":"GROUP"}]"#)
+        service.answers["/api/v1/users/00u1"] = (200, #"{"id":"00u1","status":"ACTIVE","profile":{"login":"it@acme.example"}}"#)
+        service.answers["/api/v1/users/00u2"] = (200, #"{"id":"00u2","status":"ACTIVE","profile":{"login":"pion@acme.example"}}"#)
+        let admins = try await callTool(Okta.adapter, "admin-roles", "{}", on: service, in: acme)
+        XCTAssertFalse(admins.isError, admins.text)
+        let lines = admins.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines[0].contains("it@acme.example") && lines[0].contains("Super Administrator"), admins.text)
+        XCTAssertTrue(lines.contains { $0.contains("pion@acme.example") && $0.contains("Read Only Administrator (through a group)") }, admins.text)
+    }
+
+    /// API tokens act as the admin who made them, from anywhere unless limited: who made each, and when it was last used.
+    func testAPITokensSayWhoMadeEachAndWhenItExpires() async throws {
+        let service = FakeService()
+        service.answers["/api/v1/api-tokens"] = (200, #"[{"id":"t1","name":"terraform","userId":"00u1","clientName":"Okta API","created":"2025-01-01T00:00:00.000Z","expiresAt":"2026-12-01T00:00:00.000Z","lastUpdated":"2026-11-14T09:00:00.000Z","network":{"connection":"ANYWHERE"}}]"#)
+        service.answers["/api/v1/users/00u1"] = (200, #"{"id":"00u1","status":"ACTIVE","profile":{"login":"it@acme.example"}}"#)
+        let tokens = try await callTool(Okta.adapter, "api-tokens", "{}", on: service, in: acme)
+        XCTAssertFalse(tokens.isError, tokens.text)
+        XCTAssertTrue(tokens.text.contains("terraform") && tokens.text.contains("it@acme.example") && tokens.text.contains("from anywhere")
+                      && tokens.text.contains("expires 2026-12-01"), tokens.text)
+    }
+
+    /// A refusal names the custom role the token's admin needs, as the Read-Only Administrator cannot see admins.
+    func testARefusedAuditSaysWhichRoleItNeeds() async throws {
+        let service = FakeService()
+        service.answers["/api/v1/iam/assignees/users"] = (403, #"{"errorCode":"E0000006","errorSummary":"You do not have permission to perform the requested action"}"#)
+        let refused = try await callTool(Okta.adapter, "admin-roles", "{}", on: service, in: acme)
+        XCTAssertTrue(refused.isError)
+        XCTAssertTrue(refused.text.contains("View roles, resources, and admin assignments"), refused.text)
+    }
 }
+

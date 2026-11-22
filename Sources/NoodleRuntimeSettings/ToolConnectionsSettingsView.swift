@@ -243,6 +243,7 @@ public struct ToolConnectionEditor: View {
                     Text("Name").font(.caption.weight(.semibold))
                     TextField("e.g. Notion — Work", text: $name, axis: .horizontal).lineLimit(1)
                         .help("Use a distinct name for each account")
+                        .overlay(alignment: .trailing) { resetButton($name, to: existing?.defaultName) }
                 }
                 // A tool the app answers has the address its entry gives it, which cannot change, so it is not shown.
                 if !servedByApp {
@@ -267,14 +268,19 @@ public struct ToolConnectionEditor: View {
                     }
                 }
                 if onSecret != nil {
-                    // An adapter connection proves itself the way its adapter expects; only its values change here.
-                    if existing?.adapter == nil {
-                        Picker("Sign-in", selection: $signIn) {
-                            Text("Browser").tag(SignIn.browser)
-                            Text("Token").tag(SignIn.token)
-                            Text("Client ID & Secret").tag(SignIn.client)
+                    // A catalogue or adapter connection proves itself one way, so only its values change here.
+                    if existing?.choosesSignIn ?? true {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Sign-in").font(.caption.weight(.semibold))
+                            Picker("Sign-in", selection: $signIn) {
+                                Text("Browser").tag(SignIn.browser)
+                                Text("Token").tag(SignIn.token)
+                                Text("Client ID & Secret").tag(SignIn.client)
+                            }
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+                            .fixedSize()
                         }
-                        .pickerStyle(.segmented)
                     }
                     if signIn == .client {
                         // A catalogue tool's token address and scope are its entry's.
@@ -328,6 +334,7 @@ public struct ToolConnectionEditor: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Description").font(.caption.weight(.semibold))
                     TextField("Optional", text: $description, axis: .vertical).lineLimit(2...3)
+                        .overlay(alignment: .topTrailing) { resetButton($description, to: existing?.defaultDescription) }
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Instructions").font(.caption.weight(.semibold))
@@ -336,6 +343,7 @@ public struct ToolConnectionEditor: View {
                         .roundedBorderEditor()
                         .frame(height: 130)
                         .help("Optional guidance on using this connection. Do not include passwords or tokens.")
+                        .overlay(alignment: .topTrailing) { resetButton($instructions, to: existing?.defaultInstructions) }
                 }
                 if onBack != nil { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction) }
                 if let error { Text(error).foregroundStyle(.red).font(.caption) }
@@ -345,6 +353,15 @@ public struct ToolConnectionEditor: View {
                 }
             }.textFieldStyle(.roundedBorder).padding(20)
         }.frame(width: 480)
+    }
+    /// Puts its preset's name or text back in a field the person changed; saved so, the account follows that text's updates.
+    @ViewBuilder private func resetButton(_ text: Binding<String>, to fallback: String?) -> some View {
+        if let fallback, !fallback.isEmpty, text.wrappedValue != fallback {
+            Button { text.wrappedValue = fallback } label: { Image(systemName: "arrow.counterclockwise") }
+                .buttonStyle(.borderless)
+                .help("Reset to Default; it then follows the default's updates")
+                .padding(4)
+        }
     }
     /// Whether the app's own adapter answers it, through the service's API rather than an MCP server.
     private var servedByApp: Bool { existing?.adapter != nil }
@@ -505,12 +522,33 @@ private struct ConnectedStatus: View {
 }
 
 public struct ToolConnectionIcon: View {
+    @Environment(\.displayScale) private var displayScale
     let connection: ToolConnection
     let size: CGFloat
+    let frameless: Bool
+
     public var body: some View {
+        if frameless {
+            Group {
+                if let image = ToolCatalogIcon.thumbnail(data: connection.iconData, size: size, scale: displayScale, trimMargins: true)
+                    ?? ToolCatalogIcon.thumbnail(tool: ToolCatalog.definition(for: connection), size: size, scale: displayScale, trimMargins: true) {
+                    Image(nsImage: image).renderingMode(.original).resizable().interpolation(.high).scaledToFit()
+                } else {
+                    Image(systemName: "puzzlepiece.extension.fill").resizable().scaledToFit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+        } else {
+            tile
+        }
+    }
+
+    private var tile: some View {
         Group {
-            if let data = connection.iconData, let image = NSImage(data: data) {
-                Image(nsImage: image).resizable().scaledToFit()
+            if let image = ToolCatalogIcon.thumbnail(data: connection.iconData, size: size, scale: displayScale) {
+                Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
             } else if let tool = ToolCatalog.definition(for: connection) {
                 ToolCatalogIcon(tool: tool, size: size)
             } else {
@@ -520,9 +558,10 @@ public struct ToolConnectionIcon: View {
         }.frame(width: size, height: size).clipShape(RoundedRectangle(cornerRadius: size * 0.22))
     }
 
-    public init(connection: ToolConnection, size: CGFloat) {
+    public init(connection: ToolConnection, size: CGFloat, frameless: Bool = false) {
         self.connection = connection
         self.size = size
+        self.frameless = frameless
     }
 }
 

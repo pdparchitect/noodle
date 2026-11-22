@@ -63,13 +63,18 @@ public protocol ServiceOperation: Sendable {
     static var name: String { get }
     static var summary: String { get }
     static var input: JSONSchema { get }
-    /// Whether it only reads. Bots are told; it is a hint, not a permission.
+    /// Whether it only reads. Bots are told through the tool's hints.
     static var readOnly: Bool { get }
+    /// Whether it cuts off or restores someone's access, or deletes something. Noodle's tool broker then holds a bot's
+    /// call for the champion's approval, as data a bot reads, such as a phishing mail, could have asked for it; an
+    /// ordinary change, which is neither, runs on the bot's call.
+    static var destructive: Bool { get }
     func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult
 }
 
 public extension ServiceOperation {
     static var readOnly: Bool { true }
+    static var destructive: Bool { false }
 }
 
 extension ServiceAlert {
@@ -87,6 +92,18 @@ public protocol ServiceTrigger: Sendable {
     var tool: String { get }
     /// What is serious from `since` on, at most `ServiceAlert.most` of it, newest first.
     func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert]
+    /// The same for one account, for a trigger that keeps track of an account between its checks, such as how long a
+    /// report has failed; the rest need not.
+    func check(since: Date, on service: ServiceClient, account: UUID) async throws -> [ServiceAlert]
+    /// How far each check reads back from the newest alert seen, as the service lists some after their time.
+    var lookBack: TimeInterval { get }
+}
+
+public extension ServiceTrigger {
+    var lookBack: TimeInterval { AlertWatch.overlap }
+    func check(since: Date, on service: ServiceClient, account: UUID) async throws -> [ServiceAlert] {
+        try await check(since: since, on: service)
+    }
 }
 
 /// What an operation gives back: a sentence or two for the bot to read, and the fields it kept, as JSON.
@@ -110,7 +127,8 @@ public enum ServiceError: LocalizedError, Equatable, Sendable {
     case rejected(String?)
     /// The service accepted the credentials, but they may not do this (HTTP 403), saying why when it did.
     case forbidden(String?)
-    /// Too many requests (HTTP 429), saying why when it did, such as which quota of which project ran out.
+    /// Too many requests (HTTP 429, or a 403 that names a quota), saying why when it did, such as which quota of which
+    /// project ran out.
     case rateLimited(String? = nil)
     /// Any other failure, with the service's reason when it gave one.
     case status(Int, String? = nil)
@@ -129,7 +147,7 @@ public enum ServiceError: LocalizedError, Equatable, Sendable {
             "The service accepted this connection's credentials, but they may not do this\(reason.map { " (it said: \($0))" } ?? ""). "
                 + "Ask the person to check the permissions they were given, and the organisation, project or account the connection names, in Settings › Tools."
         case .rateLimited(let reason):
-            "The service is rate limiting requests (HTTP 429)\(reason.map { "; it said: \($0)" } ?? ""). Wait before trying again, and make fewer requests."
+            "The service is rate limiting requests\(reason.map { "; it said: \($0)" } ?? ""). Wait before trying again, and make fewer requests."
         case .status(let status, let reason): "The service could not answer (HTTP \(status))\(reason.map { "; it said: \($0)" } ?? "")."
         case .unreadable: "The service answered with something that could not be read."
         case .input(let reason): reason
@@ -342,6 +360,9 @@ public struct ServiceClient: Sendable {
     /// request down, as AWS does for a service that is not enabled or a permission the role lacks, and that has no key
     /// to blame.
     var explainsRefusals = false
+    /// The connection it reads for, for an operation that reads what the connection's trigger kept, such as what the
+    /// watch found; nil where none is known.
+    var account: UUID? = nil
 
     /// One of the account's details, by its field's key.
     public func setting(_ key: String) throws -> String {
@@ -382,7 +403,7 @@ public struct ServiceClient: Sendable {
     /// connection's access still decides which hosts may be reached.
     public func at(host: String) throws -> ServiceClient {
         guard let base = URL(string: "https://\(host)") else { throw ServiceError.input("\(host) is not a valid host.") }
-        return ServiceClient(base: base, access: access, settings: settings, explainsRefusals: explainsRefusals)
+        return ServiceClient(base: base, access: access, settings: settings, explainsRefusals: explainsRefusals, account: account)
     }
 
     /// Sends `form` URL-encoded, for services that take their parameters that way.
@@ -464,6 +485,8 @@ public struct ServiceClient: Sendable {
         }
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         let (data, response) = try await access.data(for: request)
+        // Google says a quota ran out with a 403, which is no missing permission.
+        if ToolConnectionAccess.isQuotaRefusal(response.statusCode, data) { throw ServiceError.rateLimited(Self.reason(data)) }
         if explainsRefusals, response.statusCode == 401 || response.statusCode == 403, let reason = Self.reason(data) {
             throw ServiceError.refused(reason)
         }
@@ -490,15 +513,19 @@ public struct OperationAdapter: ToolConnectionAdapter {
     }
     private let entries: [(name: String, entry: Entry)]
     private let trigger: (any ServiceTrigger)?
+    public let simultaneousRequests: Int?
 
-    public init(operations: [any ServiceOperation], trigger: (any ServiceTrigger)? = nil) {
+    /// `simultaneousRequests` is for a service known to turn away a burst beyond that many requests from one connection.
+    public init(operations: [any ServiceOperation], trigger: (any ServiceTrigger)? = nil, simultaneousRequests: Int? = nil) {
         entries = operations.map { Self.entry($0) }
         self.trigger = trigger
+        self.simultaneousRequests = simultaneousRequests
     }
 
     /// The operation that reads what its trigger finds, if its service has a feed of new and serious things to watch;
     /// a lookup service has none.
     public var watchedTool: String? { trigger?.tool }
+    public var alertLookBack: TimeInterval { trigger?.lookBack ?? AlertWatch.overlap }
 
     /// What the service raised from `since` on, as its trigger finds it, or nothing for an adapter without one.
     public func alerts(since: Date, connection: ToolConnection, access: ToolConnectionAccess) async throws -> [ServiceAlert] {
@@ -507,13 +534,16 @@ public struct OperationAdapter: ToolConnectionAdapter {
 
     func alerts(since: Date, connection: ToolConnection, access: any ServiceAccess) async throws -> [ServiceAlert] {
         guard let trigger else { return [] }
-        return try await trigger.check(since: since, on: ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:]))
+        return try await trigger.check(since: since, on: ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:],
+                                                                       account: connection.id),
+                                       account: connection.id)
     }
 
     private static func entry<Operation: ServiceOperation>(_ operation: Operation) -> (name: String, entry: Entry) {
         let description: [String: Any] = [
             "name": Operation.name, "description": Operation.summary,
-            "annotations": ["readOnlyHint": Operation.readOnly], "inputSchema": Operation.input.json,
+            "annotations": Operation.readOnly ? ["readOnlyHint": true] : ["readOnlyHint": false, "destructiveHint": Operation.destructive],
+            "inputSchema": Operation.input.json,
         ]
         let tool = (try? JSONSerialization.data(withJSONObject: description, options: [.sortedKeys])) ?? Data("{}".utf8)
         return (Operation.name, Entry(tool: tool) { arguments, client in
@@ -539,7 +569,8 @@ public struct OperationAdapter: ToolConnectionAdapter {
             throw ToolConnectionError.message("This connection does not offer \(tool).")
         }
         do {
-            let result = try await entry.run(arguments, ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:]))
+            let result = try await entry.run(arguments, ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:],
+                                                                      account: connection.id))
             var object: [String: Any] = ["content": [["type": "text", "text": result.text]], "isError": false]
             if let structured = result.structured { object["structuredContent"] = try JSONSerialization.jsonObject(with: structured) }
             return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
@@ -567,9 +598,10 @@ public enum PionAdapters {
                                                                   "crowdstrike": CrowdStrike.adapter, "sentinelone": SentinelOne.adapter,
                                                                   "splunk": Splunk.adapter, "elastic": Elastic.adapter, "sentinel": Sentinel.adapter,
                                                                   "cloudflare": Cloudflare.adapter, "wiz": Wiz.adapter, "github": GitHub.adapter,
-                                                                  "abuseipdb": AbuseIPDB.adapter, "urlscan": URLScan.adapter, "greynoise": GreyNoise.adapter, "crowdsec-cti": CrowdSec.adapter, "nvd": NVD.adapter, "crtsh": CrtSh.adapter,
+                                                                  "abuseipdb": AbuseIPDB.adapter, "urlscan": URLScan.adapter, "greynoise": GreyNoise.adapter, "crowdsec-cti": CrowdSec.adapter, "nvd": NVD.adapter, "crtsh": CrtSh.adapter, "dns": DNS.adapter,
                                                                   "otx": OTX.adapter, "haveibeenpwned": HaveIBeenPwned.adapter, "aws": AWS.adapter,
                                                                   "google-cloud": GoogleCloud.adapter, "azure": Azure.adapter, "google-workspace": GoogleWorkspace.adapter,
+                                                                  "google-workspace-containment": GoogleWorkspace.containmentAdapter,
                                                                   "proofpoint": Proofpoint.adapter, "sumologic": SumoLogic.adapter,
                                                                   "tenable": Tenable.adapter, "censys": Censys.adapter, "grafana": Grafana.adapter, "sentry": Sentry.adapter]
 }

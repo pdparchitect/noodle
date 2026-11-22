@@ -73,6 +73,28 @@ final class PionCoreTests: XCTestCase {
         XCTAssertEqual(after.last?.event, "evidence")
     }
 
+    /// A call held for the champion, and their decision, go into the Investigation's audit log, even once it is closed.
+    func testAHeldCallAndItsDecisionAreLoggedInTheInvestigation() throws {
+        let investigation = try open()
+        var approval = AgentApproval(conversationID: investigation.id, provider: "workspace", providerTitle: "Google Workspace Containment",
+                                     tool: "suspend", input: #"{"user":"m.okafor@kestrel.example"}"#, reason: "Signed in from a known-bad IP",
+                                     createdAt: Date())
+        XCTAssertTrue(store.logApproval(approval, agent: agent, agentName: "Rafe"))
+        approval.state = .done; approval.decidedBy = "Avery"; approval.result = "Suspended."
+        XCTAssertTrue(store.logApproval(approval, agent: agent, agentName: "Rafe"))
+        let logged = store.audit(investigation.id).suffix(2)
+        XCTAssertEqual(logged.map(\.event), ["approval", "approval"])
+        XCTAssertEqual(logged.first?.actor, .agent(agent))
+        XCTAssertEqual(logged.last?.actor, .champion("Avery"))
+        XCTAssertTrue(logged.first?.detail.contains("suspend user: m.okafor@kestrel.example") == true, logged.first?.detail ?? "")
+        XCTAssertTrue(logged.first?.detail.contains("Signed in from a known-bad IP") == true, logged.first?.detail ?? "")
+        XCTAssertTrue(logged.last?.detail.contains("Approved by Avery") == true, logged.last?.detail ?? "")
+        XCTAssertTrue(logged.last?.detail.contains("Suspended.") == true, logged.last?.detail ?? "")
+        // A direct conversation is no Investigation, so there is nothing to log in.
+        XCTAssertFalse(store.logApproval(AgentApproval(conversationID: UUID(), provider: "p", providerTitle: "P", tool: "t", input: "{}",
+                                                       reason: "r", createdAt: Date()), agent: agent, agentName: "Rafe"))
+    }
+
     // MARK: Case tool
 
     /// The lead of every Investigation in these tests; nil leaves them without one.
@@ -128,7 +150,7 @@ final class PionCoreTests: XCTestCase {
         XCTAssertEqual((open["inputSchema"] as? [String: Any])?["required"] as? [String], ["title", "objective"], "opening one needs no Investigation")
 
         let data = try await provider.call("open", arguments: JSONSerialization.data(withJSONObject: [
-            "title": "Domain-wide project creation", "objective": "Restrict it.", "team": ["Morgan"]]), files: [],
+            "title": "Domain-wide project creation", "objective": "Restrict it."]), files: [],
             context: ToolCallContext(agentID: opener, workspace: root))
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let text = ((object["content"] as? [[String: Any]])?.first?["text"] as? String) ?? ""
@@ -136,7 +158,9 @@ final class PionCoreTests: XCTestCase {
         let conversation = try XCTUnwrap((object["structuredContent"] as? [String: Any])?["conversation"] as? String)
         XCTAssertEqual(store.audit(try XCTUnwrap(UUID(uuidString: conversation))).first?.actor, .agent(opener))
         XCTAssertEqual(asked.agent, opener)
-        XCTAssertEqual(asked.opening?.team, ["Morgan"])
+        XCTAssertEqual(asked.opening?.title, "Domain-wide project creation")
+        XCTAssertNil((open["inputSchema"] as? [String: Any]).flatMap { ($0["properties"] as? [String: Any])?["team"] },
+                     "an opener could name any agent to join")
 
         // Without the Pion's say, agents may not.
         let closed = CaseToolProvider(store: store, leadOf: { _ in nil }) { _ in "Rafe" }

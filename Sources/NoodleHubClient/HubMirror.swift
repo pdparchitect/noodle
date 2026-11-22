@@ -80,6 +80,8 @@ import Observation
     private var pauses: [UUID: LinkBotPause] = [:]
     /// Each bot's open tasks as the Hub last listed them, by its ID there.
     @ObservationIgnored private var listedTasks: [UUID: [LinkTask]] = [:]
+    /// Each bot's calls held for this Mac's user, as the Hub last listed them, by its ID there.
+    @ObservationIgnored private var listedApprovals: [UUID: [LinkApproval]] = [:]
     /// Computers being made, waiting for the Hub to say they are done.
     @ObservationIgnored private var making: [UUID: CheckedContinuation<LinkComputer, Error>] = [:]
     /// Opens a connection's sign-in page in the browser and returns the address it came back to.
@@ -506,9 +508,11 @@ import Observation
         return conversation
     }
 
-    public func updateGroup(_ conversation: UUID, named name: String, publicDescription: String, agentIDs: [UUID]) async throws {
+    public func updateGroup(_ conversation: UUID, named name: String, publicDescription: String, agentIDs: [UUID],
+                            lead: UUID?) async throws {
         guard let entry = groups.first(where: { $0.conversation == conversation }) else { throw LinkError("This group is not on the Hub.") }
-        let draft = LinkGroupDraft(name: name, publicDescription: publicDescription, botIDs: try remoteBots(agentIDs))
+        let draft = LinkGroupDraft(name: name, publicDescription: publicDescription, botIDs: try remoteBots(agentIDs),
+                                   leadID: try lead.map { try remoteBots([$0])[0] })
         guard case .group(let group) = try await pairing.request(.updateGroup(id: entry.remote, draft)) else {
             throw LinkError("The Hub sent an unexpected answer.")
         }
@@ -808,6 +812,7 @@ import Observation
         await pairing.fetchPictures(listed)
         let bots = pairing.keptPictures(listed)
         listedTasks = Dictionary(bots.map { ($0.id, $0.tasks) }, uniquingKeysWith: { first, _ in first })
+        listedApprovals = Dictionary(bots.map { ($0.id, $0.approvals) }, uniquingKeysWith: { first, _ in first })
         var changed = false
         for bot in bots {
             if let entry = entries.first(where: { $0.remote == bot.id }) {
@@ -849,8 +854,24 @@ import Observation
                           note: task.note, createdAt: task.updatedAt)
             }
             if (try? repository.replaceTasks(agentID: entry.agent, with: tasks)) == true { changed = true }
+            // The Hub runs a held call and keeps how it ended; here they show only while they wait.
+            let approvals = (listedApprovals[entry.remote] ?? []).map { approval in
+                AgentApproval(id: approval.id, conversationID: localConversation(remote: approval.conversationID) ?? entry.conversation,
+                              provider: "", providerTitle: approval.providerTitle, tool: approval.tool,
+                              toolDescription: approval.toolDescription, input: approval.input, reason: approval.reason,
+                              createdAt: approval.createdAt)
+            }
+            if (try? repository.replaceApprovals(agentID: entry.agent, with: approvals)) == true { changed = true }
         }
         if changed { onChange?() }
+    }
+
+    /// The user's decision on a call a bot on the Hub holds. The Hub runs it and wakes the bot; its list here follows.
+    public func decideApproval(_ id: UUID, localAgentID: UUID, approve: Bool) async throws {
+        guard let entry = entries.first(where: { $0.agent == localAgentID }) else { throw LinkError("This bot is not on the Hub.") }
+        _ = try await pairing.request(.decideApproval(LinkApprovalDecision(botID: entry.remote, approvalID: id, approve: approve)))
+        listedApprovals[entry.remote]?.removeAll { $0.id == id }
+        copyTasks()
     }
 
     private func syncGroups() async throws {
@@ -1261,7 +1282,8 @@ import Observation
     private func adopt(_ group: LinkGroup) throws -> BotConversation {
         let conversation = try repository.createGroup(named: group.draft.name, publicDescription: group.draft.publicDescription,
                                                       participantIDs: localAgents(group.draft.botIDs),
-                                                      existingAgents: try repository.loadAgents())
+                                                      existingAgents: try repository.loadAgents(),
+                                                      leadID: group.draft.leadID.flatMap { localAgents([$0]).first })
         groups.append(GroupEntry(remote: group.id, conversation: conversation.id, synced: 0, pinnedAt: group.pinnedAt,
                                  notifications: group.notifications))
         saveGroups()
@@ -1269,17 +1291,20 @@ import Observation
         return try repository.setConversationArchived(true, conversationID: conversation.id, now: archivedAt)
     }
 
-    /// Copies a group's name, description, bots and whether it is archived. The notice Group Info leaves comes from the Hub with its messages.
+    /// Copies a group's name, description, bots, lead and whether it is archived. The notices Group Info leaves come from the
+    /// Hub with its messages.
     @discardableResult private func apply(_ group: LinkGroup, to entry: GroupEntry) throws -> Bool {
         guard var conversation = try repository.loadConversations().first(where: { $0.id == entry.conversation }) else { return false }
         let bots = localAgents(group.draft.botIDs).sorted { $0.uuidString < $1.uuidString }
         let description = group.draft.publicDescription.isEmpty ? nil : group.draft.publicDescription
+        let lead = group.draft.leadID.flatMap { localAgents([$0]).first }
         let archivedChanged = (conversation.archivedAt != nil) != (group.archivedAt != nil)
         guard conversation.displayName != group.draft.name || conversation.publicDescription != description
-                || conversation.participantIDs != bots || archivedChanged else { return false }
+                || conversation.participantIDs != bots || conversation.lead != lead || archivedChanged else { return false }
         conversation.displayName = group.draft.name
         conversation.publicDescription = description
         conversation.participantIDs = bots
+        conversation.leadID = lead
         if archivedChanged { conversation.archivedAt = group.archivedAt }
         try repository.updateConversation(conversation)
         return true

@@ -1,6 +1,5 @@
 import CoreGraphics
 import Foundation
-import Hub
 import ImageIO
 import MLX
 import NoodleCore
@@ -13,23 +12,22 @@ public enum ImageGeneration {
     public static func png(_ request: ImageGenerationRequest) throws -> Data {
         // Every catalogue model is an SDXL checkpoint stored where the SDXL Turbo preset looks.
         let configuration = StableDiffusionConfiguration.presetSDXLTurbo
-        let unet = request.weights.appendingPathComponent(ImageModelStore.loaderPath).appendingPathComponent("unet/diffusion_pytorch_model.safetensors")
-        guard FileManager.default.fileExists(atPath: unet.path) else {
+        let directory = request.weights.appendingPathComponent(ImageModelStore.loaderPath)
+        guard FileManager.default.fileExists(atPath: directory.appendingPathComponent("unet/diffusion_pytorch_model.safetensors").path) else {
             throw ToolProviderError("This image model's files are missing. Remove it and download it again in Settings > Tools > Image Generation.")
         }
-        let hub = HubApi(downloadBase: request.weights, cache: nil, useOfflineMode: true)
         let generator: ImageGenerator
         let start: MLXArray?
         if let data = request.image {
             guard let source = CGImageSourceCreateWithData(data as CFData, nil), let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
-                  let editor = try configuration.imageToImageGenerator(hub: hub, configuration: LoadConfiguration(float16: true)) else {
+                  let editor = try configuration.imageToImageGenerator(directory: directory, configuration: LoadConfiguration(float16: true)) else {
                 throw ToolProviderError("This model cannot start from a picture.")
             }
             // Pixels to the −1…1 range the encoder takes.
             start = (Image(image: image).data.asType(.float32) / 255) * 2 - 1
             generator = editor
         } else {
-            guard let maker = try configuration.textToImageGenerator(hub: hub, configuration: LoadConfiguration(float16: true)) else {
+            guard let maker = try configuration.textToImageGenerator(directory: directory, configuration: LoadConfiguration(float16: true)) else {
                 throw ToolProviderError("This model cannot make images from text.")
             }
             start = nil

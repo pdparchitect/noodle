@@ -33,7 +33,7 @@ struct MainWindow: View {
         @Bindable var model = model
         NavigationSplitView {
             Sidebar(model: model, window: window)
-                .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
+                .navigationSplitViewColumnWidth(min: 280, ideal: 326, max: 380)
         } detail: {
             if let conversation = model.conversation(model.selection) {
                 // Kept while the selection changes, as Noodle's is: only the transcript is replaced.
@@ -99,6 +99,8 @@ struct Sidebar: View {
     let model: RookModel
     @Bindable var window: WindowState
     @AppStorage(SidebarOptions.showsClosedKey) private var showsClosed = false
+    @AppStorage(ConversationListStyle.key) private var style = ConversationListStyle.standard.rawValue
+    @AppStorage(SidebarTools.key) private var showsTools = false
     @State private var closedLimit = SidebarOptions.closedShown
     @FocusState private var searchFocused: Bool
     @SceneStorage("RookClosedExpanded") private var closedExpanded = true
@@ -113,7 +115,7 @@ struct Sidebar: View {
         Group {
             if let search = model.sidebarSearch(window.searchText, showingAll: showsAllMentions, mentions: window.mentions) {
                 SidebarSearchResults(
-                    sections: [("Missions", search.missions), ("Groups", search.groups), ("Agents", search.agents)],
+                    sections: [("Missions", search.missions), ("Agents", search.agents), ("Groups", search.groups)],
                     mentions: search.mentions, hiddenMentions: search.hiddenMentions, term: ConversationSearch(window.searchText),
                     selection: model.selection, select: { model.selection = $0 },
                     pickMessage: { match in
@@ -122,15 +124,28 @@ struct Sidebar: View {
                     },
                     showAll: { showsAllMentions = true },
                     conversation: { model.conversation($0) },
-                    mentionPicture: { AnyView(ConversationPicture(model: model, conversation: $0, size: 42)) },
+                    mentionPicture: { AnyView(ConversationPicture(model: model, conversation: $0, size: SidebarItemDensity.compact.rowPicture)) },
                     mentionTitle: { model.title(of: $0) },
-                    row: { ConversationChoiceRow(model: model, conversation: $0, line: line) },
+                    row: { ConversationChoiceRow(model: model, conversation: $0, line: line).sidebarItemInsets() },
                     menu: { ConversationRowMenu(model: model, window: window, conversation: $0) })
                 .overlay { if search.isEmpty { ContentUnavailableView.search(text: window.searchText) } }
             } else {
-                list(line: line)
+                if ConversationListStyle(rawValue: style) == .icons {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) { sections(line: line, icons: true) }
+                            .padding(.horizontal, 10)
+                            .padding(.bottom, 10)
+                            .focusSection()
+                    }
+                } else {
+                    List(selection: Binding(get: { model.selection }, set: select)) {
+                        sections(line: line, icons: false)
+                    }
+                    .listStyle(.sidebar)
+                }
             }
         }
+        .environment(\.sidebarItemDensity, .compact)
         // As in Noodle: Tab in the list goes to the message field, and Shift-Tab there comes back.
         .modifier(ConversationListKeyboardNavigation(hasSelection: model.selection != nil, searchIsFocused: searchFocused,
             focusComposer: { window.composerFocusRequest = UUID() }, focusRequest: window.sidebarFocusRequest))
@@ -158,61 +173,119 @@ struct Sidebar: View {
         }
     }
 
-    /// The sidebar when nothing is searched for.
-    private func list(line: ConversationRowDetail) -> some View {
-        let sections = model.sidebarSections(ConversationOrder(rawValue: order) ?? .standard)
-        let closed = model.missions.filter(\.isClosed).sorted { $0.updatedAt > $1.updatedAt }
-        return List(selection: Binding(get: { model.selection }, set: { id in
-            window.selectedFromKeyboard = NSApp.currentEvent?.type == .keyDown
-            model.selection = id
-        })) {
-            // Noodle's Tasks section: what the agents are working on, those waiting on the champion first.
-            SidebarTasks(store: model, filter: taskFilter, inList: true)
-            // As Noodle's, and a section shows only once it has something in it.
-            rows(sections.pinned, header: "Pinned", line: line)
-            rows(sections.unread, header: "Unread", line: line)
-            rows(sections.missions, header: "Missions", line: line)
-            // Closed ones only when asked for, a few at a time, to look back at.
-            if showsClosed, !closed.isEmpty {
-                Section(isExpanded: $closedExpanded) {
-                    ForEach(closed.prefix(closedLimit)) { mission in
-                        MissionRow(model: model, mission: mission).tag(mission.id)
-                            .contextMenu {
-                                if let conversation = model.conversation(mission.id) {
-                                    ConversationRowMenu(model: model, window: window, conversation: conversation)
-                                }
-                            }
-                    }
-                    if closed.count > closedLimit {
-                        Button("Show \(min(closed.count - closedLimit, SidebarOptions.closedShown)) More") {
-                            closedLimit += SidebarOptions.closedShown
-                        }
-                        .buttonStyle(.accentLink)
-                        .font(.caption)
-                        .selectionDisabled()
-                    }
-                } header: {
-                    Text("Closed")
-                }
-            }
-            rows(sections.groups, header: "Groups", line: line)
-            rows(sections.agents, header: "Agents", line: line)
-        }
-        .listStyle(.sidebar)
+    private func select(_ id: UUID?) {
+        window.selectedFromKeyboard = NSApp.currentEvent?.type == .keyDown
+        model.selection = id
     }
 
-    @ViewBuilder private func rows(_ conversations: [BotConversation], header: String, line: ConversationRowDetail) -> some View {
-        if !conversations.isEmpty {
-            Section {
-                ForEach(conversations) { conversation in
-                    ConversationChoiceRow(model: model, conversation: conversation, line: line).tag(conversation.id)
-                        .conversationDropTarget { model.drop($0, onConversation: conversation.id) }
-                        .contextMenu { ConversationRowMenu(model: model, window: window, conversation: conversation) }
-                }
-            } header: {
-                Text(header)
+    @ViewBuilder private func sections(line: ConversationRowDetail, icons: Bool) -> some View {
+        let sections = model.sidebarSections(ConversationOrder(rawValue: order) ?? .standard)
+        let closed = model.missions.filter(\.isClosed).sorted { $0.updatedAt > $1.updatedAt }
+        SidebarTasks(store: model, filter: taskFilter, inList: !icons)
+        conversations(sections.pinned, header: "Pinned", line: line, icons: icons)
+        conversations(sections.unread, header: "Unread", line: line, icons: icons)
+        conversations(sections.missions, header: "Missions", line: line, icons: icons)
+        if showsClosed, !closed.isEmpty {
+            if icons {
+                DisclosureGroup(isExpanded: $closedExpanded) {
+                    ConversationIconGrid { closedItems(closed, icons: true) }
+                        .padding(.vertical, 4)
+                    showMoreClosed(total: closed.count)
+                } label: { SidebarGridHeading(title: "Closed") }
+            } else {
+                Section(isExpanded: $closedExpanded) {
+                    closedItems(closed, icons: false)
+                    showMoreClosed(total: closed.count)
+                } header: { Text("Closed") }
             }
         }
+        conversations(sections.agents, header: "Agents", line: line, icons: icons)
+        conversations(sections.groups, header: "Groups", line: line, icons: icons)
+        if showsTools {
+            SidebarTools(controller: model.connectionsController, inList: !icons)
+        }
+    }
+
+    private func closedItems(_ closed: [Mission], icons: Bool) -> some View {
+        ForEach(closed.prefix(closedLimit)) { mission in
+            Group {
+                if icons {
+                    tile(id: mission.id, name: mission.title, detail: mission.sidebarDetail) { size in
+                        SeverityGlyph(severity: mission.severity, closed: true).scaleEffect(size / 18).frame(width: size, height: size)
+                    }
+                } else {
+                    MissionRow(model: model, mission: mission).sidebarItemInsets()
+                }
+            }
+            .tag(mission.id)
+            .contextMenu {
+                if let conversation = model.conversation(mission.id) {
+                    ConversationRowMenu(model: model, window: window, conversation: conversation)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func showMoreClosed(total: Int) -> some View {
+        if total > closedLimit {
+            Button("Show \(min(total - closedLimit, SidebarOptions.closedShown)) More") { closedLimit += SidebarOptions.closedShown }
+                .buttonStyle(.accentLink)
+                .font(.caption)
+                .selectionDisabled()
+        }
+    }
+
+    @ViewBuilder private func conversations(_ items: [BotConversation], header: String, line: ConversationRowDetail, icons: Bool) -> some View {
+        if !items.isEmpty {
+            if icons {
+                SidebarGridHeading(title: header)
+                ConversationIconGrid { conversationItems(items, line: line, icons: true) }
+                    .padding(.vertical, 4)
+            } else {
+                Section(header) { conversationItems(items, line: line, icons: false) }
+            }
+        }
+    }
+
+    private func conversationItems(_ items: [BotConversation], line: ConversationRowDetail, icons: Bool) -> some View {
+        ForEach(items) { conversation in
+            Group {
+                if icons {
+                    let agent = conversation.kind == .direct ? model.agent(conversation.participantIDs.first) : nil
+                    let pause = agent.flatMap { model.interruption(of: $0) }
+                    let working = agent.map { model.phase(of: $0) == .working } ?? false
+                    let detail = model.mission(conversation.id)?.sidebarDetail ?? model.rowDetail(for: conversation, showing: line)
+                    tile(id: conversation.id, name: model.title(of: conversation),
+                         detail: pause ?? (working ? "Working" : detail), paused: pause != nil, working: working) { size in
+                        ConversationPicture(model: model, conversation: conversation, size: size)
+                    }
+                } else {
+                    ConversationChoiceRow(model: model, conversation: conversation, line: line).sidebarItemInsets()
+                }
+            }
+            .tag(conversation.id)
+            .conversationDropTarget { model.drop($0, onConversation: conversation.id) }
+            .contextMenu { ConversationRowMenu(model: model, window: window, conversation: conversation) }
+        }
+    }
+
+    private func tile<Picture: View>(id: UUID, name: String, detail: String, paused: Bool = false, working: Bool = false,
+                                     @ViewBuilder picture: @escaping (CGFloat) -> Picture) -> some View {
+        let selected = model.selection == id
+        return Button { select(id) } label: {
+            SidebarItemTile(title: name, detail: detail,
+                            tone: paused ? AnyShapeStyle(.orange) : working ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary),
+                            emphasized: paused || working, selected: selected) { size in
+                picture(size).overlay(alignment: .topLeading) {
+                    if model.isUnread(id) {
+                        UnreadDot(isMuted: model.notifications(of: id) == .muted, size: 10, ringed: true).offset(x: -2, y: -2)
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .help(name)
     }
 }
 
@@ -225,9 +298,10 @@ struct ConversationPicture: View {
 
     var body: some View {
         if let mission = model.mission(conversation.id) {
-            SeverityGlyph(severity: mission.severity, closed: mission.isClosed).frame(width: size, height: size)
+            SeverityGlyph(severity: mission.severity, closed: mission.isClosed)
+                .scaleEffect(size / 18).frame(width: size, height: size)
         } else if conversation.kind == .direct, let agent = model.agent(conversation.participantIDs.first) {
-            AgentMark(agent: agent, size: size)
+            AgentMark(agent: agent, size: size, phase: model.phase(of: agent))
         } else {
             GroupSigil(members: model.members(of: conversation).map(\.id), size: size)
         }
@@ -337,31 +411,20 @@ struct MissionRow: View {
     let mission: Mission
 
     var body: some View {
-        let unread = model.countsAsUnread(mission.id)
-        HStack(alignment: .top, spacing: 8) {
+        SidebarItemRow(title: mission.title, detail: mission.sidebarDetail,
+                       timestamp: SidebarTimestamp.text(for: mission.updatedAt)) { size in
             SeverityGlyph(severity: mission.severity, closed: mission.isClosed)
-                .padding(.top, 3)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(mission.reference).font(.caption.monospaced()).foregroundStyle(.secondary)
-                    Spacer(minLength: 4)
-                    Text(mission.updatedAt.rookShort).font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
-                }
-                Text(mission.title)
-                    .font(.callout.weight(unread ? .semibold : .regular))
-                    .lineLimit(2)
-                Text(mission.outcome?.title ?? mission.status.title)
-                    .font(.caption)
-                    .foregroundStyle(mission.isClosed ? Color.secondary : mission.status.color)
-            }
+                .scaleEffect(size / 18).frame(width: size, height: size)
         }
-        .padding(.vertical, 3)
         .modifier(UnreadMark(model: model, id: mission.id))
     }
 }
 
+private extension Mission {
+    var sidebarDetail: String { "\(reference) · \(outcome?.title ?? status.title)" }
+}
+
 /// Noodle's blue dot on an unread row, in the leading inset 5 points before its mark; a muted group's is dimmed.
-/// Smaller than Noodle's, to suit Rook's smaller marks, which also keeps it clear of the sidebar's edge.
 struct UnreadMark: ViewModifier {
     let unread: Bool
     var muted = false
@@ -374,7 +437,7 @@ struct UnreadMark: ViewModifier {
 
     func body(content: Content) -> some View {
         content.overlay(alignment: .leading) {
-            if unread { UnreadDot(isMuted: muted, size: 6).offset(x: -11) }
+            if unread { UnreadDot(isMuted: muted).offset(x: -13) }
         }
     }
 }
@@ -385,19 +448,11 @@ struct GroupRow: View {
     var line = ConversationRowDetail.standard
 
     var body: some View {
-        let unread = model.countsAsUnread(group.id)
-        HStack(spacing: 8) {
-            GroupSigil(members: model.members(of: group).map(\.id), size: 22)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(model.title(of: group)).font(.callout.weight(unread ? .semibold : .regular)).lineLimit(1)
-                Text(model.rowDetail(for: group, showing: line))
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            }
+        SidebarItemRow(title: model.title(of: group), detail: model.rowDetail(for: group, showing: line),
+                       timestamp: SidebarTimestamp.text(for: group.updatedAt)) { size in
+            GroupSigil(members: model.members(of: group).map(\.id), size: size)
         }
-        .padding(.vertical, 2)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .modifier(UnreadMark(model: model, id: group.id))
-        .contentShape(Rectangle())
     }
 }
 
@@ -410,21 +465,13 @@ struct AgentRow: View {
     var line = ConversationRowDetail.standard
 
     var body: some View {
-        let phase = model.phase(of: agent)
-        HStack(spacing: 8) {
-            AgentMark(agent: agent, size: 22, phase: phase)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(agent.displayName).font(.callout.weight(unread ? .semibold : .regular))
-                if let detail = model.interruption(of: agent) ?? conversation.map({ model.rowDetail(for: $0, showing: line) })
-                    ?? model.phaseDetail(of: agent) ?? agent.publicDescription {
-                    Text(detail).font(.caption).foregroundStyle(phase == .failed ? Color.red : Color.secondary).lineLimit(1)
-                }
-            }
+        let detail = conversation.map { model.rowDetail(for: $0, showing: line) } ?? model.phaseDetail(of: agent) ?? agent.publicDescription ?? ""
+        SidebarItemRow(title: agent.displayName, detail: detail,
+                       timestamp: conversation.map { SidebarTimestamp.text(for: $0.updatedAt) } ?? "",
+                       pause: model.interruption(of: agent)) { size in
+            AgentMark(agent: agent, size: size, phase: model.phase(of: agent))
         }
-        .padding(.vertical, 2)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .modifier(UnreadMark(unread: unread))
-        .contentShape(Rectangle())
     }
 }
 

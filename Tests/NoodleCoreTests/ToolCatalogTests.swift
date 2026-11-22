@@ -144,6 +144,22 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertNil(ToolConnectionConfiguration(endpoint: URL(string: "https://custom.example/mcp")!).oauth)
     }
 
+    func testOnlyAServerThePersonAddedLetsThemChooseHowItSignsIn() throws {
+        let atlassian = try XCTUnwrap(ToolCatalog.definition(forMCPEndpoint: URL(string: "https://mcp.atlassian.com/v1/mcp")!))
+        XCTAssertFalse(try atlassian.makeConnection(name: "Atlassian").choosesSignIn)
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        let keyed = ToolDefinition(id: "keys", name: "Keys", summary: "", defaultInstructions: "", iconName: "keys",
+                                   configuration: .connection(.init(endpoint: URL(string: "https://keys.example/mcp")!, tokenHeader: "x-apikey")))
+        ToolCatalog.use(ToolCatalog.noodle + [keyed])
+        XCTAssertFalse(try keyed.makeConnection(name: "Keys").choosesSignIn)
+        let endpoint = URL(string: "https://custom.example/mcp")!
+        XCTAssertFalse(try ToolConnectionConfiguration(endpoint: endpoint, open: true).makeConnection(name: "Open").choosesSignIn)
+        var custom = try ToolConnectionConfiguration(endpoint: endpoint).makeConnection(name: "Custom")
+        XCTAssertTrue(custom.choosesSignIn)
+        custom.open = true
+        XCTAssertFalse(custom.choosesSignIn, "a server found to need nothing has nothing to choose")
+    }
+
     func testATokenPresetMakesTokenConnectionsAndOthersSignIn() throws {
         let endpoint = URL(string: "https://keys.example/mcp")!
         let keyed = try ToolConnectionConfiguration(endpoint: endpoint, tokenHeader: "x-apikey").makeConnection(name: "Keys")
@@ -291,6 +307,46 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(remade.instructions, "Look at web first.")
         XCTAssertEqual(remade.iconData, Data([1, 2, 3]))
         XCTAssertEqual(remade.tokenHeader, "Authorization")
+    }
+
+    func testAnAccountFollowsItsPresetsTextUntilThePersonWritesTheirOwn() throws {
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        func errors(_ name: String, _ summary: String, _ instructions: String) -> ToolDefinition {
+            ToolDefinition(id: "errors", name: name, summary: summary, defaultInstructions: instructions, iconName: "errors",
+                           configuration: .connection(.init(endpointTemplate: "https://errors.example/api", fields: [], tokenHeader: "Authorization",
+                                                            adapter: "errors")))
+        }
+        func notes(_ name: String, _ summary: String, _ instructions: String) -> ToolDefinition {
+            ToolDefinition(id: "notes", name: name, summary: summary, defaultInstructions: instructions, iconName: "notes",
+                           configuration: .connection(.init(endpointTemplate: "https://notes.example/mcp", fields: [])))
+        }
+        let preset = errors("Errors", "Issues.", "Read.")
+        ToolCatalog.use([preset, notes("Notes", "Pages.", "Search first.")])
+        let untouched = try preset.makeConnection(name: "Errors")
+        var edited = try preset.makeConnection(name: "Errors — Mine")
+        edited.instructions = "Mine."
+        var restored = try preset.makeConnection(name: "Errors")
+        restored.name = "Mine"
+        restored.instructions = "Mine."
+        restored.name = "Errors"
+        restored.instructions = "Read."
+        // As a Hub keeps one sent from a device, by address only, with the text it was shown.
+        let sent = try ToolConnection(name: "Notes", endpoint: URL(string: "https://notes.example/mcp")!,
+                                      description: "Pages.", instructions: "Search first.")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var registry = ToolConnectionRegistry()
+        registry.connections = [untouched, edited, restored, sent]
+        try registry.save(root: root)
+        let skillNames = try ToolConnectionRegistry.load(root: root).connections.map(\.skillName)
+
+        // A later release renames the presets and rewrites their text.
+        ToolCatalog.use([errors("Bugs", "Issues and releases.", "Read them."), notes("Wiki", "Pages and databases.", "Search before adding.")])
+        let loaded = try ToolConnectionRegistry.load(root: root).connections
+        XCTAssertEqual(loaded.map(\.name), ["Bugs", "Errors — Mine", "Bugs", "Wiki"])
+        XCTAssertEqual(loaded.map(\.description), ["Issues and releases.", "Issues and releases.", "Issues and releases.", "Pages and databases."])
+        XCTAssertEqual(loaded.map(\.instructions), ["Read them.", "Mine.", "Read them.", "Search before adding."])
+        XCTAssertEqual(loaded.map(\.skillName), skillNames, "bots would lose the name they call it by")
     }
 
     func testARememberedPresetCountsOnlyWhenTheConnectionIsAtAnAddressItMakes() throws {

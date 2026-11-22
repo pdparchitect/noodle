@@ -480,6 +480,32 @@ import XCTest
         XCTAssertEqual(whileConnected, 1)
     }
 
+    /// A call a bot holds is pushed to its owner's devices away, one ping per call under its own ID, so the phone can
+    /// tell it from replies; deciding it takes the ping back.
+    func testHeldCallsArePushedToDevicesAwayAndTakenBackOnceDecided() async throws {
+        let pushes = RecordedPushes()
+        let f = try await fixture(pushes: pushes)
+        let bot = try await createBot(f)
+        _ = try await f.device.request(.pushTopic(LinkPushTopic(topic: "phone-topic")))
+        let held = try f.hub.repository.addApproval(AgentApprovalRequest(
+            agentID: bot.id, conversationID: nil, provider: "workspace", providerTitle: "Google Workspace Containment", tool: "suspend",
+            input: #"{"user":"m.okafor@kestrel.example"}"#, reason: "Phished"))
+        f.hub.bots.approvalsChanged(of: bot.id)
+        for _ in 0..<50 where await pushes.unread("phone-topic", held.id) == nil { try await Task.sleep(for: .milliseconds(100)) }
+        let pushed = await pushes.unread("phone-topic", held.id)
+        XCTAssertNotNil(pushed)
+        // Other changes to the bot push it no more.
+        f.hub.bots.tasksChanged(of: bot.id)
+        try await Task.sleep(for: .milliseconds(300))
+        let publishedOnce = await pushes.published.filter { $0.hasSuffix(held.id.uuidString) }.count
+        XCTAssertEqual(publishedOnce, 1)
+
+        _ = try await f.device.request(.decideApproval(LinkApprovalDecision(botID: bot.id, approvalID: held.id, approve: false)))
+        for _ in 0..<50 where await pushes.unread("phone-topic", held.id) != nil { try await Task.sleep(for: .milliseconds(100)) }
+        let afterDeciding = await pushes.unread("phone-topic", held.id)
+        XCTAssertNil(afterDeciding)
+    }
+
     /// Muting a group on one device mutes it on all of them: what it showed on a device away is taken back,
     /// and its replies notify nothing until it is unmuted. A bot's own conversation and other people's groups cannot be muted.
     func testAMutedGroupNotifiesNoDevice() async throws {
@@ -683,6 +709,60 @@ import XCTest
         XCTAssertEqual(tasks.first?.waitingOn, .you)
         XCTAssertEqual(tasks.first?.note, "Pick one")
         XCTAssertEqual(tasks.first?.conversationID, bot.conversationID)
+    }
+
+    /// A call a bot holds reaches its owner's devices with the bot, exactly as it will run; only the owner decides it,
+    /// and once decided it leaves the list.
+    func testBotsCarryTheCallsTheyHoldForTheirOwnerToDecide() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        XCTAssertEqual(bot.approvals, [])
+        let events = try await f.device.subscribe()
+        _ = try await f.device.request(.bots)
+        let held = try f.hub.repository.addApproval(AgentApprovalRequest(
+            agentID: bot.id, conversationID: nil, provider: "workspace", providerTitle: "Google Workspace Containment", tool: "suspend",
+            toolDescription: "Suspend a user", input: #"{"user":"m.okafor@kestrel.example"}"#, reason: "Signed in from a known-bad IP"))
+        f.hub.bots.approvalsChanged(of: bot.id)
+        for try await event in events { if case .botsChanged = event { break } }
+
+        let first = try await bots(of: f.device).first
+        let listed = try XCTUnwrap(first?.approvals)
+        XCTAssertEqual(listed, [LinkApproval(id: held.id, conversationID: bot.conversationID, providerTitle: "Google Workspace Containment",
+                                             tool: "suspend", toolDescription: "Suspend a user", input: #"{"user":"m.okafor@kestrel.example"}"#,
+                                             reason: "Signed in from a known-bad IP", createdAt: held.createdAt)])
+        XCTAssertEqual(listed.first?.inputLines.first?.value, "m.okafor@kestrel.example")
+
+        let grace = try await person("Grace", f)
+        do {
+            _ = try await grace.device.request(.decideApproval(LinkApprovalDecision(botID: bot.id, approvalID: held.id, approve: true)))
+            XCTFail("someone else decided")
+        } catch {}
+        XCTAssertEqual(try f.hub.repository.currentApprovals(agentID: bot.id).first?.state, .pending)
+
+        let answer = try await f.device.request(.decideApproval(LinkApprovalDecision(botID: bot.id, approvalID: held.id, approve: false)))
+        XCTAssertEqual(answer, .done)
+        let decided = try XCTUnwrap(try f.hub.repository.currentApprovals(agentID: bot.id).first)
+        XCTAssertEqual(decided.state, .declined)
+        XCTAssertEqual(decided.decidedBy, "Ada")
+        let after = try await bots(of: f.device).first
+        XCTAssertEqual(after?.approvals, [])
+    }
+
+    /// Someone a bot is shared with talks with it and nothing else: its owner's held calls never reach them.
+    func testSomeoneABotIsSharedWithNeverSeesItsHeldCalls() async throws {
+        let f = try await fixture()
+        let bot = try await createBot(f)
+        let grace = try await person("Grace", f)
+        _ = try await share(bot, with: [grace.user], f)
+        _ = try f.hub.repository.addApproval(AgentApprovalRequest(
+            agentID: bot.id, conversationID: nil, provider: "workspace", providerTitle: "Google Workspace Containment", tool: "suspend",
+            input: #"{"user":"m.okafor@kestrel.example"}"#, reason: "Phished"))
+        let owners = try await bots(of: f.device).first { $0.id == bot.id }
+        XCTAssertEqual(owners?.approvals.count, 1)
+        let theirs = try await bots(of: grace.device).first { $0.id == bot.id }
+        XCTAssertNotNil(theirs, "the bot is shared with them")
+        XCTAssertEqual(theirs?.approvals, [])
+        XCTAssertEqual(f.hub.bots.pendingApprovalIDs(of: grace.user.id), [])
     }
 
     /// Writing from a task carries it to the bot, and back to devices for the label.
@@ -893,6 +973,83 @@ import XCTest
             _ = try await other.request(.send(LinkOutgoingMessage(conversationID: group.id, id: UUID(), body: "Hi")))
             XCTFail("Reached another user's group")
         } catch {}
+    }
+
+    /// A device makes one of a group's bots its lead, hands the lead to another and takes it away; the group tells
+    /// its bots each time, and lists say who leads. Only a member can lead.
+    func testADeviceChoosesAGroupsLead() async throws {
+        let f = try await fixture()
+        let alfred = try await createBot(f), jeeves = try await createBot(f)
+        let bots = [alfred.id, jeeves.id]
+        guard case .group(let group) = try await f.device.request(.createGroup(LinkGroupDraft(name: "House", botIDs: bots, leadID: alfred.id))) else {
+            return XCTFail("no group")
+        }
+        XCTAssertEqual(group.draft.leadID, alfred.id)
+        XCTAssertEqual(try f.hub.repository.loadConversations().first { $0.id == group.id }?.lead, alfred.id)
+
+        guard case .group(let handed) = try await f.device.request(.updateGroup(id: group.id, LinkGroupDraft(name: "House", botIDs: bots,
+                                                                                                           leadID: jeeves.id))) else {
+            return XCTFail("not handed on")
+        }
+        XCTAssertEqual(handed.draft.leadID, jeeves.id)
+        XCTAssertEqual(try f.hub.repository.loadMessages(conversationID: group.id).last?.body, "Alfred now leads the group.")
+        let listed = try await f.device.request(.groups)
+        XCTAssertEqual(listed, .groups([handed]))
+
+        do {
+            _ = try await f.device.request(.updateGroup(id: group.id, LinkGroupDraft(name: "House", botIDs: [alfred.id], leadID: jeeves.id)))
+            XCTFail("A bot outside the group was made its lead")
+        } catch {}
+        guard case .group(let leaderless) = try await f.device.request(.updateGroup(id: group.id, LinkGroupDraft(name: "House", botIDs: bots))) else {
+            return XCTFail("lead not taken away")
+        }
+        XCTAssertNil(leaderless.draft.leadID)
+        XCTAssertNil(try f.hub.repository.loadConversations().first { $0.id == group.id }?.lead)
+    }
+
+    /// A Hub group's lead adds a bot it already shares a group with and takes it out again, through Messenger as on a
+    /// Mac, and devices hear of each change; a bot it never met stays out.
+    func testAHubGroupsLeadChangesItsMembersAndDevicesHear() async throws {
+        let (runtime, _) = try fakeRuntime()
+        let f = try await fixture(runtime: runtime)
+        let alfred = try await createBot(f), jeeves = try await createBot(f), marvin = try await createBot(f)
+        _ = try f.hub.bots.createGroup(LinkGroupDraft(name: "Staff", botIDs: [alfred.id, jeeves.id]), for: f.ada)
+        let led = try f.hub.bots.createGroup(LinkGroupDraft(name: "Cellar", botIDs: [alfred.id], leadID: alfred.id), for: f.ada)
+        try f.hub.bots.start()
+        addTeardownBlock { await MainActor.run { f.hub.bots.stop() } }
+        let events = try await f.device.subscribe()
+        let alfreds = try XCTUnwrap(f.hub.repository.loadAgents().first { $0.id == alfred.id })
+        let workspace = f.hub.repository.directory(for: alfreds)
+        func call(_ action: MessengerAction) async throws -> MessengerCommandResult {
+            try await Task.detached { try MessengerBridgeClient.request(action, workspace: workspace) }.value
+        }
+
+        let added = try await call(.addParticipant(conversationID: led.id, agentID: jeeves.id))
+        XCTAssertEqual(added.exitCode, 0, added.standardError)
+        try await expect("the new member", in: events) { if case .groupsChanged = $0 { true } else { false } }
+        guard case .groups(let listed) = try await f.device.request(.groups) else { return XCTFail("no groups") }
+        XCTAssertEqual(Set(try XCTUnwrap(listed.first { $0.id == led.id }).draft.botIDs), [alfred.id, jeeves.id])
+
+        let stranger = try await call(.addParticipant(conversationID: led.id, agentID: marvin.id))
+        XCTAssertNotEqual(stranger.exitCode, 0, "the lead added a bot it shares no group with")
+        let removed = try await call(.removeParticipant(conversationID: led.id, agentID: jeeves.id))
+        XCTAssertEqual(removed.exitCode, 0, removed.standardError)
+        XCTAssertEqual(try f.hub.repository.loadConversations().first { $0.id == led.id }?.participantIDs, [alfred.id])
+    }
+
+    /// Who leads a group, or is in it, changed beside the link, as Noodle does to its own groups on This Mac as a Hub:
+    /// devices hear of it at the next check.
+    func testAGroupChangedBesideTheLinkReachesDevices() async throws {
+        let f = try await fixture()
+        let alfred = try await createBot(f)
+        let group = try await createGroup(f, of: [alfred])
+        f.hub.bots.checkForChanges()
+        let events = try await f.device.subscribe()
+        _ = try f.hub.repository.setGroupLead(conversationID: group.id, agentID: alfred.id, existingAgents: try f.hub.repository.loadAgents())
+        f.hub.bots.checkForChanges()
+        try await expect("the new lead", in: events) { if case .groupsChanged = $0 { true } else { false } }
+        guard case .groups(let listed) = try await f.device.request(.groups) else { return XCTFail("no groups") }
+        XCTAssertEqual(listed.first?.draft.leadID, alfred.id)
     }
 
     /// A group whose last bot is deleted goes with it, rather than staying on the Hub with no one to show it.

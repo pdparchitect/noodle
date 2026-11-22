@@ -1,0 +1,16 @@
+# Documentation
+
+**NOTE: Everything in `docs/` is for people using Pion.** Code is documented only
+in its own comments; see the `no-code-docs` skill. Write for someone who has never
+seen the code or the author's machine, conversation or work history.
+
+- Document what people can do, how to do it, the access to give and the limits
+  they will meet, in plain language.
+- `tools/` has one guide per service: why each tool asks for the access it does,
+  the least access to set it up with, and its caveats. The quick steps stay in
+  the app's Setup Steps; a guide explains them rather than repeating them.
+- Do not describe how the code works, and do not name or link source files,
+  types or functions.
+- Do not narrate history: describe what is true now. Release history belongs in
+  the changelog.
+- Update an existing guide before adding a file.

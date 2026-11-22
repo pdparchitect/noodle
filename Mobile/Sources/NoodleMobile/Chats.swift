@@ -337,6 +337,25 @@ final class ChatsCacheFile: @unchecked Sendable {
         keep(kept, for: conversation.conversationID)
     }
 
+    /// A Metal shader file, checked and compiled here first, for every device.
+    func setBackground(shader file: URL, for conversation: some HubConversation) async throws {
+        try await setBackground(file: PreparedBackgroundFile.prepare(file), for: conversation)
+    }
+
+    /// A picture, video or Metal shader, checked and converted here as the Mac does, for every device.
+    func setBackground(file prepared: PreparedBackgroundFile, for conversation: some HubConversation) async throws {
+        let kept = try await pairing.uploadBackground(prepared.url, to: conversation.conversationID)
+        // The phone already has a picture or shader it sent; a video comes down as the Hub's small copy.
+        if [BackgroundMediaKind.image, .shader].contains(prepared.kind), kept.mediaKind == prepared.kind.rawValue,
+           let name = kept.compactFilename {
+            try FileManager.default.createDirectory(at: backgroundsFolder, withIntermediateDirectories: true)
+            try? FileManager.default.removeItem(at: backgroundsFolder.appendingPathComponent(name))
+            try FileManager.default.copyItem(at: prepared.url, to: backgroundsFolder.appendingPathComponent(name))
+            fetchedBackgrounds.insert(name)
+        }
+        keep(kept, for: conversation.conversationID)
+    }
+
     private func thread(of conversationID: UUID) -> HubThread? {
         // One not listed yet is looked for in, and observed with, the whole list, so it shows once it is.
         guard let id = threadIDs[conversationID] else { return threads.first { $0.conversationID == conversationID } }
@@ -1246,6 +1265,8 @@ final class ChatsCacheFile: @unchecked Sendable {
     func reload() async throws {
         guard case .bots(let bots) = try await pairing.request(.bots) else { throw LinkError("The Hub sent an unexpected answer.") }
         setAgents(pairing.keptPictures(bots))
+        // As the Hub lists them now, not as kept from before.
+        ApprovalNotifications.sync(self)
         // A Hub from before groups does not know the request; it has none to show.
         let listed = (try? await listGroups()) ?? []
         let failure = await loadConversations(bots.map(\.conversationID) + listed.map(\.id))
@@ -1826,6 +1847,8 @@ struct AgentsView: View {
     @AppStorage(TaskListFilter.key) private var taskFilter = TaskListFilter.standard
     /// The task being written about, from the Tasks section.
     @State private var feedbackTask: TaskEntry?
+    /// The held call being decided, from the Approvals section.
+    @State private var decidingApproval: ApprovalEntry?
     @State private var showsAllTasks = false
     @State private var showingConsole = false
     @State private var creating = false
@@ -2083,6 +2106,7 @@ struct AgentsView: View {
         let (searching, pinned, unread, rest) = (listing.searching, listing.pinned, listing.unread, listing.rest)
         let mentions = shownMentions(listing, rows: rows)
         let tasks = TaskEntry.listed(in: rows.map { (chats: $0.chats, thread: $0.thread) }, filter: taskFilter)
+        let approvals = ApprovalEntry.listed(in: chats)
         return Group {
             if ConversationListStyle(rawValue: listStyle) == .icons {
                 // As on the Mac: each section a grid of pictures, with what each bot is doing under its name. Not a
@@ -2090,6 +2114,15 @@ struct AgentsView: View {
                 // first one's menu and preview.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
+                        if !approvals.isEmpty {
+                            Text("Approvals")
+                                .font(.headline)
+                                .padding(.horizontal, 8)
+                                .padding(.top, 8)
+                            VStack(spacing: 10) { approvalRows(approvals) }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 8)
+                        }
                         if !tasks.isEmpty {
                             Text("Tasks")
                                 .font(.headline)
@@ -2112,6 +2145,7 @@ struct AgentsView: View {
                 }
             } else {
                 List {
+                    if !approvals.isEmpty { Section("Approvals") { approvalRows(approvals) } }
                     if !tasks.isEmpty { Section("Tasks") { taskRows(tasks) } }
                     if !pinned.isEmpty, layout.pinsInList {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 16) {
@@ -2275,6 +2309,12 @@ struct AgentsView: View {
                     navigation.open(ChatLink(hub: CurrentHub.name(of: entry.chats.pairing), thread: entry.thread.id), in: layout)
                 }
             }
+            .sheet(item: $decidingApproval) { entry in
+                ApprovalSheet(entry: entry) {
+                    guard let thread = entry.thread else { return }
+                    navigation.open(ChatLink(hub: CurrentHub.name(of: entry.chats.pairing), thread: thread.id), in: layout)
+                }
+            }
             .fullScreenCover(isPresented: $showingConsole) { ConsoleView(hubs: chats) }
             // On the Hub whose space is shown, so the new bot or group shows there; its Hub picker still offers the others.
             .sheet(isPresented: $creating) {
@@ -2417,6 +2457,14 @@ struct AgentsView: View {
                 }
             }
             .padding(.vertical, 4)
+        }
+    }
+
+    /// Every held call, never cut short. Tapping one shows it in full to decide.
+    private func approvalRows(_ approvals: [ApprovalEntry]) -> some View {
+        ForEach(approvals) { entry in
+            Button { decidingApproval = entry } label: { ApprovalListRow(entry: entry) }
+                .buttonStyle(.plain)
         }
     }
 
@@ -2578,6 +2626,7 @@ struct AgentsView: View {
               let thread = hub.listedThreads.first(where: { $0.conversationID == route.conversation }) else { return }
         navigation.open(ChatLink(hub: CurrentHub.name(of: hub.pairing), thread: thread.id), in: layout)
         opening = nil
+        if let approval = route.approval { decidingApproval = ApprovalEntry.listed(in: [hub]).first { $0.id == approval } }
         if Self.startsCall(route, to: thread, calling: hub.calls.call?.threadID,
                            canCallNow: thread.bot.map { hub.canCallNow(hub.agent($0.id) ?? $0) } ?? false) {
             hub.calls.start(threadID: thread.id, conversationID: thread.conversationID, name: thread.name)
@@ -4643,13 +4692,14 @@ struct GroupEditor: View {
     /// Archived bots stay members until removed, but are never added.
     private var bots: [LinkBot] {
         let bots = chats.agents.filter { $0.owner == nil && ($0.archivedAt == nil || draft.botIDs.contains($0.id)) }
-        return Self.ordered(bots, members: listedFirst,
+        return Self.ordered(bots, members: listedFirst, lead: group?.draft.leadID,
                             inSpace: Self.inSpace(space, hub: CurrentHub.space(of: chats.pairing), spaces: spaceList.spaces))
     }
 
-    /// The group's bots first, so one is removed without hunting, then those in the space shown, then the rest, each by name.
-    static func ordered(_ bots: [LinkBot], members: Set<UUID>, inSpace: (LinkBot) -> Bool) -> [LinkBot] {
-        func tier(_ bot: LinkBot) -> Int { members.contains(bot.id) ? 0 : inSpace(bot) ? 1 : 2 }
+    /// The group's lead as the sheet opened, then its other bots, so one is removed without hunting, then those in the
+    /// space shown, then the rest, each by name.
+    static func ordered(_ bots: [LinkBot], members: Set<UUID>, lead: UUID? = nil, inSpace: (LinkBot) -> Bool) -> [LinkBot] {
+        func tier(_ bot: LinkBot) -> Int { bot.id == lead ? -1 : members.contains(bot.id) ? 0 : inSpace(bot) ? 1 : 2 }
         return bots.sorted { lhs, rhs in
             tier(lhs) != tier(rhs) ? tier(lhs) < tier(rhs)
                 : lhs.draft.name.localizedStandardCompare(rhs.draft.name) == .orderedAscending
@@ -4688,12 +4738,28 @@ struct GroupEditor: View {
                         Text("No Bots").foregroundStyle(.secondary)
                     }
                     ForEach(bots) { bot in
-                        let chosen = draft.botIDs.contains(bot.id)
+                        let chosen = draft.botIDs.contains(bot.id), leads = draft.leadID == bot.id
                         Button {
-                            if chosen { draft.botIDs.removeAll { $0 == bot.id } } else { draft.botIDs.append(bot.id) }
+                            if chosen {
+                                draft.botIDs.removeAll { $0 == bot.id }
+                                if leads { draft.leadID = nil }
+                            } else {
+                                draft.botIDs.append(bot.id)
+                            }
                         } label: {
                             HStack(spacing: 12) {
                                 AgentAvatar(draft: bot.draft, size: 32)
+                                    .overlay(alignment: .bottomTrailing) {
+                                        // As in Noodle's Group Info: the lead hears your messages first.
+                                        if leads {
+                                            Image(systemName: "star.circle.fill")
+                                                .font(.system(size: 15))
+                                                .symbolRenderingMode(.palette)
+                                                .foregroundStyle(.white, Color.accentColor)
+                                                .offset(x: 5, y: 4)
+                                                .accessibilityHidden(true)
+                                        }
+                                    }
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(bot.draft.name).foregroundStyle(.primary)
                                     if !bot.about.isEmpty {
@@ -4708,6 +4774,16 @@ struct GroupEditor: View {
                             }
                         }
                         .accessibilityAddTraits(chosen ? .isSelected : [])
+                        .accessibilityValue(leads ? "Lead" : "")
+                        .contextMenu {
+                            if chosen {
+                                if leads {
+                                    Button("Remove as Lead", systemImage: "star.slash") { draft.leadID = nil }
+                                } else {
+                                    Button("Make Lead", systemImage: "star") { draft.leadID = bot.id }
+                                }
+                            }
+                        }
                     }
                 }
                 if let problem {
@@ -4765,6 +4841,7 @@ struct GroupEditor: View {
     private func save() {
         draft.name = draft.name.trimmingCharacters(in: .whitespaces)
         draft.botIDs = members
+        if let lead = draft.leadID, !members.contains(lead) { draft.leadID = nil }
         saving = true
         problem = nil
         Task {

@@ -87,6 +87,37 @@ import NoodleCore
         XCTAssertEqual(Set(f.store.sidebarSections(.standard).bots.map(\.id)), [f.directA.id, f.directB.id])
     }
 
+    /// An empty space keeps the sidebar's tint across the whole column, in either style: the list once took a
+    /// sliver of it, drawn as a dark stripe down the middle with "No Bots" wrapped inside.
+    func testAnEmptySpaceKeepsTheSidebarTintAcrossTheColumn() async throws {
+        let f = try fixture()
+        UserDefaults.standard.removeObject(forKey: NoodleStore.spaceKey)
+        addTeardownBlock { UserDefaults.standard.removeObject(forKey: NoodleStore.spaceKey) }
+        XCTAssertNotNil(f.store.addSpace(named: "Work"))
+        XCTAssertTrue(f.store.filteredConversations.isEmpty)
+
+        for icons in [false, true] {
+            if icons { useIcons() }
+            let window = try XCTUnwrap(host(NavigationSplitView {
+                SidebarView().environment(f.store).navigationSplitViewColumnWidth(min: 280, ideal: 326, max: 380)
+            } detail: { Color.clear }).window)
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.setContentSize(.init(width: 800, height: 500))
+            try await settle(window)
+            XCTAssertTrue(elements(window.contentView!).contains { labels($0).contains("No Bots") }, "icons: \(icons)")
+
+            let column = try XCTUnwrap(descendant(NSSplitView.self, of: window.contentView!)?.arrangedSubviews.first)
+            let image = try XCTUnwrap(column.bitmapImageRepForCachingDisplay(in: column.bounds))
+            column.cacheDisplay(in: column.bounds, to: image)
+            // Below the empty state, at the edge and in the middle.
+            let y = image.pixelsHigh - image.pixelsHigh / 10
+            let edge = try XCTUnwrap(image.colorAt(x: image.pixelsWide / 10, y: y)?.usingColorSpace(.sRGB))
+            let middle = try XCTUnwrap(image.colorAt(x: image.pixelsWide / 2, y: y)?.usingColorSpace(.sRGB))
+            XCTAssertEqual(edge.brightnessComponent, middle.brightnessComponent, accuracy: 0.02, "icons: \(icons)")
+            window.close()
+        }
+    }
+
     private func useIcons() {
         let previous = UserDefaults.standard.string(forKey: ConversationListStyle.key)
         UserDefaults.standard.set(ConversationListStyle.icons.rawValue, forKey: ConversationListStyle.key)

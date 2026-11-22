@@ -103,6 +103,8 @@ import os
     /// Each conversation's unread replies, as last pushed or as first seen.
     @ObservationIgnored private var pushedUnread: [UUID: Int] = [:]
     @ObservationIgnored private var pendingPushes: [UUID: Task<Void, Never>] = [:]
+    /// Each user's calls held for them, as last pushed. Those already waiting when the Hub starts were pushed before.
+    @ObservationIgnored private var pushedApprovals: [UUID: Set<UUID>] = [:]
     /// Live views open on each conversation, whose they are and which card they show, to close when someone
     /// loses it and to sign in only to what is watched.
     @ObservationIgnored private var surfaces: [UUID: [(user: UUID, attachment: UUID, stream: any LinkServerStream)]] = [:]
@@ -177,6 +179,7 @@ import os
     public func start() async {
         guard server == nil else { return }
         state = .starting
+        for user in access.users { pushedApprovals[user.id] = bots?.pendingApprovalIDs(of: user.id) ?? [] }
         do {
             let server = try listen(identity, port, gate.admits) { [weak self] key, request in
                 await self?.reply(to: request, from: key) ?? .response(Data())
@@ -487,6 +490,8 @@ import os
         guard pushes != nil else { return }
         let conversation: UUID, read: Bool
         switch event {
+        case .botsChanged:
+            return pushApprovals(of: user)
         case .conversationChanged(let id, _): (conversation, read) = (id, false)
         case .readChanged(let id, _): (conversation, read) = (id, true)
         case .notificationsChanged(let id, _):
@@ -506,6 +511,31 @@ import os
             try? await Task.sleep(for: pushDelay)
             guard !Task.isCancelled else { return }
             await self?.updatePushes(conversation, of: user, read: read)
+        }
+    }
+
+    /// Tells the user's devices that are away of each call newly held for them, as a ping of its own named by the call,
+    /// which the phone tells from replies by asking the Hub; and takes back, from every device, those decided since.
+    private func pushApprovals(of user: UUID) {
+        guard let pushes, let bots else { return }
+        let pending = bots.pendingApprovalIDs(of: user), known = pushedApprovals[user] ?? []
+        guard pending != known else { return }
+        pushedApprovals[user] = pending
+        let devices = access.devices.filter { $0.user == user && $0.pushTopic != nil }
+        let away = devices.filter { !isFollowing($0) }
+        Task {
+            for id in pending.subtracting(known) {
+                for device in away {
+                    do { try await pushes.publish(topic: device.pushTopic!, conversation: id, unread: 1) }
+                    catch { Self.pushLog.error("Could not tell a device of a held call: \(error.localizedDescription, privacy: .public)") }
+                }
+            }
+            for id in known.subtracting(pending) {
+                for device in devices {
+                    do { try await pushes.withdraw(topic: device.pushTopic!, conversation: id) }
+                    catch { Self.pushLog.error("Could not take back a held call: \(error.localizedDescription, privacy: .public)") }
+                }
+            }
         }
     }
 
@@ -700,6 +730,9 @@ import os
             return .done
         case .stop(let botID):
             try hubBots().stop(botID, for: try user(key))
+            return .done
+        case .decideApproval(let decision):
+            try await hubBots().decideApproval(decision, for: try user(key))
             return .done
         case .kick(let botID):
             return try hubBots().kick(botID, for: try user(key)).map(LinkResponse.kickConfirmation) ?? .done

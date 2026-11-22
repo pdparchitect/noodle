@@ -43,6 +43,8 @@ final class LinkProtocolTests: XCTestCase {
         XCTAssertEqual(LinkBackground(media: "\(id).mov", mediaKind: "video").mediaFilename, "\(id).mov")
         XCTAssertEqual(LinkBackground(media: "\(id).mov", mediaKind: "video").compactFilename, "\(id).mp4")
         XCTAssertEqual(LinkBackground(media: "\(id).heic", mediaKind: "dynamicImage").compactFilename, "\(id).jpg")
+        // A shader is its own small copy, kept as Metal source.
+        XCTAssertEqual(LinkBackground(media: "\(id).metal", mediaKind: "shader").compactFilename, "\(id).metal")
         for hostile in ["..", ".", "", "../\(id).jpg", "\(id).jpg/..", "/etc/passwd", "\(id)/../\(id).jpg", "~/\(id).jpg",
                         "secret.jpg", "\(id).sh", "\(id)", "\(id).jpg.mov", ".\(id).jpg", "\(id).jpg/", "\(id).jpg\u{0}"] {
             let background = LinkBackground(media: hostile, mediaKind: "image")

@@ -50,6 +50,7 @@ public struct ConnectionToolProvider: ToolProvider {
         let cleaned = try ToolUntrustedContent.tools(try await perform(context.agentID, .tools, nil, nil, nil, Self.checkpoint(context)))
         var object = try JSONSerialization.jsonObject(with: cleaned) as? [String: Any] ?? [:]
         let remote = (object["tools"] as? [[String: Any]] ?? []).filter { ![Self.resourcesTool, Self.readResourceTool].contains($0["name"] as? String) }
+            .map(Self.heldForApproval)
         object["tools"] = remote + [
             ["name": Self.resourcesTool, "description": "List the resources this connection offers, with their URIs.",
              "annotations": ["readOnlyHint": true, "idempotentHint": true], "inputSchema": ["type": "object", "properties": [String: Any]()]],
@@ -70,6 +71,24 @@ public struct ConnectionToolProvider: ToolProvider {
             return try ToolUntrustedContent.result(try await perform(context.agentID, .readResource, nil, nil, uri, checkpoint))
         default: return try ToolUntrustedContent.result(try await perform(context.agentID, .call, tool, arguments, nil, checkpoint))
         }
+    }
+
+    /// A tool its server marks destructive is held for the person, so it also takes why and where, which the broker
+    /// keeps with the approval and never sends on.
+    static func heldForApproval(_ tool: [String: Any]) -> [String: Any] {
+        guard AgentApproval.asks(annotations: tool["annotations"] as? [String: Any]) else { return tool }
+        var tool = tool, schema = tool["inputSchema"] as? [String: Any] ?? ["type": "object"]
+        var properties = schema["properties"] as? [String: Any] ?? [:]
+        properties[AgentApproval.reasonParameter] = ["type": "string", "description": "Required. Why this should be done, in a sentence or two "
+            + "for the person deciding: what you found and what this call will do about it. The call is held for their approval and runs "
+            + "only if they approve."]
+        properties[AgentApproval.conversationParameter] = ["type": "string", "format": "noodle-conversation", "description":
+            "The conversation this is for, where the person sees why. Your direct conversation with them when left out."]
+        schema["properties"] = properties
+        tool["inputSchema"] = schema
+        let description = tool["description"] as? String ?? ""
+        tool["description"] = description + (description.isEmpty ? "" : " ") + "Held for the person's approval."
+        return tool
     }
 
     private static func checkpoint(_ context: ToolCallContext) -> @Sendable () async -> Bool {

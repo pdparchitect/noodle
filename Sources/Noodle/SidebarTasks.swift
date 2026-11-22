@@ -196,7 +196,7 @@ enum SidebarTimestamp {
     }
 }
 
-/// The tool connections at the foot of the sidebar, as icons, when View › Sidebar › Show Tools is on: a red dot marks
+/// The tool connections at the foot of the sidebar when View › Sidebar › Show Tools is on: a red dot marks
 /// one waiting on the person to sign in or look at a failure. Clicking one opens its page: where the app shows it, or
 /// in a window of its own.
 struct SidebarTools: View {
@@ -213,33 +213,33 @@ struct SidebarTools: View {
         if !controller.registry.connections.isEmpty {
             if inList {
                 Section {
-                    // One row for the whole grid; each icon is a button of its own.
-                    grid.selectionDisabled()
+                    ForEach(controller.registry.connections) { connection in
+                        button(connection).sidebarItemInsets().selectionDisabled()
+                    }
                 } header: {
                     Text("Tools")
                 }
             } else {
-                Text("Tools")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 4)
-                    .padding(.top, 10)
-                    .padding(.bottom, 2)
-                    .accessibilityAddTraits(.isHeader)
+                SidebarGridHeading(title: "Tools")
                 grid
             }
         }
     }
 
     private var grid: some View {
-        ConversationIconGrid(minimumWidth: 56) {
-            ForEach(controller.registry.connections) { connection in
-                ToolTile(controller: controller, connection: connection, selected: selected == connection.id) {
-                    if let open { open(connection) } else { controller.showPage(connection) }
-                }
-            }
+        ConversationIconGrid {
+            ForEach(controller.registry.connections) { connection in button(connection) }
         }
         .padding(.vertical, 4)
+    }
+
+    private func button(_ connection: ToolConnection) -> some View {
+        Button {
+            if let open { open(connection) } else { controller.showPage(connection) }
+        } label: {
+            SidebarToolItem(controller: controller, connection: connection, icons: !inList, selected: selected == connection.id)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -250,46 +250,55 @@ struct SidebarToolsToggle: View {
     var body: some View { Toggle("Show Tools", isOn: $showsTools) }
 }
 
-/// A tool connection's icon and name, marked when it needs the person, opening its page when clicked.
-private struct ToolTile: View {
+/// The same tool content is a selectable row where the app shows a tool's page in its main window, or a button that
+/// opens the page in a window of its own.
+struct SidebarToolItem: View {
     let controller: ToolConnectionsController
     let connection: ToolConnection
-    let selected: Bool
-    let open: () -> Void
+    let icons: Bool
+    var selected = false
 
     var body: some View {
         let status = controller.status(of: connection)
-        Button(action: open) {
-            VStack(spacing: 3) {
-                // Flat and in the text colour, as the agents' marks around it are, so the red dot of one that needs you is
-                // what stands out.
-                FlatToolIcon(connection: connection, size: 30)
-                    .opacity(status == .managed ? 0.4 : 1)
-                    .overlay(alignment: .topTrailing) {
-                        if status.needsAttention {
-                            Circle().fill(Color.red).frame(width: 8, height: 8)
-                                .padding(1.5)
-                                .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
-                                .offset(x: 4, y: -4)
-                        } else if case .signingIn = status {
-                            ProgressView().controlSize(.mini).offset(x: 5, y: -5)
-                        }
-                    }
-                Text(connection.name)
-                    .font(.system(size: 10))
-                    .foregroundStyle(status.needsAttention || selected ? Color.primary : Color.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
+        Group {
+            if icons {
+                SidebarItemTile(title: connection.name, detail: detail(status), selected: selected) {
+                    picture(size: $0, status: status)
+                }
+            } else {
+                SidebarItemRow(title: connection.name, detail: detail(status)) {
+                    picture(size: $0, status: status)
+                }
             }
-            .padding(.vertical, 4)
-            .frame(maxWidth: .infinity)
-            .background(Color.primary.opacity(selected ? 0.1 : 0), in: .rect(cornerRadius: 8, style: .continuous))
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
         .help(connection.name)
-        .accessibilityLabel(connection.name)
-        .accessibilityValue(status.needsAttention ? "Needs attention" : "")
+    }
+
+    private func picture(size: CGFloat, status: ToolConnectionStatus) -> some View {
+        ToolConnectionIcon(connection: connection, size: size, frameless: true)
+            .overlay(alignment: .bottomTrailing) {
+                if status.needsAttention {
+                    // Smaller on compact pictures, so it marks the icon rather than covering it.
+                    let dot: CGFloat = size <= 24 ? 5 : size <= 40 ? 6 : 10
+                    Circle().fill(Color.red).frame(width: dot, height: dot)
+                        .padding(size <= 40 ? 1 : 2).background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
+                } else if case .signingIn = status {
+                    ProgressView().controlSize(.mini)
+                }
+            }
+    }
+
+    private func detail(_ status: ToolConnectionStatus) -> String {
+        switch status {
+        case .managed: "Disabled by organisation"
+        case .connected: "Connected"
+        case .signingIn(let stage): stage.isEmpty ? "Signing in" : stage
+        case .failed(let message): message
+        case .tokenRequired: "Token required"
+        case .credentialsRequired: "Credentials required"
+        case .signInRequired: "Sign-in required"
+        }
     }
 }
 

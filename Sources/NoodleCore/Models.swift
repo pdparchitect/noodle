@@ -419,6 +419,19 @@ public struct MessengerParticipantStatus: Codable, Hashable, Sendable {
     }
 }
 
+/// A bot a lead knows, from a group they share. Never its private backstory.
+public struct MessengerKnownBot: Codable, Hashable, Sendable {
+    public let participant: MessengerIdentity
+    public let publicDescription: String?
+    /// Set while the bot is suspended: it takes no new turn until then.
+    public let suspendedUntil: Date?
+}
+
+public struct MessengerKnownBots: Codable, Hashable, Sendable {
+    public let me: MessengerIdentity
+    public let bots: [MessengerKnownBot]
+}
+
 public struct MessengerRoster: Codable, Hashable, Sendable {
     public let me: MessengerIdentity
     public let conversation: BotConversation

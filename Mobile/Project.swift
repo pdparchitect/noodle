@@ -5,6 +5,34 @@ import ProjectDescription
 let version = (try? String(contentsOfFile: "VERSION", encoding: .utf8))?
     .trimmingCharacters(in: .whitespacesAndNewlines) ?? "0.0.0"
 
+/// Quick Look's preview or thumbnail of Metal shader files, which conversations use as backgrounds; the Mac has the same two.
+func quickLookExtension(_ kind: String, point: String, principal: String, attributes: [String: Plist.Value] = [:]) -> Target {
+    .target(
+        name: "NoodleMobileShader\(kind)",
+        destinations: .iOS,
+        product: .appExtension,
+        productName: "NoodleMobileShader\(kind)",
+        bundleId: "com.pdparchitect.noodle.mobile.shader-\(kind.lowercased())",
+        deploymentTargets: .iOS("26.0"),
+        infoPlist: .extendingDefault(with: [
+            "CFBundleDisplayName": "$(MOBILE_APP_NAME)",
+            "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+            "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
+            "NSExtension": [
+                "NSExtensionPointIdentifier": .string(point),
+                "NSExtensionPrincipalClass": .string(principal),
+                "NSExtensionAttributes": .dictionary(["QLSupportedContentTypes": ["com.apple.metal"]].merging(attributes) { $1 }),
+            ],
+        ]),
+        sources: [.glob("../Shared/Wallpaper/QuickLook/\(kind)/**")],
+        dependencies: [.package(product: "NoodleWallpaperCore")],
+        settings: .settings(base: [
+            "PRODUCT_BUNDLE_IDENTIFIER": .string("$(MOBILE_APP_BUNDLE_ID).shader-\(kind.lowercased())"),
+            "CODE_SIGN_STYLE": "Automatic",
+        ])
+    )
+}
+
 let project = Project(
     name: "NoodleMobile",
     packages: [.local(path: "../Shared/HubLink"), .local(path: "../Shared/Wallpaper"), .local(path: "../Shared/Brand"),
@@ -61,6 +89,13 @@ let project = Project(
                 "NSUserActivityTypes": ["INSendMessageIntent"],
                 // A mouse or trackpad on iPad clicks as a pointer, not a finger, so a right-click opens a message's actions.
                 "UIApplicationSupportsIndirectInputEvents": true,
+                // Metal shaders, which conversations take as backgrounds and Quick Look plays, as Xcode names them on the Mac.
+                "UTImportedTypeDeclarations": [[
+                    "UTTypeIdentifier": "com.apple.metal",
+                    "UTTypeDescription": "Metal Shader",
+                    "UTTypeConformsTo": ["public.source-code"],
+                    "UTTypeTagSpecification": ["public.filename-extension": ["metal"]],
+                ]],
             ]),
             // The widgets' bot entity too, for the Shortcuts actions that take a bot.
             sources: ["Sources/NoodleMobile/**", "Sources/Shared/**", "Sources/NoodleMobileWidgets/BotEntity.swift"],
@@ -70,7 +105,8 @@ let project = Project(
             dependencies: [.package(product: "HubLink"), .package(product: "NoodleWallpaperCore"), .package(product: "NoodleBrand"),
                            .package(product: "NoodletRuntime"), .package(product: "NoodlePatch"),
                            .target(name: "NoodleMobileNotifications"), .target(name: "NoodleMobileShare"),
-                           .target(name: "NoodleMobileWidgets")],
+                           .target(name: "NoodleMobileWidgets"), .target(name: "NoodleMobileShaderPreview"),
+                           .target(name: "NoodleMobileShaderThumbnail")],
             settings: .settings(base: [
                 "PRODUCT_BUNDLE_IDENTIFIER": "$(MOBILE_APP_BUNDLE_ID)",
                 "CODE_SIGN_STYLE": "Automatic",
@@ -165,6 +201,9 @@ let project = Project(
                 "CODE_SIGN_STYLE": "Automatic",
             ])
         ),
+        quickLookExtension("Preview", point: "com.apple.quicklook.preview", principal: "ShaderPreviewController"),
+        quickLookExtension("Thumbnail", point: "com.apple.quicklook.thumbnail", principal: "ShaderThumbnailProvider",
+                           attributes: ["QLThumbnailMinimumDimension": 0]),
         // Runs inside the app, so it sees the bundle as the phone does.
         .target(
             name: "NoodleMobileTests",
