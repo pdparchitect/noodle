@@ -9,6 +9,10 @@ All notable changes to Noodle are documented here, following
 ### Added
 
 - Approvals: a bot's call to a tool its service marks destructive, such as suspending a user or deleting something, waits for you instead of running. It shows in a new Approvals section at the top of the sidebar, which stays there while anything waits, with exactly what will run and the bot's reason; approve or decline it there or from its notification, which comes through even with Noodle in front. The Dock counts it too. The bot is told the outcome. Ordinary changes, and tools whose service does not mark them destructive, run as before. Bots on a Hub you joined, and those your phone reaches through This Mac as a Hub, ask the same way, and This Mac as a Hub notifies your phone of each one while it is away.
+- A Metal shader can be a conversation's background, playing behind the messages: right-click a `.metal` file in a conversation and choose Use as Background, or choose, drop or paste one in the background editor. Ask any bot for a shader; SwiftUI colour shaders and fragment shaders both work, and one that doesn't compile shows the compiler's message. It plays at up to 30 frames a second, stops while the window is hidden, and holds still with Reduce Motion or Low Power Mode. It reaches your phone through your Noodle Hub as pictures and videos do.
+- Quick Look plays `.metal` shader files, in conversations and in Finder, and shows a still of each as its thumbnail.
+- Paste a background into the Conversation Background sheet: while it is open, ⌘V, or Paste in the preview's right-click menu, takes a copied picture, video or `.metal` file, or a copied image, and shows it there to apply, as a drop does. Paste is off when nothing copied can be a background, and ⌘V no longer attaches it to the conversation behind the sheet.
+- Copy on a `.metal` file in a conversation copies the file under its own name, ready to paste into the background editor, into Finder or into another conversation.
 
 ### Changed
 

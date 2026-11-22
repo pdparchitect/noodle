@@ -13,6 +13,8 @@ struct MessageContextMenu: NSViewRepresentable {
     var save: (() -> Void)? = nil
     var backgroundImageURL: URL? = nil
     var useAsBackground: (() -> Void)? = nil
+    /// The file is a Metal shader, which draws as a background but is no icon.
+    var backgroundIsShader = false
     var backgroundTargetName: String = "this conversation"
     var iconTargetName: String? = nil
     var useAsIcon: (() -> Void)? = nil
@@ -98,16 +100,16 @@ struct MessageContextMenu: NSViewRepresentable {
             }
             // Inspect only when opening the menu, not while scrolling the transcript.
             // Decode detection also covers real images with generic attachment MIME types.
-            if let url = configuration.backgroundImageURL,
-               let useAsBackground = configuration.useAsBackground,
-               ConversationBackground.canUseImage(at: url) {
+            let shader = configuration.backgroundIsShader
+            if let useAsBackground = configuration.useAsBackground,
+               shader || configuration.backgroundImageURL.map(ConversationBackground.canUseImage(at:)) == true {
                 menu.addItem(.separator())
-                addItem("Use as Background", symbol: "photo", to: menu) { [weak self] in
+                addItem("Use as Background", symbol: shader ? "sparkles.rectangle.stack" : "photo", to: menu) { [weak self] in
                     self?.confirmAppearanceChange(title: "Use as Background?",
-                        message: "Replace the background for \(configuration.backgroundTargetName) with this image?",
+                        message: "Replace the background for \(configuration.backgroundTargetName) with this \(shader ? "shader" : "image")?",
                         button: "Use as Background", action: useAsBackground)
                 }
-                if let name = configuration.iconTargetName, let useAsIcon = configuration.useAsIcon {
+                if !shader, let name = configuration.iconTargetName, let useAsIcon = configuration.useAsIcon {
                     addItem("Use as Icon", symbol: "person.crop.circle", to: menu) { [weak self] in
                         self?.confirmAppearanceChange(title: "Use as Icon?",
                             message: "Replace \(name)’s icon with this image? Their icon will change everywhere in Noodle.",

@@ -51,6 +51,12 @@ public final class PreparedBackgroundFile: @unchecked Sendable, Equatable {
                 throw ConversationBackgroundError.invalidMedia
             }
             try Task.checkCancellation()
+            if ShaderSourceFile.isShader(copy) {
+                let target = directory.appendingPathComponent("wallpaper.metal")
+                try FileManager.default.moveItem(at: copy, to: target)
+                try await BackgroundMedia.checkShader(at: target)
+                return PreparedBackgroundFile(url: target, kind: .shader, directory: directory)
+            }
             if let source = CGImageSourceCreateWithURL(copy as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
                let identifier = CGImageSourceGetType(source) as String?, UTType(identifier)?.conforms(to: .image) == true {
                 guard copiedSize <= 536_870_912, let first = BackgroundMedia.image(at: copy, index: 0) else {
@@ -103,7 +109,16 @@ public final class PreparedBackgroundFile: @unchecked Sendable, Equatable {
 
 public enum BackgroundMedia {
     public static var allowedContentTypes: [UTType] {
-        [.image, .mpeg4Movie, .quickTimeMovie, UTType(filenameExtension: "m4v")!]
+        [.image, .mpeg4Movie, .quickTimeMovie, UTType(filenameExtension: "m4v")!, .metalShader]
+    }
+
+    /// A shader must name something to draw and, where this device has a GPU, compile: the compiler's
+    /// message is shown when it doesn't.
+    static func checkShader(at url: URL) async throws {
+        let program = try ShaderProgram(source: ShaderSourceFile.read(url))
+        #if canImport(Metal)
+        do { _ = try await ShaderPipeline.compile(program) } catch ShaderError.noDevice {}
+        #endif
     }
 
     public static func image(data: Data) -> CGImage? {
@@ -154,7 +169,10 @@ public enum BackgroundMedia {
     public static func writeCompactCopy(of source: URL, kind: BackgroundMediaKind, to target: URL) async throws {
         let staging = target.deletingLastPathComponent().appendingPathComponent(".\(UUID().uuidString).\(target.pathExtension)")
         defer { try? FileManager.default.removeItem(at: staging) }
-        if kind == .video {
+        if kind == .shader {
+            // A shader is its own small copy.
+            try FileManager.default.copyItem(at: source, to: staging)
+        } else if kind == .video {
             let asset = videoAsset(at: source)
             guard let track = try await asset.loadTracks(withMediaType: .video).first else { throw ConversationBackgroundError.invalidMedia }
             let silent = AVMutableComposition()
@@ -180,6 +198,9 @@ public enum BackgroundMedia {
     }
 
     public static func poster(at url: URL, kind: BackgroundMediaKind?) async -> CGImage? {
+        #if canImport(Metal)
+        if kind == .shader { return try? await ShaderPipeline.still(of: url, width: 1280, height: 800) }
+        #endif
         if kind != .video { return image(at: url, index: 0) }
         let generator = AVAssetImageGenerator(asset: videoAsset(at: url))
         generator.appliesPreferredTrackTransform = true

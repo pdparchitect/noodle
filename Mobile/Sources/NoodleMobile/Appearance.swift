@@ -6,8 +6,8 @@ import NoodleWallpaperCore
 import PhotosUI
 import SwiftUI
 
-/// A conversation's backdrop, drawn as Noodle draws it on the Mac: a preset's gradient, or a photo or
-/// a silent video dimmed so the bubbles stay readable.
+/// A conversation's backdrop, drawn as Noodle draws it on the Mac: a preset's gradient, or a photo,
+/// a silent video or a Metal shader dimmed so the bubbles stay readable.
 struct ConversationBackdrop: View {
     let background: ConversationBackground
     var imageURL: URL?
@@ -24,10 +24,14 @@ struct ConversationBackdrop: View {
                     if background.mediaKind == .video, let imageURL, !reduceMotion {
                         LoopingVideo(url: imageURL).frame(width: geometry.size.width, height: geometry.size.height)
                     }
+                    // The shader holds a still itself with Reduce Motion or Low Power Mode.
+                    if background.mediaKind == .shader, let imageURL {
+                        ShaderBackground(url: imageURL).frame(width: geometry.size.width, height: geometry.size.height)
+                    }
                 } else if let preset = background.preset {
                     PresetGradient(preset)
                 }
-                // Presets are drawn to sit behind bubbles; photos and videos are dimmed for them.
+                // Presets are drawn to sit behind bubbles; photos, videos and shaders are dimmed for them.
                 if background.imageFilename != nil { Color.black.opacity(0.25) }
             }
             .clipped()
@@ -79,8 +83,8 @@ private struct LoopingVideo: UIViewRepresentable {
     }
 }
 
-/// Picks a conversation's backdrop: the presets, a photo, or an image made with Image Playground.
-/// It applies as it is chosen, on the Hub, for every device.
+/// Picks a conversation's backdrop: the presets, a photo, an image made with Image Playground, or a
+/// picture, video or Metal shader pasted. It applies as it is chosen, on the Hub, for every device.
 struct BackgroundEditor: View {
     let chats: HubChats
     let thread: HubThread
@@ -123,6 +127,12 @@ struct BackgroundEditor: View {
                 if supportsImagePlayground {
                     Button { creating = true } label: { Label("Create Image", systemImage: "apple.image.playground") }
                 }
+                // The system's Paste control: it reads the clipboard without asking, and is off when nothing
+                // copied can be a background.
+                PasteButton(payloadType: PastedBackground.self) { pasted in
+                    guard let pasted = pasted.first else { return }
+                    Task { @MainActor in await apply(pasted) }
+                }
             }
             if busy { ProgressView() }
             if let problem { Text(problem).foregroundStyle(.red) }
@@ -155,6 +165,18 @@ struct BackgroundEditor: View {
         do {
             guard let data = try await load() else { throw ConversationBackgroundError.invalidImage }
             try await chats.setBackground(photo: data, for: thread)
+        } catch {
+            problem = error.localizedDescription
+        }
+    }
+
+    /// Checked and converted as on the Mac, where it would be dropped or pasted.
+    private func apply(_ pasted: PastedBackground) async {
+        busy = true
+        problem = nil
+        defer { busy = false }
+        do {
+            try await chats.setBackground(file: pasted.prepare(), for: thread)
         } catch {
             problem = error.localizedDescription
         }

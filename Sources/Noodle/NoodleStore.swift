@@ -2735,11 +2735,16 @@ final class NoodleStore {
     }
 
     func useAttachmentAsBackground(_ attachment: ConversationAttachment) async {
-        guard await downloadedFile(attachment) != nil else { return }
+        guard let file = await downloadedFile(attachment) else { return }
         let repository = repository
         do {
             let saved = try await Task.detached {
-                try repository.setBackground(from: attachment)
+                // A shader is checked and compiled as one chosen in the background editor is.
+                guard ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.originalFilename)) else {
+                    return try repository.setBackground(from: attachment)
+                }
+                return try repository.setBackground(conversationID: attachment.conversationID,
+                                                    file: try await PreparedBackgroundFile.prepare(file))
             }.value
             // Keep the action bound to its source chat even if selection changes during decoding.
             backgrounds[attachment.conversationID] = saved

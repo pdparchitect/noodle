@@ -122,6 +122,23 @@ final class AttachmentDragTests: XCTestCase {
         XCTAssertThrowsError(try AttachmentDrag.save(fileURL: root, to: root.appendingPathComponent("Folder")))
     }
 
+    /// Copy on a shader in a conversation: its file, named as it was sent and apart from conversation storage,
+    /// with its source under the Metal type, so it pastes into the Background sheet, Finder or another conversation.
+    @MainActor func testShaderCopiesAsItsFileWithTheMetalType() throws {
+        let root = try directory(), source = root.appendingPathComponent("stored-file.metal")
+        try "[[ stitchable ]] half4 glow(float2 position) { return half4(1); }".write(to: source, atomically: true, encoding: .utf8)
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+
+        XCTAssertTrue(AttachmentDrag.copy(attachment("Aurora.metal", mediaType: "text/plain"), fileURL: source, to: pasteboard))
+
+        let files = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        XCTAssertEqual(files.map(\.lastPathComponent), ["Aurora.metal"])
+        XCTAssertNotEqual(files.first?.deletingLastPathComponent().standardizedFileURL, root.standardizedFileURL)
+        XCTAssertEqual(files.first.flatMap { try? Data(contentsOf: $0) }, try Data(contentsOf: source))
+        XCTAssertEqual(pasteboard.data(forType: NSPasteboard.PasteboardType("com.apple.metal")), try Data(contentsOf: source))
+    }
+
     func testOnlyFilesOfferSaving() {
         XCTAssertTrue(attachment("Report.pdf").isSavable)
         for url in [URL(string: "https://example.com")!, CompanionLink.noodlet(UUID()).url] {
