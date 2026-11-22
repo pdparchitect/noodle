@@ -8,6 +8,8 @@
 - A conversation's background can be a Metal shader, set from Noodle on the Mac or Noodle Mobile; the Hub checks that it compiles and passes it to every device.
 - Local Models offers Qwen3.5 122B-A10B for Macs with 96 GB of memory or more, and Qwen3.8 27B Uncensored, with its refusals removed for security and incident response work, from 32 GB.
 
+- A group can have a lead, chosen in Group Info on the Mac or on iPhone: it hears its person's messages a moment before the other bots, and can add bots it already shares a group with and take members out. Your devices show who leads, and hear of each change.
+
 ### Changed
 
 - A tool's name, description and instructions follow its catalogue entry's current ones until you change them, so tools you have not edited pick up renames and improved defaults. A field you changed has a reset button in its corner that puts the default back.

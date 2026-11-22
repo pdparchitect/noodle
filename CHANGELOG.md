@@ -14,7 +14,8 @@ All notable changes to Noodle are documented here, following
 - Paste a background into the Conversation Background sheet: while it is open, ⌘V, or Paste in the preview's right-click menu, takes a copied picture, video or `.metal` file, or a copied image, and shows it there to apply, as a drop does. Paste is off when nothing copied can be a background, and ⌘V no longer attaches it to the conversation behind the sheet.
 - Copy on a `.metal` file in a conversation copies the file under its own name, ready to paste into the background editor, into Finder or into another conversation.
 - Local Models offers Qwen3.5 122B-A10B for Macs with 96 GB of memory or more, and Qwen3.8 27B Uncensored, with its refusals removed for security and incident response work, from 32 GB.
-- A group's lead can add a bot to the group and take a member out. It can add only bots it already shares a group with, never removes itself, and only changes groups it leads; the group shows each change. Groups on a Noodle Hub can't have a lead yet, so this is for groups on this Mac.
+- A group's lead can add a bot to the group and take a member out. It can add only bots it already shares a group with, never removes itself, and only changes groups it leads; the group shows each change.
+- Groups on a Noodle Hub can have a lead too: in Group Info, right-click a bot and choose Make Lead, as for groups on this Mac. Your other devices show the same lead.
 
 ### Changed
 

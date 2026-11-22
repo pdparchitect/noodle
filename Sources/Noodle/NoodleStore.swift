@@ -1731,14 +1731,9 @@ final class NoodleStore {
         }
     }
 
-    /// Groups on a Noodle Hub have no lead yet: their bots are woken on the Hub.
-    func canLead(_ conversation: BotConversation) -> Bool {
-        conversation.kind == .group && hubMirror(forConversation: conversation.id) == nil
-    }
-
-    /// Makes a bot the group's lead, or leaves the group without one.
-    func setLead(_ agentID: UUID?, of conversation: BotConversation) {
-        guard canLead(conversation) else { return }
+    /// Makes a bot one of this Mac's own groups' lead, or leaves the group without one. A Hub's group takes its lead
+    /// with the rest of its edit.
+    private func setLead(_ agentID: UUID?, of conversation: BotConversation) {
         do {
             let updated = try repository.setGroupLead(conversationID: conversation.id, agentID: agentID, existingAgents: agents)
             if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
@@ -1757,14 +1752,17 @@ final class NoodleStore {
         named name: String,
         publicDescription: String,
         participantIDs: Set<UUID>,
+        lead: UUID?? = nil,
         folders: [AgentFolder]? = nil
     ) -> Bool {
+        // Left out, the lead stays as it is.
+        let lead = lead ?? conversation.lead
         if let hub = hubMirror(forConversation: conversation.id) {
             groupBeingEdited = nil
             Task {
                 do {
                     try await hub.updateGroup(conversation.id, named: name, publicDescription: publicDescription,
-                                              agentIDs: Array(participantIDs))
+                                              agentIDs: Array(participantIDs), lead: lead)
                     refreshAppShortcuts()
                 } catch {
                     errorMessage = error.localizedDescription
@@ -1782,6 +1780,7 @@ final class NoodleStore {
                 folders: folders
             )
             try groupEdited(from: conversations.first { $0.id == conversation.id } ?? conversation, to: updated)
+            if updated.lead != lead { setLead(lead, of: updated) }
             groupBeingEdited = nil
             return true
         } catch {

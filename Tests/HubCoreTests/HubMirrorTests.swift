@@ -405,7 +405,7 @@ import XCTest
         XCTAssertEqual(messages.map(\.body), ["Dinner at eight.", "Very good."])
         XCTAssertEqual(messages.last?.author, .agent(jeeves.id))
 
-        try await mirror.updateGroup(local.id, named: "Staff", publicDescription: "", agentIDs: [alfred.id])
+        try await mirror.updateGroup(local.id, named: "Staff", publicDescription: "", agentIDs: [alfred.id], lead: nil)
         XCTAssertEqual(try f.hub.repository.loadConversations().first { $0.id == remote.id }?.participantIDs.count, 1)
         XCTAssertEqual(try f.local.loadConversations().first { $0.id == local.id }?.displayName, "Staff")
 
@@ -435,6 +435,28 @@ import XCTest
         try f.hub.bots.deleteGroup(group.id, for: f.ada)
         await mirror.sync()
         XCTAssertFalse(try f.local.loadConversations().contains { $0.kind == .group })
+    }
+
+    /// A Hub group's lead shows here as this Mac's own bot, and one chosen here becomes the Hub's.
+    func testAHubGroupsLeadFollowsTheHubAndIsChosenHere() async throws {
+        let f = try await fixture()
+        let mirror = f.mirror()
+        let alfred = try f.hub.bots.create(LinkBotDraft(name: "Alfred", provider: "claude-code"), for: f.ada)
+        let jeeves = try f.hub.bots.create(LinkBotDraft(name: "Jeeves", provider: "claude-code"), for: f.ada)
+        let group = try f.hub.bots.createGroup(LinkGroupDraft(name: "House", botIDs: [alfred.id, jeeves.id], leadID: alfred.id), for: f.ada)
+        await mirror.sync()
+        let agents = try f.local.loadAgents()
+        let localAlfred = try XCTUnwrap(agents.first { $0.displayName == "Alfred" }), localJeeves = try XCTUnwrap(agents.first { $0.displayName == "Jeeves" })
+        let local = try XCTUnwrap(f.local.loadConversations().first { $0.kind == .group })
+        XCTAssertEqual(local.lead, localAlfred.id)
+
+        try await mirror.updateGroup(local.id, named: "House", publicDescription: "", agentIDs: [localAlfred.id, localJeeves.id], lead: localJeeves.id)
+        XCTAssertEqual(try f.hub.repository.loadConversations().first { $0.id == group.id }?.lead, jeeves.id)
+        XCTAssertEqual(try f.local.loadConversations().first { $0.id == local.id }?.lead, localJeeves.id)
+
+        _ = try f.hub.bots.updateGroup(group.id, with: LinkGroupDraft(name: "House", botIDs: [alfred.id, jeeves.id]), for: f.ada)
+        await mirror.sync()
+        XCTAssertNil(try f.local.loadConversations().first { $0.id == local.id }?.lead)
     }
 
     func testBotsAndGroupsArchivedElsewhereAreArchivedHere() async throws {

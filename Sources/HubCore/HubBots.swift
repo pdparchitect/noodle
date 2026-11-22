@@ -76,6 +76,9 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     private var effectsChanged: [UUID: Date] = [:]
     /// Each conversation's background when last checked.
     private var backgrounds: [UUID: ConversationBackground] = [:]
+    /// Each group as devices were last told of it, so one changed beside the link, such as by Noodle on This Mac as
+    /// a Hub, reaches them.
+    private var groupDrafts: [UUID: LinkGroupDraft] = [:]
     /// What each bot was last reported doing.
     private var phases: [UUID: AgentRuntimePhase] = [:]
     /// Each bot's status when last checked; an absent bot has not been checked yet.
@@ -125,6 +128,9 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         }
         messenger.onCallRequested = { [weak self] id in Task { @MainActor in self?.ringCall(of: id) } }
         messenger.onTasksChanged = { [weak self] id in Task { @MainActor in self?.tasksChanged(of: id) } }
+        messenger.onGroupMembersChanged = { [weak self] before, after, _ in
+            Task { @MainActor in self?.leadChangedMembers(from: before, to: after) }
+        }
         connections.onAssignmentsChange = { [weak self] in self?.toolBroker?.synchronizeSkills() }
         connections.store.refreshSkills = { [weak self] in await self?.toolBroker?.synchronizeSkills().value }
         // The bots kept here, whose names a connection's activity gives and whom a watched connection wakes.
@@ -531,8 +537,9 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
 
     public func createGroup(_ draft: LinkGroupDraft, for user: HubUser) throws -> LinkGroup {
         let bots = try draft.botIDs.map { try runHere($0, by: user) }
+        try Self.checkLead(of: draft)
         let conversation = try repository.createGroup(named: draft.name, publicDescription: draft.publicDescription,
-                                                      participantIDs: bots.map(\.id), existingAgents: bots)
+                                                      participantIDs: bots.map(\.id), existingAgents: bots, leadID: draft.leadID)
         onChange?(user.id, .groupsChanged)
         onBotsEdited?()
         // As saved, so it matches every later read of the same group.
@@ -542,16 +549,40 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     public func updateGroup(_ id: UUID, with draft: LinkGroupDraft, for user: HubUser) throws -> LinkGroup {
         let before = try ownedGroup(id, by: user)
         let bots = try draft.botIDs.map { try runHere($0, by: user) }
-        let updated = try repository.updateGroup(conversationID: id, named: draft.name, publicDescription: draft.publicDescription,
-                                                 participantIDs: bots.map(\.id), existingAgents: try repository.loadAgents())
-        // As Group Info does in Noodle: the bots hear who joined or left, and of a new description.
-        if running || watching, BotConversation.editWakesMembers(from: before, to: updated) {
+        try Self.checkLead(of: draft)
+        let agents = try repository.loadAgents()
+        var updated = try repository.updateGroup(conversationID: id, named: draft.name, publicDescription: draft.publicDescription,
+                                                 participantIDs: bots.map(\.id), existingAgents: agents)
+        // The notice of a new lead comes after the one of who joined, as in Group Info.
+        if updated.lead != draft.leadID {
+            updated = try repository.setGroupLead(conversationID: id, agentID: draft.leadID, existingAgents: agents)
+        }
+        // As Group Info does in Noodle: the bots hear who joined or left, of a new description and of a new lead.
+        if running || watching, BotConversation.editWakesMembers(from: before, to: updated) || before.lead != updated.lead {
             runtime.notify(bots, repository: repository)
         }
         try restartBots(BotConversation.botsWithChangedFolders(from: before, to: updated))
+        groupDrafts[id] = group(updated).draft
         onChange?(user.id, .groupsChanged)
         onBotsEdited?()
         return group(updated)
+    }
+
+    private static func checkLead(of draft: LinkGroupDraft) throws {
+        if let lead = draft.leadID, !draft.botIDs.contains(lead) { throw LinkError("The group's lead must be one of its bots.") }
+    }
+
+    /// After a group's lead added or removed a member through Messenger: as after an edit from a device, the bots
+    /// hear of it, and the group's user's devices list its groups again.
+    private func leadChangedMembers(from before: BotConversation, to after: BotConversation) {
+        let agents = (try? repository.loadAgents()) ?? []
+        if running || watching, BotConversation.editWakesMembers(from: before, to: after) {
+            runtime.notify(agents.filter { after.participantIDs.contains($0.id) }, repository: repository)
+        }
+        try? restartBots(BotConversation.botsWithChangedFolders(from: before, to: after))
+        groupDrafts[after.id] = group(after).draft
+        if let owner = owner(of: after, among: agents) { onChange?(owner, .groupsChanged) }
+        onBotsEdited?()
     }
 
     /// As in Noodle: a group's folders reach its bots' sandbox only when they launch.
@@ -1492,6 +1523,13 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
 
     private func apply(agents: [AgentRecord], conversations: [BotConversation], reads: [(BotConversation, UUID, ConversationRead)]) {
         checks += 1
+        var regrouped: Set<UUID> = []
+        for (conversation, owner, _) in reads where conversation.kind == .group && conversation.guest == nil {
+            let draft = group(conversation).draft
+            if let known = groupDrafts[conversation.id], known != draft { regrouped.insert(owner) }
+            groupDrafts[conversation.id] = draft
+        }
+        regrouped.forEach { onChange?($0, .groupsChanged) }
         for (conversation, owner, read) in reads {
             if let known = backgrounds[conversation.id], known != read.background {
                 onChange?(owner, .backgroundChanged(conversationID: conversation.id, background: self.background(of: conversation.id)))
@@ -2033,7 +2071,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     private func group(_ conversation: BotConversation) -> LinkGroup {
         LinkGroup(id: conversation.id,
                   draft: LinkGroupDraft(name: conversation.displayName, publicDescription: conversation.publicDescription ?? "",
-                                        botIDs: conversation.participantIDs),
+                                        botIDs: conversation.participantIDs, leadID: conversation.lead),
                   createdAt: conversation.createdAt, readUpTo: readMarks[conversation.id], archivedAt: conversation.archivedAt,
                   background: background(of: conversation.id), pinnedAt: pins[conversation.id],
                   notifications: notifications[conversation.id])

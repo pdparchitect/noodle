@@ -1545,11 +1545,15 @@ public struct LinkGroupDraft: Codable, Equatable, Sendable {
     public var publicDescription: String
     /// Bots of the same user, at least one.
     public var botIDs: [UUID]
+    /// The bot that leads the group, one of `botIDs`: it hears its user's messages a moment before the others, and
+    /// may add and remove bots. Nil when the group has no lead.
+    public var leadID: UUID?
 
-    public init(name: String, publicDescription: String = "", botIDs: [UUID]) {
+    public init(name: String, publicDescription: String = "", botIDs: [UUID], leadID: UUID? = nil) {
         self.name = name
         self.publicDescription = publicDescription
         self.botIDs = botIDs
+        self.leadID = leadID
     }
 }
 

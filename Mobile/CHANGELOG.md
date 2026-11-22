@@ -10,6 +10,8 @@
 - Quick Look plays `.metal` shader files and shows a still of each as its thumbnail.
 - Paste in a conversation's Background settings sets a copied picture, video or Metal shader as its background, for every device.
 
+- A group can have a lead: in Group Info, touch and hold a member and choose Make Lead. A star marks it. The lead hears your messages a moment before the other bots, and can bring in bots it already works with in another group and take members out; the group shows each change.
+
 ### What to Test
 
 - Give a bot a tool whose service marks a tool destructive, and ask the bot to use it. Check the call shows under Approvals with what it will do and the bot's reason, that Decline leaves it undone and Approve runs it, and that the bot then says how it went.
@@ -19,6 +21,8 @@
 - Turn on Reduce Motion or Low Power Mode: the background holds still.
 - Touch and hold a `.metal` file in a conversation and choose Copy File, then open the conversation's Background settings and tap Paste: the shader becomes the background, on the Mac too.
 - Copy a photo in Photos and tap Paste there: the photo becomes the background. With only text copied, Paste is off.
+- In Group Info, touch and hold a member and choose Make Lead. A star marks it, and after Save the group says it now leads. Open the same group in Noodle on the Mac: it shows the same lead. Choose Remove as Lead, save, and check the star is gone on both.
+- Ask the lead to bring another bot into the group, one it shares a different group with. The group shows the new member here without reopening it.
 
 ## [0.58.0] - 2026-11-18
 

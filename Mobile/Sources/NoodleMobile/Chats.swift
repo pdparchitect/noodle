@@ -4692,13 +4692,14 @@ struct GroupEditor: View {
     /// Archived bots stay members until removed, but are never added.
     private var bots: [LinkBot] {
         let bots = chats.agents.filter { $0.owner == nil && ($0.archivedAt == nil || draft.botIDs.contains($0.id)) }
-        return Self.ordered(bots, members: listedFirst,
+        return Self.ordered(bots, members: listedFirst, lead: group?.draft.leadID,
                             inSpace: Self.inSpace(space, hub: CurrentHub.space(of: chats.pairing), spaces: spaceList.spaces))
     }
 
-    /// The group's bots first, so one is removed without hunting, then those in the space shown, then the rest, each by name.
-    static func ordered(_ bots: [LinkBot], members: Set<UUID>, inSpace: (LinkBot) -> Bool) -> [LinkBot] {
-        func tier(_ bot: LinkBot) -> Int { members.contains(bot.id) ? 0 : inSpace(bot) ? 1 : 2 }
+    /// The group's lead as the sheet opened, then its other bots, so one is removed without hunting, then those in the
+    /// space shown, then the rest, each by name.
+    static func ordered(_ bots: [LinkBot], members: Set<UUID>, lead: UUID? = nil, inSpace: (LinkBot) -> Bool) -> [LinkBot] {
+        func tier(_ bot: LinkBot) -> Int { bot.id == lead ? -1 : members.contains(bot.id) ? 0 : inSpace(bot) ? 1 : 2 }
         return bots.sorted { lhs, rhs in
             tier(lhs) != tier(rhs) ? tier(lhs) < tier(rhs)
                 : lhs.draft.name.localizedStandardCompare(rhs.draft.name) == .orderedAscending
@@ -4737,12 +4738,28 @@ struct GroupEditor: View {
                         Text("No Bots").foregroundStyle(.secondary)
                     }
                     ForEach(bots) { bot in
-                        let chosen = draft.botIDs.contains(bot.id)
+                        let chosen = draft.botIDs.contains(bot.id), leads = draft.leadID == bot.id
                         Button {
-                            if chosen { draft.botIDs.removeAll { $0 == bot.id } } else { draft.botIDs.append(bot.id) }
+                            if chosen {
+                                draft.botIDs.removeAll { $0 == bot.id }
+                                if leads { draft.leadID = nil }
+                            } else {
+                                draft.botIDs.append(bot.id)
+                            }
                         } label: {
                             HStack(spacing: 12) {
                                 AgentAvatar(draft: bot.draft, size: 32)
+                                    .overlay(alignment: .bottomTrailing) {
+                                        // As in Noodle's Group Info: the lead hears your messages first.
+                                        if leads {
+                                            Image(systemName: "star.circle.fill")
+                                                .font(.system(size: 15))
+                                                .symbolRenderingMode(.palette)
+                                                .foregroundStyle(.white, Color.accentColor)
+                                                .offset(x: 5, y: 4)
+                                                .accessibilityHidden(true)
+                                        }
+                                    }
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(bot.draft.name).foregroundStyle(.primary)
                                     if !bot.about.isEmpty {
@@ -4757,6 +4774,16 @@ struct GroupEditor: View {
                             }
                         }
                         .accessibilityAddTraits(chosen ? .isSelected : [])
+                        .accessibilityValue(leads ? "Lead" : "")
+                        .contextMenu {
+                            if chosen {
+                                if leads {
+                                    Button("Remove as Lead", systemImage: "star.slash") { draft.leadID = nil }
+                                } else {
+                                    Button("Make Lead", systemImage: "star") { draft.leadID = bot.id }
+                                }
+                            }
+                        }
                     }
                 }
                 if let problem {
@@ -4814,6 +4841,7 @@ struct GroupEditor: View {
     private func save() {
         draft.name = draft.name.trimmingCharacters(in: .whitespaces)
         draft.botIDs = members
+        if let lead = draft.leadID, !members.contains(lead) { draft.leadID = nil }
         saving = true
         problem = nil
         Task {

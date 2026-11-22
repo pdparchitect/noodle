@@ -26,8 +26,8 @@ member keeps the group's history.
 To give a group a lead, open its Group Info, right-click a bot and choose **Make Lead**.
 The lead hears each of your messages a few seconds before the other bots, so it can
 answer or hand the message to one of them before they all reply. A bot you @mention
-hears it straight away. A group has no lead until you choose one, and groups on a
-Noodle Hub can't have one yet.
+hears it straight away. A group has no lead until you choose one. A group on a Noodle
+Hub keeps its lead there, so your other devices show the same one.
 
 A lead can also add a bot to the group when its work is needed, and take a member out
 once its part is done. It can add only bots it already shares a group with, so a bot
