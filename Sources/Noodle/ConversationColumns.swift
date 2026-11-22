@@ -558,8 +558,9 @@ struct SidebarCommands: View {
             Divider()
             SidebarListPickers()
             Divider()
-            Toggle("Space Picker", isOn: $showsSpacePicker)
-            SidebarToolsToggle()
+            Toggle("Show Space Picker", isOn: $showsSpacePicker)
+            // Noodle no longer offers Show Tools. A sidebar that already shows tools keeps them; uncomment to offer it again.
+            // SidebarToolsToggle()
         }
     }
 }

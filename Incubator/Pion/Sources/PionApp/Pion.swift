@@ -426,11 +426,12 @@ struct ViewOptions: View {
             .pickerStyle(.inline)
             .labelsHidden()
             Divider()
-            Toggle("Show Closed Investigations", isOn: $showsClosed)
-            SidebarToolsToggle()
-            Divider()
             // Noodle's: the line under each name, the order and the agents' tasks.
             SidebarListPickers()
+            // Last, where Noodle keeps its own Show items.
+            Divider()
+            Toggle("Show Closed Investigations", isOn: $showsClosed)
+            SidebarToolsToggle()
         }
         // Noodle's, without its choices for long messages: Pion keeps its own reading style.
         Menu("Conversation") { AttachmentLayoutChoices() }

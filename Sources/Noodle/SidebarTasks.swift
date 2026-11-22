@@ -279,8 +279,10 @@ struct SidebarToolItem: View {
         ToolConnectionIcon(connection: connection, size: size, frameless: true)
             .overlay(alignment: .bottomTrailing) {
                 if status.needsAttention {
-                    Circle().fill(Color.red).frame(width: 10, height: 10)
-                        .padding(2).background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
+                    // Smaller on compact pictures, so it marks the icon rather than covering it.
+                    let dot: CGFloat = size <= 24 ? 5 : size <= 40 ? 6 : 10
+                    Circle().fill(Color.red).frame(width: dot, height: dot)
+                        .padding(size <= 40 ? 1 : 2).background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
                 } else if case .signingIn = status {
                     ProgressView().controlSize(.mini)
                 }
