@@ -138,6 +138,10 @@ final class AppleModelDownloaderTests: XCTestCase {
         XCTAssertEqual(offered(4), ["Qwen3 1.7B"])
         XCTAssertEqual(offered(16).last, "Qwen3.5 9B")
         XCTAssertFalse(offered(64).contains("gpt-oss 120B"))
+        XCTAssertFalse(offered(24).contains("Qwen3.8 27B Uncensored"))
+        XCTAssertTrue(offered(32).contains("Qwen3.8 27B Uncensored"))
+        XCTAssertFalse(offered(64).contains("Qwen3.5 122B-A10B"))
+        XCTAssertTrue(offered(96).contains("Qwen3.5 122B-A10B"))
         XCTAssertEqual(offered(512), AppleDownloadableModel.available.map(\.name))
         for model in AppleDownloadableModel.available {
             XCTAssertNotNil(model.revision.range(of: "^[0-9a-f]{40}$", options: .regularExpression))

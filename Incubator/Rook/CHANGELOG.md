@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Local Models offers Qwen3.5 122B-A10B for Macs with 96 GB of memory or more, and Qwen3.8 27B Uncensored, with its refusals removed for security and incident response work, from 32 GB.
+
 ### Changed
 
 - View › Sidebar offers As List and As Icons. Missions, agents, groups and optional tool connections use compact pictures in Noodle’s sidebar rows and icon grid.

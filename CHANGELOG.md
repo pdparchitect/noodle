@@ -13,6 +13,7 @@ All notable changes to Noodle are documented here, following
 - Quick Look plays `.metal` shader files, in conversations and in Finder, and shows a still of each as its thumbnail.
 - Paste a background into the Conversation Background sheet: while it is open, ⌘V, or Paste in the preview's right-click menu, takes a copied picture, video or `.metal` file, or a copied image, and shows it there to apply, as a drop does. Paste is off when nothing copied can be a background, and ⌘V no longer attaches it to the conversation behind the sheet.
 - Copy on a `.metal` file in a conversation copies the file under its own name, ready to paste into the background editor, into Finder or into another conversation.
+- Local Models offers Qwen3.5 122B-A10B for Macs with 96 GB of memory or more, and Qwen3.8 27B Uncensored, with its refusals removed for security and incident response work, from 32 GB.
 
 ### Changed
 
