@@ -29,7 +29,7 @@ final class AzureTests: XCTestCase {
         "operationName":{"value":"write","localizedValue":"Update VM"},"status":{"value":"Failed"}}]}
         """)
         let found = try await callTool(Azure.adapter, "activity-log", """
-        {"caller":"admin@example.com","resourceGroup":"production","resource":"/vm/one","failuresOnly":true,"since":"\(since)","until":"\(until)","limit":1}
+        {"caller":"admin@example.com","resource":"/vm/one","failuresOnly":true,"since":"\(since)","until":"\(until)","limit":1}
         """, on: service, in: azure)
         XCTAssertFalse(found.isError, found.text)
         XCTAssertTrue(found.text.contains("Update VM"), found.text)
@@ -39,7 +39,8 @@ final class AzureTests: XCTestCase {
         XCTAssertEqual(service.requests.first?.url?.path, path)
         let query = queryItems(service.requests.first)
         XCTAssertEqual(query["api-version"], "2015-04-01")
-        XCTAssertEqual(query["$filter"], "eventTimestamp ge '\(since)' and eventTimestamp le '\(until)' and caller eq 'admin@example.com' and resourceGroupName eq 'production' and resourceUri eq '/vm/one'")
+        XCTAssertEqual(query["$filter"], "eventTimestamp ge '\(since)' and eventTimestamp le '\(until)' and caller eq 'admin@example.com' and resourceUri eq '/vm/one'")
+        XCTAssertEqual(query["$select"], "eventDataId,eventTimestamp,caller,resourceId,resourceGroupName,status,operationName")
     }
 
     func testDefenderAlertsAreFilteredAndSortedWithTheirEvidence() async throws {
@@ -162,6 +163,94 @@ final class AzureTests: XCTestCase {
             XCTAssertTrue(found.isError, found.text)
             XCTAssertTrue(service.requests.isEmpty)
         }
+    }
+
+    func testResourceAndResourceGroupAreExclusive() async throws {
+        let service = FakeService()
+        let found = try await callTool(Azure.adapter, "activity-log", #"{"resource":"/vm/one","resourceGroup":"production"}"#, on: service, in: azure)
+        XCTAssertTrue(found.isError)
+        XCTAssertTrue(found.text.contains("Give a resource or resourceGroup, not both."), found.text)
+        XCTAssertTrue(service.requests.isEmpty)
+    }
+
+    func testAlertsAndTriggerReadLaterPagesAndKeepDetails() async throws {
+        let path = root + "Microsoft.Security/alerts"
+        let first = #"{"value":[],"nextLink":"https://management.azure.com/alerts?$skipToken=next%2Bpage"}"#
+        let last = #"{"value":[{"id":"later","properties":{"severity":"High","timeGeneratedUtc":"2026-11-19T09:15:00Z","description":"Investigate this","entities":[{"name":"vm-one","type":"host"}]}}]}"#
+        for trigger in [false, true] {
+            let service = FakeService()
+            service.sequences[path] = [(200, first), (200, last)]
+            if trigger {
+                let found = try await Azure.adapter.alerts(since: ServiceAlert.time("2026-11-19T09:00:00Z")!, connection: azure, access: service)
+                XCTAssertEqual(found.map(\.id), ["later"])
+            } else {
+                let found = try await callTool(Azure.adapter, "defender-alerts", #"{"since":"2026-01-01T00:00:00Z"}"#, on: service, in: azure)
+                XCTAssertFalse(found.isError, found.text)
+                let kept = try XCTUnwrap(found.structured?["alerts"] as? [[String: Any]])
+                let properties = try XCTUnwrap(kept.first?["properties"] as? [String: Any])
+                XCTAssertEqual(properties["description"] as? String, "Investigate this")
+                XCTAssertEqual((properties["entities"] as? [[String: String]])?.first?["name"], "vm-one")
+                XCTAssertFalse(found.text.contains("Stopped early"))
+            }
+            XCTAssertEqual(service.requests.count, 2)
+            XCTAssertEqual(queryItems(service.requests.last)["$skipToken"], "next+page")
+        }
+    }
+
+    func testActivityPagesUntilEnoughFailuresMatch() async throws {
+        let service = FakeService()
+        let path = root + "Microsoft.Insights/eventtypes/management/values"
+        service.sequences[path] = [
+            (200, #"{"value":[{"status":{"value":"Succeeded"}}],"nextLink":"https://management.azure.com/activity?$skipToken=two"}"#),
+            (200, #"{"value":[{"eventDataId":"failure","status":{"value":"Failed"}}],"nextLink":"https://management.azure.com/activity?$skipToken=three"}"#),
+        ]
+        let found = try await callTool(Azure.adapter, "activity-log", #"{"failuresOnly":true,"limit":1}"#, on: service, in: azure)
+        XCTAssertFalse(found.isError, found.text)
+        XCTAssertEqual((found.structured?["events"] as? [[String: Any]])?.first?["eventDataId"] as? String, "failure")
+        XCTAssertEqual(service.requests.count, 2)
+        XCTAssertTrue(found.text.contains("Stopped early"), found.text)
+    }
+
+    func testRoleAssignmentsAndDefinitionsPageAndMatchTrailingIDs() async throws {
+        let service = FakeService()
+        let assignments = root + "Microsoft.Authorization/roleAssignments"
+        let definitions = root + "Microsoft.Authorization/roleDefinitions"
+        let guid = "8A7F3C2E-0000-4000-8000-000000000003"
+        let rows = (0..<31).map { "{\"id\":\"\($0)\",\"properties\":{\"roleDefinitionId\":\"/providers/Microsoft.Authorization/roleDefinitions/\(guid)\"}}" }.joined(separator: ",")
+        let first = #"{"value":[],"nextLink":"https://management.azure.com/roles?$skipToken=two"}"#
+        service.sequences[assignments] = [(200, first), (200, "{\"value\":[\(rows)]}")]
+        service.sequences[definitions] = [(200, first), (200, "{\"value\":[{\"id\":\"/subscriptions/one/providers/Microsoft.Authorization/roleDefinitions/\(guid.lowercased())\",\"properties\":{\"roleName\":\"Reader\"}}]}")]
+        let found = try await callTool(Azure.adapter, "role-assignments", "{}", on: service, in: azure)
+        XCTAssertFalse(found.isError, found.text)
+        XCTAssertTrue(found.text.contains("Showing 30 of 31 total assignments."), found.text)
+        XCTAssertEqual((found.structured?["assignments"] as? [[String: Any]])?.last?["roleName"] as? String, "Reader")
+        XCTAssertEqual(service.requests.count, 4)
+        XCTAssertEqual(queryItems(service.requests[1])["$skipToken"], "two")
+        XCTAssertEqual(queryItems(service.requests[3])["$skipToken"], "two")
+    }
+
+    func testPageCapsAndLaterPageErrors() async throws {
+        for (tool, suffix) in [("defender-alerts", "Microsoft.Security/alerts"), ("activity-log", "Microsoft.Insights/eventtypes/management/values"), ("role-assignments", "Microsoft.Authorization/roleAssignments"), ("role-assignments", "Microsoft.Authorization/roleDefinitions")] {
+            let service = FakeService()
+            let path = root + suffix
+            service.answers[root + "Microsoft.Authorization/roleAssignments"] = (200, #"{"value":[]}"#)
+            service.answers[root + "Microsoft.Authorization/roleDefinitions"] = (200, #"{"value":[]}"#)
+            let page = #"{"value":[],"nextLink":"https://management.azure.com/list?$skipToken=more"}"#
+            service.answers[path] = (200, page)
+            let found = try await callTool(Azure.adapter, tool, "{}", on: service, in: azure)
+            XCTAssertFalse(found.isError, found.text)
+            XCTAssertTrue(found.text.contains("Stopped early"), found.text)
+            XCTAssertEqual(service.requests.filter { $0.url?.path == path }.count, Azure.maximumPages)
+            service.sequences[path] = [(200, page), (403, #"{"error":{"message":"Later page denied"}}"#)]
+            let denied = try await callTool(Azure.adapter, tool, "{}", on: service, in: azure)
+            XCTAssertTrue(denied.isError, denied.text)
+            XCTAssertTrue(denied.text.contains("Later page denied"), denied.text)
+        }
+        let service = FakeService()
+        service.answers[root + "Microsoft.Security/alerts"] = (200, #"{"value":[],"nextLink":"https://management.azure.com/list?$skipToken=more"}"#)
+        let found = try await Azure.adapter.alerts(since: Date(), connection: azure, access: service)
+        XCTAssertTrue(found.isEmpty)
+        XCTAssertEqual(service.requests.count, Azure.maximumPages)
     }
 
     private var alerts: String {

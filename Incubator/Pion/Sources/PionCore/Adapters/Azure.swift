@@ -11,6 +11,7 @@ public enum Azure {
         Use Microsoft Azure to read a subscription's activity log, Microsoft Defender for Cloud alerts, resources and role \
         assignments. Keep queries narrow, with a time filter and a row limit. Record each query and what it returned as \
         evidence, with the query itself as the method. These tools only read: recommend changes to the champion.
+        Defender for Cloud alerts may also appear in Microsoft Defender XDR (alerts_v2 serviceSource microsoftDefenderForCloud) under a different ID, so match them up.
         """,
         iconName: "azure",
         configuration: .connection(.init(endpointTemplate: "https://management.azure.com",
@@ -24,7 +25,7 @@ public enum Azure {
     static let setup = [
         "In the [Microsoft Entra admin center](https://entra.microsoft.com), open **App registrations** and choose **New registration**. Name it, such as Pion, keep **Single tenant** and leave the redirect URI empty. It needs no API permissions.",
         "Under **Certificates & secrets**, add a client secret and copy its **Value**, not its Secret ID; it is shown only once.",
-        "In the [Azure portal](https://portal.azure.com), open the subscription, choose **Access control (IAM) › Add role assignment**, and give the app the **Reader** role, plus **Security Reader** for Microsoft Defender for Cloud alerts.",
+        "In the [Azure portal](https://portal.azure.com), open the subscription, choose **Access control (IAM) › Add role assignment**, and give the app the **Reader** role.",
         "Copy the **Subscription ID** from the subscription's **Overview**, and the **Directory (tenant) ID** and **Application (client) ID** from the app's **Overview**.",
     ]
 
@@ -39,25 +40,50 @@ public enum Azure {
         ["subscriptions", try guid(service.setting("subscription")), "providers", provider, resource]
     }
 
-    struct List<Item: Decodable>: Decodable { let value: [Item] }
+    static let maximumPages = 20
+    struct List<Item: Decodable>: Decodable { let value: [Item]; let nextLink: String? }
+    struct Listing<Item> { var value: [Item] = []; var more = false }
+
+    static func list<Item: Decodable>(_ service: ServiceClient, path: [String], query: [String: String?],
+                                      as: Item.Type, limit: Int? = nil, matching: (Item) -> Bool = { _ in true }) async throws -> Listing<Item> {
+        var query = query
+        var found = Listing<Item>()
+        for _ in 0..<maximumPages {
+            let page = try await service.get(path, query: query, as: List<Item>.self)
+            found.value += page.value.filter(matching)
+            found.more = page.nextLink?.isEmpty == false
+            if !found.more || limit.map({ found.value.count >= $0 }) == true { break }
+            guard let link = page.nextLink,
+                  let token = URLComponents(string: link)?.queryItems?.first(where: { $0.name.lowercased() == "$skiptoken" })?.value,
+                  !token.isEmpty else { throw ServiceError.unreadable }
+            query["$skipToken"] = token
+        }
+        return found
+    }
+
+    static func stopped(_ more: Bool, _ listing: String) -> String {
+        more ? "\nStopped early reading \(listing); more pages remain, so results may be incomplete." : ""
+    }
 
     struct Alert: Codable {
         struct Properties: Codable {
             struct Resource: Codable { let azureResourceId: String?, type: String? }
+            struct Entity: Codable { let name: String?, type: String? }
             let alertDisplayName: String?, severity: String?, status: String?, timeGeneratedUtc: String?
+            let description: String?, entities: [Entity]?
             let compromisedEntity: String?, resourceIdentifiers: [Resource]?, techniques: [String]?, intent: String?, alertUri: String?
         }
         let id: String, name: String?, properties: Properties?
     }
 
-    static func alerts(_ service: ServiceClient) async throws -> [Alert] {
-        try await service.get(path(service, "Microsoft.Security", "alerts"), query: ["api-version": "2022-01-01"], as: List<Alert>.self).value
+    static func alerts(_ service: ServiceClient) async throws -> Listing<Alert> {
+        try await list(service, path: path(service, "Microsoft.Security", "alerts"), query: ["api-version": "2022-01-01"], as: Alert.self)
     }
 
     struct SevereAlerts: ServiceTrigger {
         var tool: String { DefenderAlerts.name }
         func check(since: Date, on service: ServiceClient) async throws -> [ServiceAlert] {
-            Array(try await Azure.alerts(service).compactMap { alert -> ServiceAlert? in
+            Array(try await Azure.alerts(service).value.compactMap { alert -> ServiceAlert? in
                 guard alert.properties?.severity == "High", let time = ServiceAlert.time(alert.properties?.timeGeneratedUtc), time >= since else { return nil }
                 return ServiceAlert(id: alert.id, time: time)
             }.sorted { $0.time > $1.time }.prefix(ServiceAlert.most))
@@ -79,6 +105,7 @@ extension Azure {
         ])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            guard input.resource == nil || input.resourceGroup == nil else { throw ServiceError.input("Give a resource or resourceGroup, not both.") }
             let since = try input.since.map { try ServiceInput.time(ServiceInput.quoted($0, "the time")) } ?? ServiceInput.daysAgo(7)
             let until = try input.until.map { try ServiceInput.time(ServiceInput.quoted($0, "the time")) } ?? ISO8601DateFormatter().string(from: Date())
             guard let from = ServiceAlert.time(since), let to = ServiceAlert.time(until), from <= to,
@@ -95,15 +122,17 @@ extension Azure {
                 let eventDataId: String?, eventTimestamp: String?, caller: String?, resourceId: String?, resourceGroupName: String?
                 let status: Named?, operationName: Named?
             }
-            var events = try await service.get(Azure.path(service, "Microsoft.Insights", "eventtypes") + ["management", "values"],
-                query: ["api-version": "2015-04-01", "$filter": filter.joined(separator: " and ")], as: List<Event>.self).value
-            events = Array(events.filter { input.failuresOnly != true || $0.status?.value?.lowercased() == "failed" }
+            let listing = try await Azure.list(service, path: Azure.path(service, "Microsoft.Insights", "eventtypes") + ["management", "values"],
+                query: ["api-version": "2015-04-01", "$filter": filter.joined(separator: " and "),
+                        "$select": "eventDataId,eventTimestamp,caller,resourceId,resourceGroupName,status,operationName"], as: Event.self, limit: limit,
+                matching: { input.failuresOnly != true || $0.status?.value?.lowercased() == "failed" })
+            let events = Array(listing.value
                 .sorted { (ServiceAlert.time($0.eventTimestamp) ?? .distantPast) > (ServiceAlert.time($1.eventTimestamp) ?? .distantPast) }.prefix(limit))
             let text = events.isEmpty ? "No activity matches." : events.map {
                 "\($0.eventTimestamp ?? "?") \($0.status?.value ?? "?"): \($0.operationName?.localizedValue ?? $0.operationName?.value ?? "?") — \($0.caller ?? "?")"
             }.joined(separator: "\n")
             struct Kept: Encodable { let events: [Event] }
-            return try ServiceResult(text: text, structured: Kept(events: events))
+            return try ServiceResult(text: text + Azure.stopped(listing.more, "activity"), structured: Kept(events: events))
         }
     }
 
@@ -123,7 +152,8 @@ extension Azure {
             let status = try input.status.map { try ServiceInput.oneOf($0, ["Active", "InProgress", "Resolved", "Dismissed"], "status") }
             let since = ServiceAlert.time(try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(7))!
             let limit = Int(try Graph.limit(input.limit, default: 25, maximum: 100))!
-            let alerts = Array(try await Azure.alerts(service).filter { alert in
+            let listing = try await Azure.alerts(service)
+            let alerts = Array(listing.value.filter { alert in
                 guard let time = ServiceAlert.time(alert.properties?.timeGeneratedUtc), time >= since else { return false }
                 return (severity == nil || alert.properties?.severity == severity) && (status == nil || alert.properties?.status == status)
             }.sorted { (ServiceAlert.time($0.properties?.timeGeneratedUtc) ?? .distantPast) > (ServiceAlert.time($1.properties?.timeGeneratedUtc) ?? .distantPast) }.prefix(limit))
@@ -131,7 +161,7 @@ extension Azure {
                 "\($0.properties?.timeGeneratedUtc ?? "?") \($0.properties?.severity ?? "?") \($0.properties?.status ?? "?"): \($0.properties?.alertDisplayName ?? $0.id) — \($0.properties?.compromisedEntity ?? "?")"
             }.joined(separator: "\n")
             struct Kept: Encodable { let alerts: [Alert] }
-            return try ServiceResult(text: text, structured: Kept(alerts: alerts))
+            return try ServiceResult(text: text + Azure.stopped(listing.more, "alerts"), structured: Kept(alerts: alerts))
         }
     }
 
@@ -175,17 +205,19 @@ extension Azure {
                 struct Properties: Decodable { let roleName: String? }
                 let id: String; let properties: Properties
             }
-            let assignments = try await service.get(Azure.path(service, "Microsoft.Authorization", "roleAssignments"), query: query, as: List<Assignment>.self).value
-            let definitions = try await service.get(Azure.path(service, "Microsoft.Authorization", "roleDefinitions"),
-                query: ["api-version": "2022-04-01"], as: List<Definition>.self).value
-            let names = Dictionary(definitions.map { ($0.id.lowercased(), $0.properties.roleName ?? $0.id) }, uniquingKeysWith: { first, _ in first })
+            let assignments = try await Azure.list(service, path: Azure.path(service, "Microsoft.Authorization", "roleAssignments"), query: query, as: Assignment.self)
+            let definitions = try await Azure.list(service, path: Azure.path(service, "Microsoft.Authorization", "roleDefinitions"),
+                query: ["api-version": "2022-04-01"], as: Definition.self)
+            func roleKey(_ id: String) -> String { String(id.split(separator: "/").last ?? "").lowercased() }
+            let names = Dictionary(definitions.value.map { (roleKey($0.id), $0.properties.roleName ?? $0.id) }, uniquingKeysWith: { first, _ in first })
             struct Kept: Encodable { let id: String; let properties: Properties; let roleName: String? }
             struct Answer: Encodable { let assignments: [Kept] }
-            let kept = assignments.map { Kept(id: $0.id, properties: $0.properties, roleName: $0.properties.roleDefinitionId.flatMap { names[$0.lowercased()] }) }
+            let kept = assignments.value.map { Kept(id: $0.id, properties: $0.properties, roleName: $0.properties.roleDefinitionId.flatMap { names[roleKey($0)] }) }
             let text = kept.isEmpty ? "No access matches." : kept.prefix(30).map {
                 "\($0.properties.principalId ?? "?"): \($0.roleName ?? $0.properties.roleDefinitionId ?? "?") on \($0.properties.scope ?? "?")"
             }.joined(separator: "\n")
-            return try ServiceResult(text: text, structured: Answer(assignments: kept))
+            let count = kept.count > 30 ? "\nShowing 30 of \(kept.count)\(assignments.more ? " read so far" : " total") assignments." : ""
+            return try ServiceResult(text: text + count + Azure.stopped(assignments.more, "role assignments") + Azure.stopped(definitions.more, "role definitions"), structured: Answer(assignments: kept))
         }
     }
 }
