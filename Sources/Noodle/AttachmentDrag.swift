@@ -3,6 +3,7 @@ import SwiftUI
 import NoodleCore
 import UniformTypeIdentifiers
 import HubLink
+import NoodleWallpaper
 
 enum AttachmentDrag {
     static func provider(
@@ -19,25 +20,9 @@ enum AttachmentDrag {
         fileURL: URL,
         temporaryDirectory: URL = FileManager.default.temporaryDirectory
     ) throws -> (provider: NSItemProvider, file: URL) {
-        let manager = FileManager.default
-        let filename = try exportFilename(for: attachment, fileURL: fileURL)
-
-        // Export a separate file with its display name. A destination may move
-        // or edit a dropped file; it must never change conversation storage.
-        // Keep it in system-managed temporary storage after the drag ends so
-        // destinations that consume the file asynchronously can still read it.
-        let directory = temporaryDirectory.appendingPathComponent("NoodleAttachmentDrag-\(UUID())", isDirectory: true)
-        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
-        let exportedURL = directory.appendingPathComponent(filename)
-        do {
-            try manager.copyItem(at: fileURL, to: exportedURL)
-        } catch {
-            try? manager.removeItem(at: directory)
-            throw error
-        }
-
+        let exportedURL = try exportedFile(for: attachment, fileURL: fileURL, temporaryDirectory: temporaryDirectory)
         let provider = NSItemProvider()
-        provider.suggestedName = filename
+        provider.suggestedName = exportedURL.lastPathComponent
         let mediaType = UTType(mimeType: attachment.mediaType)
         let contentType = mediaType.flatMap { $0 == .data || $0.isDynamic ? nil : $0 }
             ?? UTType(filenameExtension: exportedURL.pathExtension)
@@ -51,6 +36,25 @@ enum AttachmentDrag {
         }
         provider.registerObject(exportedURL as NSURL, visibility: .all)
         return (provider, exportedURL)
+    }
+
+    /// A separate copy of the file under its display name. A destination may move or edit a dropped or
+    /// pasted file; it must never change conversation storage. It stays in system-managed temporary
+    /// storage afterwards, so destinations that read the file later still can.
+    static func exportedFile(for attachment: ConversationAttachment, fileURL: URL,
+                             temporaryDirectory: URL = FileManager.default.temporaryDirectory) throws -> URL {
+        let manager = FileManager.default
+        let filename = try exportFilename(for: attachment, fileURL: fileURL)
+        let directory = temporaryDirectory.appendingPathComponent("NoodleAttachmentDrag-\(UUID())", isDirectory: true)
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let exportedURL = directory.appendingPathComponent(filename)
+        do {
+            try manager.copyItem(at: fileURL, to: exportedURL)
+        } catch {
+            try? manager.removeItem(at: directory)
+            throw error
+        }
+        return exportedURL
     }
 
     /// A file that is not on this Mac yet, offered under its name and fetched by `download` once it is dropped.
@@ -115,8 +119,9 @@ enum AttachmentDrag {
         }
     }
 
-    /// A link as its address; a picture as itself, so it pastes as one, along with its file; anything else as
-    /// its file. False when nothing could be written.
+    /// A link as its address; a picture as itself, so it pastes as one, along with its file; a Metal shader as
+    /// a copy named as it was sent, with its source under its own type, so it pastes as a background, into
+    /// Finder or into another conversation; anything else as its file. False when nothing could be written.
     @MainActor @discardableResult
     static func copy(_ attachment: ConversationAttachment, fileURL url: URL, to pasteboard: NSPasteboard = .general) -> Bool {
         pasteboard.clearContents()
@@ -134,6 +139,16 @@ enum AttachmentDrag {
             item.setString(url.absoluteString, forType: .fileURL)
             item.setData(pngData, forType: .png)
             item.setData(tiffData, forType: .tiff)
+            if pasteboard.writeObjects([item]) { return true }
+            pasteboard.clearContents()
+        }
+        if ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.originalFilename)),
+           let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= ShaderSourceFile.maximumBytes,
+           let export = try? exportedFile(for: attachment, fileURL: url),
+           let source = try? Data(contentsOf: export) {
+            let item = NSPasteboardItem()
+            item.setString(export.absoluteString, forType: .fileURL)
+            item.setData(source, forType: NSPasteboard.PasteboardType(UTType.metalShader.identifier))
             if pasteboard.writeObjects([item]) { return true }
             pasteboard.clearContents()
         }

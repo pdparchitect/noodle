@@ -77,10 +77,13 @@ public struct ConversationBackgroundView: View {
                 } else if let preset = background.preset {
                     PresetGradient(preset)
                 }
-                if let imageURL, let kind = background.mediaKind, kind != .image {
+                if let imageURL, background.mediaKind == .shader {
+                    // Over its still, which shows until the first frame and stays on if it can't draw.
+                    ShaderBackground(url: imageURL)
+                } else if let imageURL, let kind = background.mediaKind, kind != .image {
                     AnimatedWallpaper(url: imageURL, kind: kind, reduceMotion: reduceMotion)
                 }
-                // Presets are drawn to sit behind bubbles; photos and videos are dimmed for them.
+                // Presets are drawn to sit behind bubbles; photos, videos and shaders are dimmed for them.
                 if background.imageFilename != nil { Color.black.opacity(0.25) }
             }
             .clipped()

@@ -3,6 +3,7 @@ import HubLink
 import ImageIO
 @preconcurrency import LinkPresentation
 import NoodlePatch
+import NoodleWallpaperCore
 import NoodletRuntime
 import PhotosUI
 import QuickLook
@@ -42,6 +43,8 @@ struct AttachmentView: View {
     @State private var liveCard: LinkCardInfo?
     /// The file read as a patch, once it is on the phone and reads as one.
     @State private var patch: Patch?
+    /// Why the shader chosen as the background couldn't be, in the compiler's words.
+    @State private var shaderProblem: String?
     @Environment(\.watchLive) private var watchLive
     @Environment(\.reviewPatch) private var reviewPatch
     @Environment(\.annotating) private var annotating
@@ -107,8 +110,22 @@ struct AttachmentView: View {
                     Task { try? await chats.setBackground(photo: Data(contentsOf: chats.file(for: attachment, in: thread)), for: thread) }
                 }
             }
+            // A Metal shader plays behind the conversation; one that doesn't compile says why.
+            if ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.filename)) {
+                Button("Use as Background", systemImage: "sparkles.rectangle.stack") {
+                    Task {
+                        do { try await chats.setBackground(shader: chats.file(for: attachment, in: thread), for: thread) }
+                        catch { shaderProblem = error.localizedDescription }
+                    }
+                }
+            }
         }
         .task(id: attachment.id) { await load() }
+        .alert("Can’t Use as Background", isPresented: Binding { shaderProblem != nil } set: { if !$0 { shaderProblem = nil } }) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(shaderProblem ?? "")
+        }
     }
 
     /// The card as the Hub resolved it this time, else as this phone kept it, else as shared.
@@ -1027,6 +1044,8 @@ final class PastingTextView: UITextView {
 @MainActor enum AttachmentClipboard {
     static func isText(_ attachment: LinkAttachment) -> Bool {
         guard attachment.annotation == nil else { return false }
+        // A shader copies as its file too, to paste as a conversation's background.
+        if ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.filename)) { return true }
         let ext = (attachment.filename as NSString).pathExtension
         return [UTType(mimeType: attachment.mediaType), ext.isEmpty ? nil : UTType(filenameExtension: ext)]
             .contains { $0?.conforms(to: .text) == true }

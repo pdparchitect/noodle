@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- A conversation's background can be a Metal shader, set from Noodle on the Mac or Noodle Mobile; the Hub checks that it compiles and passes it to every device.
+
 ## [0.58.0] - 2026-11-21
 
 ### Changed

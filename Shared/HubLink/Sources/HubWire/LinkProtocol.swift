@@ -410,7 +410,7 @@ public struct LinkBackground: Codable, Equatable, Sendable {
     public var preset: String?
     /// The picture or video, by a name that changes whenever it does, so a device fetches each once.
     public var media: String?
-    /// `image`, `video` or `dynamicImage`, as Noodle names them.
+    /// `image`, `video`, `dynamicImage` or `shader`, as Noodle names them.
     public var mediaKind: String?
 
     public init(preset: String? = nil, media: String? = nil, mediaKind: String? = nil) {
@@ -425,13 +425,15 @@ public struct LinkBackground: Codable, Equatable, Sendable {
         guard let media else { return nil }
         let parts = media.split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 2, UUID(uuidString: String(parts[0])) != nil,
-              ["jpg", "heic", "heif", "mov", "mp4", "m4v"].contains(parts[1]) else { return nil }
+              ["jpg", "heic", "heif", "mov", "mp4", "m4v", "metal"].contains(parts[1]) else { return nil }
         return media
     }
 
-    /// The name a device keeps the small copy under: a video plays as MP4, anything else is a JPEG.
+    /// The name a device keeps the small copy under: a video plays as MP4, a shader stays Metal source,
+    /// anything else is a JPEG.
     public var compactFilename: String? {
-        mediaFilename.map { "\($0.prefix { $0 != "." }).\(mediaKind == "video" ? "mp4" : "jpg")" }
+        let suffix = mediaKind == "video" ? "mp4" : mediaKind == "shader" ? "metal" : "jpg"
+        return mediaFilename.map { "\($0.prefix { $0 != "." }).\(suffix)" }
     }
 }
 

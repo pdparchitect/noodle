@@ -506,6 +506,7 @@ struct MessageBubble: View {
             useAsBackground: attachment.map { item in
                 { Task { await store.useAttachmentAsBackground(item) } }
             },
+            backgroundIsShader: attachment.map { ShaderSourceFile.isShader(URL(fileURLWithPath: $0.originalFilename)) } ?? false,
             backgroundTargetName: conversation?.displayName ?? "this conversation",
             iconTargetName: iconAgent?.displayName,
             useAsIcon: attachment.flatMap { item in

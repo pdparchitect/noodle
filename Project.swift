@@ -95,6 +95,25 @@ func helper(_ name: String, sources: SourceFilesList, dependencies: [TargetDepen
     )
 }
 
+/// Quick Look's preview or thumbnail of Metal shader files, which Noodle uses as backgrounds; Noodle Mobile has the same two.
+func quickLookExtension(_ kind: String) -> Target {
+    .target(
+        name: "NoodleShader\(kind)",
+        destinations: .macOS,
+        product: .appExtension,
+        bundleId: "com.pdparchitect.noodle.shader-\(kind.lowercased())",
+        deploymentTargets: .macOS("26.0"),
+        infoPlist: .file(path: "Shared/Wallpaper/QuickLook/\(kind)/Info.plist"),
+        sources: ["Shared/Wallpaper/QuickLook/\(kind)/**"],
+        entitlements: .file(path: "Shared/Wallpaper/QuickLook/Extension.entitlements"),
+        dependencies: [.package(product: "NoodleWallpaperCore")],
+        settings: .settings(base: signing.merging([
+            "PRODUCT_BUNDLE_IDENTIFIER": .string("$(NOODLE_APP_BUNDLE_ID).shader-\(kind.lowercased())"),
+            "PRODUCT_NAME": .string("NoodleShader\(kind)"),
+        ]) { $1 })
+    )
+}
+
 /// A tool extension in Tools/NAME, bound to Noodle's tool extension point. See Tools/AGENTS.md.
 func toolExtension(_ name: String) -> Target {
     let provider = "Noodle\(name)Tools"
@@ -221,6 +240,8 @@ let project = Project(
                 .target(name: "NoodleMapsToolsExtension"),
                 .target(name: "NoodleBrowserToolsExtension"),
                 .target(name: "NoodleComputerToolsExtension"),
+                .target(name: "NoodleShaderPreview"),
+                .target(name: "NoodleShaderThumbnail"),
                 .target(name: "messenger"),
                 .target(name: "NoodleAppleAgent"),
             ],
@@ -304,6 +325,8 @@ let project = Project(
                 "EXECUTABLE_NAME": "NoodleWidgetsExtension",
             ]) { $1 })
         ),
+        quickLookExtension("Preview"),
+        quickLookExtension("Thumbnail"),
         toolExtension("Vision"),
         toolExtension("Maps"),
         toolExtension("Browser"),

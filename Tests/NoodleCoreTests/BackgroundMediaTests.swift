@@ -21,6 +21,29 @@ final class BackgroundMediaTests: XCTestCase {
         XCTAssertFalse(decoded.isDefault)
     }
 
+    /// A Metal shader is kept as its source, which is also what a phone fetches.
+    func testShaderBackgroundPersistsAsItsSource() async throws {
+        let url = root.appendingPathComponent("Plasma.metal")
+        let source = """
+            #include <metal_stdlib>
+            using namespace metal;
+            fragment float4 plasma(float4 p [[position]], constant float &time [[buffer(0)]]) {
+                return float4(0.5 + 0.5 * sin(p.x * 0.01 + time), 0.3, 0.6, 1.0);
+            }
+            """
+        try source.write(to: url, atomically: true, encoding: .utf8)
+        let prepared = try await PreparedBackgroundFile.prepare(url)
+        XCTAssertEqual(prepared.kind, .shader)
+        let bot = try repository.createAgent(named: "Bot")
+        let saved = try repository.setBackground(conversationID: bot.conversation.id, file: prepared)
+        XCTAssertEqual(saved.mediaKind, .shader)
+        let stored = try XCTUnwrap(repository.backgroundImageURL(saved, conversationID: bot.conversation.id))
+        XCTAssertEqual(stored.pathExtension, "metal")
+        XCTAssertEqual(try String(contentsOf: stored, encoding: .utf8), source)
+        XCTAssertEqual(repository.compactBackgroundURL(saved, conversationID: bot.conversation.id), stored)
+        XCTAssertEqual(try repository.loadBackground(conversationID: bot.conversation.id), saved)
+    }
+
     func testHEICFramesPersistAndTemporaryCopyIsReleased() async throws {
         let url = root.appendingPathComponent("dynamic.heic")
         try imageFixture(url, type: .heic, count: 3)
