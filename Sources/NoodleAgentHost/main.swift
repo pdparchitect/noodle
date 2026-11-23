@@ -56,8 +56,8 @@ private enum HostPaths {
         }
     }
 
-    /// Set in the host's own Info.plist by an app whose bots are all siloed: restricted, and reaching the network only
-    /// through this host's proxy, to the addresses their harness lists. The app cannot ask for less.
+    /// Set in the host's own Info.plist by an app whose restricted bots are siloed: they reach the network only
+    /// through this host's proxy, to the addresses their harness lists. Unrestricted bots are left as they are.
     static var silo: Bool { Bundle.main.object(forInfoDictionaryKey: "NoodleHarnessSilo") as? Bool == true }
 
     static let egressLog = Logger(subsystem: RuntimeDiagnostics.subsystem, category: "egress")
@@ -153,9 +153,9 @@ if CommandLine.arguments.count == 13, CommandLine.arguments[1] == "--harness-chi
         guard !appsEnabled || provider.supportsAccountApps else { throw HostError("This harness does not support account apps.") }
         guard restricted || CommandLine.arguments[9] == "autonomous",
               !restricted || provider.supportsRestrictedAccess else { throw HostError("Unsupported runtime access mode.") }
-        // The parent's proxy port, present exactly when this host silos its bots.
+        // The parent's proxy port, present exactly when this host silos a restricted bot.
         let egressPort = UInt16(CommandLine.arguments[12])
-        guard (egressPort != nil) == HostPaths.silo, egressPort == nil || restricted else { throw HostError("Unsupported network access.") }
+        guard (egressPort != nil) == (HostPaths.silo && restricted) else { throw HostError("Unsupported network access.") }
         // Only a UUID may override the saved login. Both parent and child resolve it
         // inside Noodle's storage and verify its harness; the caller cannot supply a path.
         let profiles = HostPaths.profiles
@@ -398,9 +398,7 @@ private final class HostSession: NSObject, AgentHostService {
 
     private func startRuntime(harnessIdentifier: String, agentID: String, executablePath: String,
                               sessionID: String?, resumeSession: Bool, modelIdentifier: String?, effortIdentifier: String?,
-                              restricted requested: Bool, appsEnabled: Bool = false, profileOverride: UUID? = nil, reply: @escaping (Int32, String?) -> Void) {
-        // A siloing host runs every bot restricted, whatever the app asked for.
-        let restricted = requested || HostPaths.silo
+                              restricted: Bool, appsEnabled: Bool = false, profileOverride: UUID? = nil, reply: @escaping (Int32, String?) -> Void) {
         queue.async { [self] in
             guard self.process == nil, !self.stopping else { reply(0, "Runtime already started or stopping."); return }
             do {
@@ -419,7 +417,7 @@ private final class HostSession: NSObject, AgentHostService {
                     HarnessLoginLog.logger.notice("start-refused bot=\(agentID, privacy: .public) harness=\(provider.rawValue, privacy: .public)")
                     throw RestrictedHarnessStorage.refused(provider)
                 }
-                let egress = try HostPaths.silo ? Self.siloProxy(provider: provider, model: modelIdentifier,
+                let egress = try HostPaths.silo && restricted ? Self.siloProxy(provider: provider, model: modelIdentifier,
                                                                     appsEnabled: appsEnabled, bot: agentID) : nil
                 var started = false
                 defer { if !started { egress?.stop() } }
