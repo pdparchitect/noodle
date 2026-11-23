@@ -67,11 +67,17 @@ struct VoiceMessageComposer<Content: View>: View {
                                     .buttonStyle(.plain).help(KeyboardBindings.shared.help("Stop Recording", for: .recordVoice))
                             }
                         }
+                        let cannotSend = sending || !(recorder.phase == .recording || recorder.phase == .ready)
                         Button { Task { await sendRecording() } } label: {
+                            // A white arrow on the accent, as the message send button has.
                             Image(systemName: "arrow.up.circle.fill").font(.system(size: 23))
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, Color.accentColor)
                         }
-                        .buttonStyle(.plain).foregroundStyle(Color.accentColor)
-                        .disabled(sending || !(recorder.phase == .recording || recorder.phase == .ready))
+                        .buttonStyle(.plain)
+                        // Explicit colours are not dimmed when disabled, so it is dimmed here.
+                        .opacity(cannotSend ? 0.5 : 1)
+                        .disabled(cannotSend)
                         .help("Send Voice Message (Return)")
                         .keyboardShortcut(.defaultAction)
                     }

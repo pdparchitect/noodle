@@ -441,9 +441,11 @@ private struct ComposerDraftInput: View {
                     .padding(.trailing, 7)
             } else {
                 Button(action: { store.sendDraft(to: conversation.id) }) {
+                    // A white arrow on the accent, rather than one cut out of it, reads the same in light and dark.
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 23))
-                        .foregroundStyle(Color.accentColor)
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Color.accentColor)
                         .frame(width: sendControlWidth, height: controlHeight)
                         .contentShape(Rectangle())
                 }
