@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - Use as Background on a picture or `.metal` shader in a conversation now offers Use Here, as before, or Choose Conversations…, which opens the list Forward… uses: tick as many bots and groups as you like, on this Mac or on a Hub you joined, and each gets it as its background.
+- Links in dark mode use the accent colour itself, so they match the rest of the accent-coloured text.
 
 ## [0.93.0] - 2026-11-22
 

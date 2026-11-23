@@ -2,17 +2,15 @@ import AppKit
 import SwiftUI
 
 /// The colour of links, in text and as buttons: the accent, the app's own or the one the person chose in System Settings,
-/// as the controls around them have, rather than the system's fixed link blue. In dark appearance a deep accent is
-/// lightened just enough to read as text on a dark window; a bright one, such as yellow, is left as it is.
+/// as the controls around them have, rather than the system's fixed link blue. `readable(_:)` can lighten a deep accent
+/// just enough to read as text on a dark window, leaving a bright one, such as yellow, as it is.
 public enum AccentLink {
     /// The relative luminance link text needs on a dark window: about 4 to 1 against it.
     public static let readableLuminance: CGFloat = 0.25
 
-    public static let color = Color(nsColor: NSColor(name: nil) { appearance in
-        let accent = NSColor.controlAccentColor
-        guard appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua else { return accent }
-        return readable(accent)
-    })
+    // Lightening in dark appearance is off for now, so links match the accent used elsewhere, such as the
+    // "Waiting on you" tints. Returning `readable(accent)` here in dark appearance turns it back on.
+    public static let color = Color(nsColor: NSColor(name: nil) { _ in NSColor.controlAccentColor })
 
     /// `accent` lightened towards white in small steps, only until it reads on a dark window.
     public static func readable(_ accent: NSColor) -> NSColor {
