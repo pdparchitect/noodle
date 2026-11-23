@@ -103,7 +103,7 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 - **An Audit Log** of every change to the case, only ever added to.
 - **Groups** of agents for the work between incidents.
 - **Tasks** waiting on you, at the top of the sidebar.
-- **Woken by alerts**: new high alerts in Microsoft Defender XDR, Microsoft Defender for Cloud, Microsoft Sentinel, CrowdStrike,
+- **Woken by alerts**: new high alerts and incidents in Microsoft Defender XDR Audit, Microsoft Defender for Cloud, Microsoft Sentinel, CrowdStrike,
   SentinelOne, Microsoft Entra ID Audit, Proofpoint, Wiz, Google Cloud Audit, Google Workspace Audit and GitHub, and CVEs joining the top of the
   cve.now Index, wake the agents those tools are assigned to, who read them and decide how far to look.
 - **Approvals**: agents investigate freely; a change that cuts off access or deletes something
@@ -124,7 +124,7 @@ to the agents that should use it.
 | **Reputation and intel** | VirusTotal, Shodan, Censys, GreyNoise, CrowdSec CTI, AbuseIPDB, AlienVault OTX, urlscan.io, Have I Been Pwned, Cloudflare Radar |
 | **Attack surface** | crt.sh, DNS, NVD, cve.now, Tenable |
 | **Identity** | Okta Audit, Okta Containment, Microsoft Entra ID Audit, Microsoft Entra ID Containment, Google Workspace Audit, Google Workspace Containment |
-| **Endpoint and email** | CrowdStrike Falcon, Microsoft Defender XDR, SentinelOne, Proofpoint TAP |
+| **Endpoint and email** | CrowdStrike Falcon, Microsoft Defender XDR Audit, Microsoft Defender XDR Containment, SentinelOne, Proofpoint TAP |
 | **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |
 | **Cloud and code** | AWS Audit, AWS Containment, Google Cloud Audit, Google Cloud Containment, Microsoft Azure Audit, Microsoft Azure Containment, Cloudflare Security, Wiz, GitHub |
 
@@ -143,7 +143,10 @@ the audit sign-in's scopes only read, and the containment admin holds a custom r
 permissions its actions take. Microsoft Entra ID Audit and Microsoft Entra ID Containment likewise each
 sign in as an admin of their own through OAuth, with a public client app registration your organisation
 makes for each and no client secret: the audit app's permissions only read, and the containment admin
-holds only the roles its actions take.
+holds only the roles its actions take. Microsoft Defender XDR Audit and Microsoft Defender XDR Containment
+sign in the same way: Audit reads alerts, incidents, advanced hunting and devices through Microsoft Graph
+with read-only permissions, and Containment isolates, restricts, quarantines, scans and collects through
+the Defender for Endpoint API with an admin whose Defender role covers only those actions and device groups.
 
 Some services have a guide in [docs/tools](docs/tools) explaining the access each tool asks for,
 the least access to set it up with, and its caveats.

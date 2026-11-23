@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Microsoft Defender XDR Containment, a tool of its own beside Microsoft Defender XDR Audit with an OAuth sign-in of its own to the Defender for Endpoint API, as an admin of its own with only the Defender permissions its Setup Steps list: agents can isolate a device, Full or Selective, or release it, restrict it to Microsoft-signed apps or lift that, stop and quarantine a file by its SHA1, run a Quick or Full antivirus scan and collect an investigation package, each only once you approve it, with a comment Defender records, and each saying what recovering from it involves. It refuses a malformed device ID, a device it cannot find, one not onboarded or not active, an action of the same kind or its opposite already pending, any action while not every pending action of the device could be read, and isolating a device whose last observed isolation action isolated it or releasing one whose last action released it, while a state it cannot confirm blocks nothing and is said in the result; every result gives the machine action's ID and where it stands after a short wait, saying plainly that Pending is not done and saying done only once Defender names the device, the action and the scope asked for, and `action-status` reads it again. `device`, `machine-actions`, which lists who asked for what on which device, and `check-access` read without changing anything.
+- A guide to both Microsoft Defender XDR tools in `docs/tools/defender.md`: the access each asks for, the least access to set it up with, the licences it needs, what the watch wakes for and what it does not, and their caveats.
+
+### Changed
+
+- Microsoft Defender XDR is now Microsoft Defender XDR Audit, signed in through an admin's delegated OAuth at the tenant's own authority with a public client app registration and read-only Microsoft Graph permissions, in place of an app's client secret: connect it again as its Setup Steps say. Its alerts and incidents read on across pages and say when more matched than they kept, `alert` and `incident` read one in full with each device's Defender for Endpoint ID and each file's SHA1, `devices` and `device` read Defender for Endpoint's devices from advanced hunting, and `check-access` says what works, what to change and which Defender plans' hunting tables have data. Its alert watch now wakes the agents for high-severity alerts that are not resolved and high-severity incidents still open, each once, late ones included, and says once when it cannot read a feed or the tenant lacks Defender; `security-events` reads what it found.
+
 ## [0.10.0] - 2026-11-23
 
 ### Added

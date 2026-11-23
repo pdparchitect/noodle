@@ -7,13 +7,15 @@ import XCTest
 /// Pion's adapters and cve.now's board, watched by the watcher every app runs.
 final class AlertWatchTests: XCTestCase {
     @MainActor func testTheWatcherWakesEachAgentAnAccountIsAssignedToAndSaysWhatEachCheckFound() async throws {
-        let defender = try Defender.preset.makeConnection(name: "Defender — Contoso", values: ["tenant": "contoso.onmicrosoft.com"])
+        let defender = try Defender.preset.makeConnection(name: "Defender — Contoso", values: ["tenant": "contoso.onmicrosoft.com", "clientID": EntraTests.client])
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
         defer { try? FileManager.default.removeItem(at: file) }
-        let now = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
+        // An hour ago, as the watch reads Defender's alerts only up to the real time.
+        let now = Date(timeIntervalSince1970: (Date().timeIntervalSince1970 - 3_600).rounded(.down))
         let raised = ISO8601DateFormatter().string(from: now.addingTimeInterval(60))
         let service = FakeService()
-        service.answers["/v1.0/security/alerts_v2"] = (200, #"{"value":[{"id":"a1","createdDateTime":"\#(raised)"}]}"#)
+        service.answers["/v1.0/security/alerts_v2"] = (200, #"{"value":[{"id":"a1","severity":"high","status":"new","createdDateTime":"\#(raised)"}]}"#)
+        service.answers["/v1.0/security/incidents"] = (200, #"{"value":[]}"#)
         let watcher = AlertWatcher(file: file, alerts: { connection, since in
             try await Defender.adapter.alerts(since: since, connection: connection, access: service)
         })
@@ -27,11 +29,12 @@ final class AlertWatchTests: XCTestCase {
         checked = await watcher.check([(defender, [lead, analyst])], keeping: [], at: now.addingTimeInterval(300)) { woken.append(($0, $1)) }
         XCTAssertEqual(checked, [defender.id: .found("1 new alert")])
         XCTAssertEqual(woken.map(\.0), [lead, analyst])
-        XCTAssertTrue(woken.allSatisfy { $0.1.contains(#"new="1""#) && $0.1.contains(#"tool="alerts""#) }, "\(woken)")
+        XCTAssertTrue(woken.allSatisfy { $0.1.contains(#"new="1""#) && $0.1.contains(#"tool="security-events""#) }, "\(woken)")
         checked = await watcher.check([(defender, [lead, analyst])], keeping: [], at: now.addingTimeInterval(450)) { woken.append(($0, $1)) }
         XCTAssertEqual(checked, [defender.id: .nothingNew])
 
-        service.answers["/v1.0/security/alerts_v2"] = (403, #"{"error":{"code":"Forbidden","message":"Missing role permissions."}}"#)
+        // Throttled: a passing failure holds the check back rather than waking anyone.
+        service.answers["/v1.0/security/alerts_v2"] = (429, #"{"error":{"code":"TooManyRequests","message":"Too many requests."}}"#)
         checked = await watcher.check([(defender, [lead])], keeping: [], at: now.addingTimeInterval(600)) { woken.append(($0, $1)) }
         guard case .failed? = checked[defender.id] else { return XCTFail("\(checked)") }
         XCTAssertEqual(woken.count, 2, "A failed check wakes no one")
@@ -234,11 +237,11 @@ final class AlertWatchTests: XCTestCase {
     @MainActor func testAWatchedToolsSkillSaysWhatItsWakeMeans() throws {
         let watcher = AlertWatcher(file: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString), alerts: { _, _ in [] })
         watcher.adapters = PionAdapters.all
-        let defender = try Defender.preset.makeConnection(name: "Defender", values: ["tenant": "contoso.onmicrosoft.com"])
+        let defender = try Defender.preset.makeConnection(name: "Defender", values: ["tenant": "contoso.onmicrosoft.com", "clientID": EntraTests.client])
         let skill = try XCTUnwrap(watcher.skillText(for: defender))
         XCTAssertTrue(skill.hasPrefix("## Alerts"), skill)
         XCTAssertTrue(skill.contains("<tool-alerts"), skill)
-        XCTAssertTrue(skill.contains("`alerts`"), "It names the tool that reads them: \(skill)")
+        XCTAssertTrue(skill.contains("`security-events`"), "It names the tool that reads them: \(skill)")
         let lookup = try VirusTotal.preset.makeConnection(name: "VirusTotal", values: [:])
         XCTAssertNil(watcher.skillText(for: lookup), "A lookup is never watched")
     }
