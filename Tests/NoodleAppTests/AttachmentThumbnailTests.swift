@@ -24,7 +24,6 @@ import XCTest
         XCTAssertTrue(CGImageDestinationFinalize(destination))
     }
 
-    /// Scrolling back to a picture after memory was reclaimed reads a small copy, not the original.
     /// A shader sent in a conversation shows a still of what it draws, not a blank file card; one that
     /// does not compile keeps the card.
     func testAShaderFileShowsAStillOfWhatItDraws() async throws {
@@ -39,7 +38,8 @@ import XCTest
                 return half4(half3(uv.y, 0.5 + 0.5 * sin(uv.x * 6.0 + time), 1.0 - uv.y), 1.0h);
             }
             """.write(to: shader, atomically: true, encoding: .utf8)
-        let still = try XCTUnwrap(await AttachmentThumbnailCache.shaderStill(for: shader))
+        let rendered = await AttachmentThumbnailCache.shaderStill(for: shader)
+        let still = try XCTUnwrap(rendered)
         XCTAssertEqual(still.size, CGSize(width: 520, height: 300))
         XCTAssertEqual(still.representations.first?.pixelsWide, 1040, "drawn for a Retina display")
 
@@ -53,6 +53,7 @@ import XCTest
         XCTAssertNil(textStill)
     }
 
+    /// Scrolling back to a picture after memory was reclaimed reads a small copy, not the original.
     func testAThumbnailIsDecodedOnceAtTheSizeItIsShown() throws {
         let original = root.appendingPathComponent("photo.png"), cache = root.appendingPathComponent("Cache")
         try writePNG(width: 2_400, height: 1_200, to: original)
