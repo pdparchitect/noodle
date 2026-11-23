@@ -45,7 +45,7 @@ struct ChatView: View {
     @State private var profileGroup: BotConversation?
     @State private var profileAction: ProfileAction?
     /// The file Forward… was chosen for. Held here, not by its message, which the transcript may unload.
-    @State private var forwarding: ConversationAttachment?
+    @State private var forwarding: AttachmentForwardRequest?
 
     private enum ProfileAction {
         case reply(name: String, conversationID: UUID)
@@ -67,7 +67,7 @@ struct ChatView: View {
             }
             .environment(\.conversationAnnotations, conversationAnnotations)
             .environment(\.forwardAttachment) { forwarding = $0 }
-            .sheet(item: $forwarding) { ForwardAttachmentSheet(attachment: $0, store: store).noodleSheetSizing() }
+            .sheet(item: $forwarding) { ForwardAttachmentSheet($0, store: store).noodleSheetSizing() }
             .background(ConversationAnnotationHost(controller: conversationAnnotations,
                 conversationID: conversation.id, title: store.title(for: conversation),
                 save: { note, content, source, raw in

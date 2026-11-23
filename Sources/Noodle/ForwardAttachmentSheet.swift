@@ -2,8 +2,18 @@ import NoodleCore
 import SwiftUI
 
 extension EnvironmentValues {
-    /// Opens Forward… for a file, presented by the conversation rather than the message it is in.
-    @Entry var forwardAttachment: (@MainActor (ConversationAttachment) -> Void)?
+    /// Opens Forward… for a file, or Use as Background's Choose Conversations…, presented by the conversation rather
+    /// than the message it is in.
+    @Entry var forwardAttachment: (@MainActor (AttachmentForwardRequest) -> Void)?
+}
+
+/// A file to forward, or to use as the background of the conversations chosen.
+struct AttachmentForwardRequest: Identifiable {
+    enum Purpose { case forward, useAsBackground }
+
+    let id = UUID()
+    let attachment: ConversationAttachment
+    var purpose = Purpose.forward
 }
 
 /// A conversation Forward… can send to.
@@ -12,20 +22,34 @@ struct ForwardTarget: Identifiable {
     let title: String
 }
 
-/// Forward…: picks the conversation a file goes to, with an optional comment, and sends it there. The app
-/// gives the conversations a search finds, each one's picture and the sending.
+/// Forward…: picks the conversation a file goes to, with an optional comment, and sends it there. Use as
+/// Background's Choose Conversations… picks several the same way and sets the file as each one's background. The app
+/// gives the conversations a search finds, each one's picture, and what is done with those chosen.
 struct ForwardAttachmentSheet: View {
+    /// What is done with the conversations chosen.
+    enum Action {
+        /// Forward…: the file goes to the one chosen, with the comment.
+        case send((UUID, String) async throws -> Void)
+        /// Use as Background: it becomes the background of each one chosen.
+        case useAsBackground(([UUID]) async throws -> Void)
+    }
+
     @Environment(\.dismiss) private var dismiss
     let attachment: ConversationAttachment
     let targets: (String) -> [ForwardTarget]
     /// A conversation's picture, 28 points across.
     let picture: (UUID) -> AnyView
-    let send: (UUID, String) async throws -> Void
+    let action: Action
     @State private var search = ""
-    @State private var chosenID: UUID?
+    /// In the order chosen.
+    @State private var chosenIDs: [UUID] = []
     @State private var comment = ""
     @State private var failure: String?
     @FocusState private var searchFocused: Bool
+
+    private var choosesSeveral: Bool {
+        if case .useAsBackground = action { true } else { false }
+    }
 
     var body: some View {
         let targets = targets(search)
@@ -36,12 +60,12 @@ struct ForwardAttachmentSheet: View {
                     .foregroundStyle(Color.accentColor)
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                Text("Forward").font(.headline)
+                Text(choosesSeveral ? "Use as Background" : "Forward").font(.headline)
                 Spacer()
-                Button("Send", action: forward)
+                Button(choosesSeveral ? "Use" : "Send", action: finish)
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.accentColor)
-                    .disabled(chosenID == nil)
+                    .disabled(chosenIDs.isEmpty)
                     .keyboardShortcut(.defaultAction)
             }
             Label(attachment.originalFilename, systemImage: "doc")
@@ -61,8 +85,10 @@ struct ForwardAttachmentSheet: View {
             .overlay {
                 if targets.isEmpty { Text("No Conversations").foregroundStyle(.secondary) }
             }
-            TextField("Comment", text: $comment)
-                .textFieldStyle(.roundedBorder)
+            if !choosesSeveral {
+                TextField("Comment", text: $comment)
+                    .textFieldStyle(.roundedBorder)
+            }
             if let failure {
                 Text(failure).font(.caption).foregroundStyle(.red)
             }
@@ -70,15 +96,20 @@ struct ForwardAttachmentSheet: View {
         .padding(20)
         .frame(width: 420)
         .onAppear { searchFocused = true }
-        // A search that hides the chosen one leaves nothing chosen, so Send never goes somewhere unseen.
+        // A search that hides the chosen one leaves nothing chosen, so Send never goes somewhere unseen. Several
+        // chosen for a background stay chosen while searching for the next.
         .onChange(of: targets.map(\.id)) { _, shown in
-            if let chosenID, !shown.contains(chosenID) { self.chosenID = nil }
+            if !choosesSeveral { chosenIDs.removeAll { !shown.contains($0) } }
         }
     }
 
     private func row(_ item: ForwardTarget) -> some View {
-        let chosen = chosenID == item.id
-        return Button { chosenID = item.id } label: {
+        let chosen = chosenIDs.contains(item.id)
+        return Button {
+            if !choosesSeveral { chosenIDs = [item.id] }
+            else if chosen { chosenIDs.removeAll { $0 == item.id } }
+            else { chosenIDs.append(item.id) }
+        } label: {
             HStack(spacing: 10) {
                 picture(item.id)
                 Text(item.title).lineLimit(1)
@@ -97,11 +128,15 @@ struct ForwardAttachmentSheet: View {
         .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 
-    private func forward() {
-        guard let chosenID else { return }
+    private func finish() {
+        guard let first = chosenIDs.first else { return }
+        let chosenIDs = chosenIDs, comment = comment
         Task {
             do {
-                try await send(chosenID, comment)
+                switch action {
+                case .send(let send): try await send(first, comment)
+                case .useAsBackground(let use): try await use(chosenIDs)
+                }
                 dismiss()
             } catch {
                 failure = error.localizedDescription

@@ -279,13 +279,20 @@ private actor FakeHub {
         case .success(.setBackground(let choice)) where choice.conversationID == bot.conversationID:
             bot.background = LinkBackground(preset: choice.preset)
             return .background(bot.background!)
-        case .success(.uploadBackground(let piece)) where piece.conversationID == bot.conversationID:
+        case .success(.uploadBackground(let piece)) where piece.conversationID == bot.conversationID
+            || groups.contains(where: { $0.id == piece.conversationID }):
             if piece.offset == 0 { backgroundUpload = Data() }
             guard piece.offset == backgroundUpload.count else { return .failure("Pieces out of order.") }
             backgroundUpload.append(piece.data)
             guard backgroundUpload.count == piece.byteCount else { return .done }
-            setBackground(LinkBackground(media: "\(UUID()).jpg", mediaKind: "image"), compact: backgroundUpload)
-            return .background(bot.background!)
+            let kept = LinkBackground(media: "\(UUID()).jpg", mediaKind: "image")
+            guard let index = groups.firstIndex(where: { $0.id == piece.conversationID }) else {
+                setBackground(kept, compact: backgroundUpload)
+                return .background(kept)
+            }
+            groups[index].background = kept
+            backgroundFiles[kept.media!] = backgroundUpload
+            return .background(kept)
         case .success(.backgroundMedia(let fetch)) where fetch.conversationID == bot.conversationID && fetch.compact:
             guard fetch.media == bot.background?.media, let data = backgroundFiles[fetch.media] else { return .failure("No such background.") }
             if fetch.offset == 0 { backgroundFetches += 1 }
@@ -2108,6 +2115,37 @@ private actor RecordedSubscriptions: PushSubscriptions {
         try await chats.apply(.backgroundChanged(conversationID: scout.conversationID, background: LinkBackground()))
         #expect(chats.background(for: scout).isDefault)
         #expect(!FileManager.default.fileExists(atPath: image.path))
+    }
+
+    /// Use as Background's Choose Conversations…: a picture a bot sent becomes the background of each conversation
+    /// chosen, on the Hub for every device, as if set in each one's Background settings. Its own keeps its own.
+    @Test func aPictureBecomesTheBackgroundOfEachConversationChosen() async throws {
+        let hub = FakeHub()
+        let photo = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 30)).image { context in
+            UIColor.orange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 40, height: 30))
+        }.pngData()!
+        let picture = await hub.botSends(photo, named: "sunset.png", mediaType: "image/png")
+        _ = await hub.addGroup(named: "Crew", saying: "Morning")
+        _ = await hub.addGroup(named: "House", saying: "Hi all")
+        let (chats, server) = try await paired(to: hub)
+        defer { server.stop() }
+        try await chats.reload()
+        let scout = try #require(chats.agents.first)
+        #expect(chats.groups.count == 2)
+
+        try await chats.useAsBackground(picture, in: .bot(scout), for: chats.groups.map { (chats, HubThread.group($0)) })
+
+        for group in chats.groups {
+            #expect(chats.background(for: group).mediaKind == .image)
+            let image = try #require(chats.backgroundImageURL(for: group))
+            #expect(UIImage(contentsOfFile: image.path) != nil)
+        }
+        let onHub = await hub.groups
+        #expect(onHub.allSatisfy { $0.background?.mediaKind == "image" && $0.background?.media != nil })
+        #expect(Set(onHub.compactMap { $0.background?.media }).count == 2)
+        #expect(chats.background(for: scout).isDefault)
+        #expect(await hub.bot.background == nil)
     }
 
     /// Groups made on another device are listed with the bots, with what was said in them.

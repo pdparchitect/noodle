@@ -13,6 +13,8 @@ struct MessageContextMenu: NSViewRepresentable {
     var save: (() -> Void)? = nil
     var backgroundImageURL: URL? = nil
     var useAsBackground: (() -> Void)? = nil
+    /// Choose Conversations…: picks the conversations it becomes the background of, as Forward… picks.
+    var useAsBackgroundElsewhere: (() -> Void)? = nil
     /// The file is a Metal shader, which draws as a background but is no icon.
     var backgroundIsShader = false
     var backgroundTargetName: String = "this conversation"
@@ -105,9 +107,11 @@ struct MessageContextMenu: NSViewRepresentable {
                shader || configuration.backgroundImageURL.map(ConversationBackground.canUseImage(at:)) == true {
                 menu.addItem(.separator())
                 addItem("Use as Background", symbol: shader ? "sparkles.rectangle.stack" : "photo", to: menu) { [weak self] in
+                    let elsewhere = configuration.useAsBackgroundElsewhere
                     self?.confirmAppearanceChange(title: "Use as Background?",
                         message: "Replace the background for \(configuration.backgroundTargetName) with this \(shader ? "shader" : "image")?",
-                        button: "Use as Background", action: useAsBackground)
+                        button: elsewhere == nil ? "Use as Background" : "Use Here", action: useAsBackground,
+                        other: elsewhere.map { ("Choose Conversations…", $0) })
                 }
                 if !shader, let name = configuration.iconTargetName, let useAsIcon = configuration.useAsIcon {
                     addItem("Use as Icon", symbol: "person.crop.circle", to: menu) { [weak self] in
@@ -121,8 +125,11 @@ struct MessageContextMenu: NSViewRepresentable {
             actions = []
         }
 
+        /// Asks before changing how a conversation or bot looks; `other` is a second way to go on, between the
+        /// default button and Cancel.
         private func confirmAppearanceChange(title: String, message: String, button: String,
-                                             action: @escaping () -> Void) {
+                                             action: @escaping () -> Void,
+                                             other: (title: String, action: () -> Void)? = nil) {
             guard let window else { return }
             // Present a native sheet only after the context menu has stopped tracking.
             DispatchQueue.main.async {
@@ -130,9 +137,11 @@ struct MessageContextMenu: NSViewRepresentable {
                 alert.messageText = title
                 alert.informativeText = message
                 alert.addButton(withTitle: button)
+                if let other { alert.addButton(withTitle: other.title) }
                 alert.addButton(withTitle: "Cancel")
                 alert.beginSheetModal(for: window) { response in
                     if response == .alertFirstButtonReturn { action() }
+                    if response == .alertSecondButtonReturn { other?.action() }
                 }
             }
         }
