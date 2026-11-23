@@ -9,16 +9,20 @@ struct ConversationTransition<Content: View>: NSViewRepresentable {
     @ViewBuilder var content: Content
 
     func makeNSView(context: Context) -> ConversationTransitionSurface {
-        ConversationTransitionSurface(content: AnyView(content), environment: context.environment, conversationID: conversationID)
+        ConversationTransitionSurface(content: hostedContent(context), conversationID: conversationID)
     }
 
     func updateNSView(_ view: ConversationTransitionSurface, context: Context) {
-        view.update(content: AnyView(content), environment: context.environment, conversationID: conversationID,
+        view.update(content: hostedContent(context), conversationID: conversationID,
                     reduceMotion: context.environment.accessibilityReduceMotion)
     }
 
     static func dismantleNSView(_ view: ConversationTransitionSurface, coordinator: ()) {
         view.cancelTransition()
+    }
+
+    private func hostedContent(_ context: Context) -> AnyView {
+        AnyView(content.environment(\.self, context.environment))
     }
 }
 
@@ -32,18 +36,14 @@ struct ConversationTransition<Content: View>: NSViewRepresentable {
     static let animationKey = "transition"
     private(set) var conversationID: UUID
     private var content: AnyView
-    /// The conversation's environment, which the transcript takes as its own.
-    private var environment: EnvironmentValues?
     private var generation = 0
     private var closedSinceShown = false
     private var visibility: NSKeyValueObservation?
 
-    init(content: AnyView, environment: EnvironmentValues? = nil, conversationID: UUID) {
+    init(content: AnyView, conversationID: UUID) {
         self.conversationID = conversationID
         self.content = content
-        self.environment = environment
         super.init(rootView: AnyView(content.id(0)))
-        rootView = hosted()
         // The transcript sizes itself from the chat layout, not from its content.
         sizingOptions = []
         wantsLayer = true
@@ -58,7 +58,7 @@ struct ConversationTransition<Content: View>: NSViewRepresentable {
 
     required init?(coder: NSCoder) { nil }
 
-    func update(content: AnyView, environment: EnvironmentValues? = nil, conversationID: UUID, reduceMotion: Bool) {
+    func update(content: AnyView, conversationID: UUID, reduceMotion: Bool) {
         let switching = self.conversationID != conversationID
         self.conversationID = conversationID
         if reduceMotion { cancelTransition() }
@@ -66,8 +66,7 @@ struct ConversationTransition<Content: View>: NSViewRepresentable {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         self.content = content
-        self.environment = environment
-        rootView = hosted()
+        rootView = AnyView(content.id(generation))
         if switching, !reduceMotion, window != nil, !inLiveResize, !bounds.isEmpty {
             // Replacing the animation under one key also bounds rapid keyboard
             // navigation to the latest selection, with no queued completions.
@@ -109,25 +108,6 @@ struct ConversationTransition<Content: View>: NSViewRepresentable {
         guard closedSinceShown, window?.isVisible == true else { return }
         closedSinceShown = false
         generation += 1
-        rootView = hosted()
-    }
-
-    /// The conversation's environment, in the colours this view is drawn in now. A copied colour scheme would
-    /// keep the one from the conversation's last update: a background that turns the window dark changes the
-    /// window's appearance after that, and the transcript stayed light until the conversation was selected again.
-    private func hosted() -> AnyView {
-        let scheme: ColorScheme = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
-        hostedColorScheme = scheme
-        guard var values = environment else { return AnyView(content.environment(\.colorScheme, scheme).id(generation)) }
-        values.colorScheme = scheme
-        return AnyView(content.environment(\.self, values).id(generation))
-    }
-
-    private var hostedColorScheme: ColorScheme?
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        let scheme: ColorScheme = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
-        if scheme != hostedColorScheme { rootView = hosted() }
+        rootView = AnyView(content.id(generation))
     }
 }

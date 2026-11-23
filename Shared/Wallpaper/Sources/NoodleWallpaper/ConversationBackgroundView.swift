@@ -164,3 +164,14 @@ private struct WallpaperWindowAppearance: NSViewRepresentable {
     func makeNSView(context: Context) -> Probe { Probe() }
     func updateNSView(_ nsView: Probe, context: Context) { nsView.isDark = isDark }
 }
+
+extension View {
+    /// Dark colours for a conversation in front of a background, as the window it is in is dark for one. Taken from the
+    /// background rather than the window: in light mode a closing sheet resets the window's appearance a moment after
+    /// the background darkened it, and SwiftUI's colour scheme follows the window late, which left the transcript light.
+    public func colorScheme(over background: ConversationBackground) -> some View {
+        transformEnvironment(\.colorScheme) { scheme in
+            if !background.isDefault { scheme = .dark }
+        }
+    }
+}

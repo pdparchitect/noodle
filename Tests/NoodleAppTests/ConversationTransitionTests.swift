@@ -1,5 +1,6 @@
 import AppKit
 import QuartzCore
+import NoodleWallpaper
 import SwiftUI
 import XCTest
 @testable import Noodle
@@ -49,30 +50,35 @@ import XCTest
         XCTAssertNil(surface.layer?.animationKeys())
     }
 
-    /// A background that turns the window dark does so after the conversation's last update, so the
-    /// transcript takes the window's appearance, not the colour scheme its conversation last had.
-    func testTranscriptTakesTheWindowsAppearanceWhenItChanges() async {
-        let seen = SeenColorScheme()
+    /// The conversation's colour scheme can still say light when its background has turned the window dark. In light
+    /// mode, Use as Background's closing sheet resets the window's appearance a moment after the background darkened
+    /// it, and SwiftUI's colour scheme follows the window's appearance late, so the transcript kept light colours
+    /// until the conversation was selected again. In front of a background it takes dark colours from the background.
+    func testTranscriptIsDarkInFrontOfABackgroundWhateverColoursTheWindowLastGaveIt() async {
+        let seen = SeenColorScheme(), state = BackgroundState()
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
             styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         defer { window.close(); window.contentView = nil }
-        window.appearance = NSAppearance(named: .aqua)
-        // The conversation as it was last updated, while the window was still light.
-        window.contentView = NSHostingView(rootView: ConversationTransition(conversationID: UUID()) {
-            ColorSchemeReader(seen: seen)
-        }.environment(\.colorScheme, .light))
+        // The light colours the conversation still has from its window.
+        window.contentView = NSHostingView(rootView: ConversationWithBackground(state: state, seen: seen)
+            .environment(\.colorScheme, .light))
         window.orderFront(nil)
         await settle(window)
         XCTAssertEqual(seen.scheme, .light)
 
-        window.appearance = NSAppearance(named: .darkAqua)
-        await settle(window)
-        XCTAssertEqual(seen.scheme, .dark, "The transcript kept light colours in a window that turned dark")
+        for background in [ConversationBackground(imageFilename: "\(UUID().uuidString.lowercased()).metal", mediaKind: .shader),
+                           ConversationBackground(imageFilename: "\(UUID().uuidString.lowercased()).mp4", mediaKind: .video),
+                           ConversationBackground(imageFilename: "\(UUID().uuidString.lowercased()).jpg", mediaKind: .image),
+                           ConversationBackground(preset: .midnight)] {
+            state.background = background
+            await settle(window)
+            XCTAssertEqual(seen.scheme, .dark, "The transcript kept light colours in front of \(background.imageFilename ?? "a preset")")
+        }
 
-        window.appearance = NSAppearance(named: .aqua)
+        state.background = ConversationBackground()
         await settle(window)
-        XCTAssertEqual(seen.scheme, .light)
+        XCTAssertEqual(seen.scheme, .light, "Without a background the conversation keeps its own colours")
     }
 
     private func settle(_ window: NSWindow) async {
@@ -86,6 +92,24 @@ import XCTest
 }
 
 @MainActor private final class SeenColorScheme { var scheme: ColorScheme? }
+
+@MainActor private final class BackgroundState: ObservableObject {
+    @Published var background = ConversationBackground()
+}
+
+/// A conversation as the window shows it: its transcript, with its background behind it.
+private struct ConversationWithBackground: View {
+    @ObservedObject var state: BackgroundState
+    let seen: SeenColorScheme
+    let conversationID = UUID()
+
+    var body: some View {
+        ConversationTransition(conversationID: conversationID) { ColorSchemeReader(seen: seen) }
+            .colorScheme(over: state.background)
+            .frame(width: 600, height: 400)
+            .background { ConversationWallpaper(background: state.background) }
+    }
+}
 
 private struct ColorSchemeReader: View {
     let seen: SeenColorScheme

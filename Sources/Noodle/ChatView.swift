@@ -56,6 +56,7 @@ struct ChatView: View {
 
     var body: some View {
         chatContent
+            .colorScheme(over: store.background(for: conversation))
             .simultaneousGesture(TapGesture().onEnded { store.markConversationRead(conversation.id) })
             .onChange(of: activeState, initial: true) { _, state in
                 if state == .key { store.markConversationRead(conversation.id) }
