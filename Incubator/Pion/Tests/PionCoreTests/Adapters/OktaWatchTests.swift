@@ -70,7 +70,7 @@ final class SystemLog: ServiceAccess, @unchecked Sendable {
 }
 
 final class OktaWatchTests: XCTestCase {
-    private func org() -> ToolConnection { try! Okta.preset.makeConnection(name: "Okta Audit — Acme", values: ["domain": "acme.okta.com"]) }
+    private func org() -> ToolConnection { try! Okta.preset.makeConnection(name: "Okta Audit — Acme", values: ["domain": "acme.okta.com", "clientID": "0oaPionAudit"]) }
 
     private func client(_ connection: ToolConnection, _ access: any ServiceAccess) -> ServiceClient {
         ServiceClient(base: connection.endpoint, access: access, settings: connection.settings ?? [:], account: connection.id)

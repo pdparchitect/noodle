@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Bots can list every tool in Settings › Tools › Add Tools with `messenger --list-tool-catalogue`, each by name and summary with whether it is available, configured, assigned to other bots or assigned to them, naming only the bots with it that they share a conversation with, so they can ask one for help or suggest which tool to turn on. It never says whose a connection is, how it is set up or how many there are, never names bots they share no conversation with, and grants nothing.
+
 ### Changed
 
 - Use as Background on a picture or `.metal` shader in a conversation now offers Use Here, as before, or Choose Conversations…, which opens the list Forward… uses: tick as many bots and groups as you like, on this Mac or on a Hub you joined, and each gets it as its background.
@@ -17,6 +21,7 @@ All notable changes to Noodle are documented here, following
 
 - A conversation background turns the whole window dark at once in light mode too: the messages no longer keep light colours until you select the conversation again, using a second shader no longer turns the window light, and switching the Mac to light mode no longer turns a window with a shader, video or picture background light.
 - A `.metal` shader sent in a conversation shows a still of what it draws instead of a blank file card.
+- A tool's Setup Steps no longer run off the screen: the popover grows to most of the screen's height and scrolls past it with Copy and Open in Window kept in view, and the window they open in can be resized, the steps reflowing to its width.
 
 ## [0.93.0] - 2026-11-22
 

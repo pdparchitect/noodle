@@ -67,11 +67,16 @@ public actor ToolConnectionService {
         self.adapters = adapters
     }
 
-    public func hasCredentials(_ id: UUID) -> Bool {
+    /// Whether the connection holds what it signs in with, its sign-in checked as using it checks it: against the
+    /// account's own client, scopes and, for one whose sign-in server is its own, that server.
+    public func hasCredentials(_ connection: ToolConnection) -> Bool {
+        let id = connection.id
         if (try? tokens.load(id)) != nil || (try? clients.load(id)) != nil { return true }
         if let session = try? awsSessions.load(id), session.accessToken != nil || session.refreshToken != nil { return true }
-        guard let stored = try? credentials.load(id), stored.accessToken != nil else { return false }
-        return (try? oauth.validateConfiguration(stored, configuration: Self.oauthConfiguration(for: stored.endpoint, clientID: stored.clientID))) != nil
+        guard let stored = try? credentials.load(id), stored.accessToken != nil, stored.endpoint == connection.endpoint else { return false }
+        let configuration = Self.oauthConfiguration(for: connection, bundleIdentifier: bundleIdentifier)
+        if configuration == nil, Self.signsInAtItsOwnServer(connection) { return false }
+        return (try? oauth.validateConfiguration(stored, configuration: configuration)) != nil
     }
     /// What asking the service to revoke a connection's sign-in or key came to.
     public enum Revocation: Equatable, Sendable {
@@ -93,9 +98,16 @@ public actor ToolConnectionService {
         }
         if let stored = try? credentials.load(connection.id), stored.endpoint == connection.endpoint,
            stored.refreshToken != nil || stored.accessToken != nil {
-            let field = Self.connectionConfiguration(for: connection.endpoint)?.oauthClientField
-            let configured = Self.oauthConfiguration(for: connection.endpoint, clientID: field.flatMap { connection.settings?[$0] })
-            guard let endpoint = stored.revocationEndpoint ?? configured?.revocationEndpoint else { return .notOffered }
+            let configured = Self.oauthConfiguration(for: connection)
+            let endpoint: URL?
+            if Self.signsInAtItsOwnServer(connection) {
+                // Only where the account's checked details say, never an address the saved sign-in carries.
+                guard let configured else { return .failed("This connection's details no longer fit its tool, so its sign-in was sent nowhere.") }
+                endpoint = configured.revocationEndpoint
+            } else {
+                endpoint = stored.revocationEndpoint ?? configured?.revocationEndpoint
+            }
+            guard let endpoint else { return .notOffered }
             do { try await oauth.revoke(stored, at: endpoint); return .revoked }
             catch { return .failed(Self.revocationFailure(error)) }
         }
@@ -358,7 +370,16 @@ public actor ToolConnectionService {
     }
     public nonisolated static func configuredRedirectURI(for endpoint: URL,
                                                          bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> URL? {
-        guard let configuration = connectionConfiguration(for: endpoint), let oauth = configuration.oauth else { return nil }
+        configuredRedirectURI(connectionConfiguration(for: endpoint), bundleIdentifier: bundleIdentifier)
+    }
+    /// Where the connection's sign-in returns, found from the account, so one whose address holds its own details,
+    /// such as an Okta org's domain, is found too.
+    public nonisolated static func configuredRedirectURI(for connection: ToolConnection,
+                                                         bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> URL? {
+        configuredRedirectURI(connectionConfiguration(for: connection), bundleIdentifier: bundleIdentifier)
+    }
+    private nonisolated static func configuredRedirectURI(_ configuration: ToolConnectionConfiguration?, bundleIdentifier: String?) -> URL? {
+        guard let configuration, let oauth = configuration.oauth else { return nil }
         if configuration.oauthClientField != nil { return bundleIdentifier.flatMap(accountClientRedirect) }
         return oauth.clients.first { $0.bundleIdentifier == bundleIdentifier }?.redirectURI
     }
@@ -391,15 +412,12 @@ public actor ToolConnectionService {
         guard case .connection(let configuration)? = ToolCatalog.definition(for: connection)?.configuration else { return nil }
         return configuration
     }
-    /// How a connection at `endpoint` signs in. For an entry whose accounts bring their organisation's own client,
-    /// it is that client, `clientID`, returning to this app's bundle ID.
-    private nonisolated static func oauthConfiguration(for endpoint: URL, clientID: String? = nil,
-                                                       bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> MCPOAuthConfiguration? {
-        oauthConfiguration(connectionConfiguration(for: endpoint), clientID: clientID, bundleIdentifier: bundleIdentifier)
-    }
-    private nonisolated static func oauthConfiguration(_ configuration: ToolConnectionConfiguration?, clientID: String?,
+    /// How a connection signs in. For an entry whose accounts bring their organisation's own client, it is that client,
+    /// `clientID`, returning to this app's bundle ID; for one whose sign-in server is each account's own, at the host
+    /// `settings` name.
+    private nonisolated static func oauthConfiguration(_ configuration: ToolConnectionConfiguration?, settings: [String: String]?, clientID: String?,
                                                        bundleIdentifier: String?) -> MCPOAuthConfiguration? {
-        guard let configuration, let oauth = configuration.oauth else { return nil }
+        guard let configuration, let oauth = configuration.oauth(for: settings) else { return nil }
         guard configuration.oauthClientField != nil else { return oauth }
         guard let clientID, let bundleIdentifier, let redirect = accountClientRedirect(bundleIdentifier) else { return oauth.with(clients: []) }
         return oauth.with(clients: [MCPOAuthClientConfiguration(id: clientID, bundleIdentifier: bundleIdentifier, redirectURI: redirect)])
@@ -407,8 +425,25 @@ public actor ToolConnectionService {
     private nonisolated static func oauthConfiguration(for connection: ToolConnection,
                                                        bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> MCPOAuthConfiguration? {
         let configuration = connectionConfiguration(for: connection)
-        return oauthConfiguration(configuration, clientID: configuration?.oauthClientField.flatMap { connection.settings?[$0] },
+        return oauthConfiguration(configuration, settings: connection.settings,
+                                  clientID: configuration?.oauthClientField.flatMap { connection.settings?[$0] },
                                   bundleIdentifier: bundleIdentifier)
+    }
+    /// Refuses a connection whose catalogue entry signs in at each account's own server when its details no longer
+    /// resolve that server, such as a tenant changed under it to one that names no one account: it is then neither
+    /// signed in, nor used, nor refreshed, and nothing is sent, so no saved sign-in or discovery stands in for it.
+    private nonisolated static func requireOwnServer(_ connection: ToolConnection) throws {
+        guard signsInAtItsOwnServer(connection), oauthConfiguration(for: connection) == nil else { return }
+        throw ToolConnectionError.message("This connection's details no longer fit its tool, so it is not signed in or used: correct them in its settings and connect again.")
+    }
+    /// Whether the connection's catalogue entry signs in at each account's own server, such as an Okta org's or a
+    /// Microsoft tenant's, by the entry it names even when its details no longer fit that entry.
+    private nonisolated static func signsInAtItsOwnServer(_ connection: ToolConnection) -> Bool {
+        let own = { (configuration: ToolConnectionConfiguration?) in configuration?.oauthHostField != nil || configuration?.oauthPathField != nil }
+        if own(connectionConfiguration(for: connection)) { return true }
+        guard let id = connection.catalogueID,
+              case .connection(let named)? = ToolCatalog.entries.first(where: { $0.id == id })?.configuration else { return false }
+        return own(named)
     }
     private nonisolated static func authorizationServer(for endpoint: URL) -> URL? {
         guard case .connection(let configuration)? = ToolCatalog.definition(forMCPEndpoint: endpoint)?.configuration else { return nil }
@@ -430,6 +465,7 @@ public actor ToolConnectionService {
                        progress: @Sendable (String) async -> Void = { _ in },
                        browser: @Sendable (URL) async throws -> URL) async throws -> SignIn {
         guard Organisation.allows(Organisation.action(for: connection)) else { throw ToolConnectionServiceError.notAllowed }
+        try Self.requireOwnServer(connection)
         guard Self.signsInThroughBrowser(connection) else {
             throw ToolConnectionError.message("This connection does not sign in through the browser. Enter its details in its settings.")
         }
@@ -607,6 +643,7 @@ public actor ToolConnectionService {
         }
         guard var stored = try credentials.load(connection.id), stored.endpoint == connection.endpoint,
               stored.accessToken != nil else { throw ToolConnectionServiceError.signInRequired }
+        try Self.requireOwnServer(connection)
         let oauthConfiguration = Self.oauthConfiguration(for: connection, bundleIdentifier: bundleIdentifier)
         try oauth.validateConfiguration(stored, configuration: oauthConfiguration)
         if (stored.expiresAt ?? .distantPast) < Date().addingTimeInterval(60) {
@@ -633,6 +670,7 @@ public actor ToolConnectionService {
     /// something new, rather than for a bot's call. Fails as a call would when the connection needs signing in again.
     public func access(for connection: ToolConnection) async throws -> ToolConnectionAccess {
         let epoch = epochs[connection.id, default: 0], deadline = Date().addingTimeInterval(30)
+        try Self.requireOwnServer(connection)
         let credentials = connection.keepsSecret || Self.signsInThroughBrowser(connection)
         let authorization = credentials ? try await authorization(for: connection, epoch: epoch, deadline: deadline) : nil
         try checkActive(connection.id, epoch: epoch, deadline: deadline)
@@ -663,6 +701,7 @@ public actor ToolConnectionService {
         guard let adapter = adapters[name] else {
             throw ToolConnectionError.message("\(ProductIdentity.current.name) cannot serve this connection.")
         }
+        try Self.requireOwnServer(connection)
         let credentials = connection.keepsSecret || Self.signsInThroughBrowser(connection)
         let authorization = credentials ? try await authorization(for: connection, epoch: epoch, deadline: deadline) : nil
         try checkActive(connection.id, epoch: epoch, deadline: deadline)

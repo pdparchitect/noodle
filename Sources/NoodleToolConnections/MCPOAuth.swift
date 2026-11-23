@@ -43,7 +43,7 @@ struct MCPOAuth {
         var credentials = MCPCredentials(endpoint: endpoint, issuer: configuration.issuer,
             authorizationEndpoint: configuration.authorizationEndpoint,
             tokenEndpoint: configuration.tokenEndpoint, clientID: client.id,
-            redirectURI: redirect, resource: endpoint, scope: configuration.scopes.joined(separator: " "))
+            redirectURI: redirect, resource: endpoint, scope: (configuration.scopes + configuration.unlistedScopes).joined(separator: " "))
         credentials.revocationEndpoint = configuration.revocationEndpoint
         return credentials
     }

@@ -96,7 +96,7 @@ import Observation
     public func readSignIns() async {
         for connection in registry.connections {
             let open = (connection.adapter != nil && !connection.keepsSecret) || connection.open == true
-            let signedIn = await service.hasCredentials(connection.id)
+            let signedIn = await service.hasCredentials(connection)
             if open || signedIn {
                 ready.insert(connection.id)
             } else {

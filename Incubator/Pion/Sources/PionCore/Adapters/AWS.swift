@@ -15,16 +15,21 @@ public enum AWS {
 
     public static let preset = ToolDefinition(
         id: "c2b701c3-9057-41aa-8bda-9b7635180fce", name: "AWS Audit",
-        summary: "CloudTrail, GuardDuty, Security Hub, IAM, Access Analyzer, EC2 and CloudWatch Logs across an organisation, read-only, with an alert watch.",
+        summary: "CloudTrail, GuardDuty, Security Hub, IAM and Identity Center, Access Analyzer, AWS Config, S3, EC2, Inspector, Macie and CloudWatch Logs across an organisation, read-only, with an alert watch.",
         defaultInstructions: """
         Use AWS Audit to investigate an organisation's accounts: cloudtrail-events looks up CloudTrail events by user, \
         event name, source, resource or access key, with who acted (root, an IAM user or an assumed role and its \
         issuer), from where, whether MFA was used and any error; guardduty-findings, securityhub-findings and \
         access-analyzer-findings list what those services found, each finding with its own account and region; \
         access-key traces a key to its account, owner and last use; credential-report lists every user's password, \
-        keys and MFA; iam-access says who holds which permissions, full administrators first; ec2-instances and \
-        open-security-groups find instances and groups open to the internet over IPv4 or IPv6; logs-insights queries \
-        CloudWatch Logs, such as VPC Flow Logs; regions lists the regions an account has turned on. It covers every \
+        keys and MFA, and credential-hygiene picks out root's, users without MFA and stale keys and passwords; \
+        iam-access says who holds which permissions, full administrators first, who could make themselves one and \
+        which roles anyone, outside accounts or any GitHub repository could assume; identity-center-assignments says \
+        who holds which permission set in which account, read from the management account; config-history shows how \
+        a resource's configuration changed and who changed it; s3-exposure says which buckets are public or shared \
+        and why; ec2-instances and open-security-groups find instances and groups open to the internet over IPv4 or \
+        IPv6; inspector-findings and macie-findings list vulnerabilities and sensitive data found; logs-insights \
+        queries CloudWatch Logs, such as VPC Flow Logs; regions lists the regions an account has turned on. It covers every \
         account the sign-in may use: list them with accounts, and name the account in each lookup, by ID or name, \
         unless there is only one. Most services are regional and each lookup reads one region, the connection's own \
         unless named: name another when activity may be there. IAM, STS, Organizations and console sign-ins are logged \
@@ -53,16 +58,30 @@ public enum AWS {
 
     static let setup = [
         "In the **IAM Identity Center** console, open **Permission sets** and create one from the AWS managed policy **SecurityAudit**, AWS's read-only policy for security reviews, named such as `SecurityAudit`. Set its session duration to an hour or so.",
-        "On that permission set, add an inline policy allowing `logs:StartQuery`, `logs:GetQueryResults` and `iam:SimulatePrincipalPolicy` on all resources: the first two for Logs Insights, the last so check-access can tell whether the role could change anything.",
+        "On that permission set, add this inline policy, for reads SecurityAudit may leave out: Logs Insights queries, IAM's policy simulator, so iam-access and check-access can tell what a role could do, AWS Config's history, S3's bucket settings, IAM Identity Center's assignments, and Inspector's and Macie's findings. It allows no change: `\(compact(auditPolicy))`",
         "Under **AWS accounts**, assign the permission set to whoever signs in to Pion, in every account to investigate; select them all to cover the organisation. The alert watch reads up to \(watchAccounts) of them, the lowest account IDs first, so put your security tooling and log archive accounts among them.",
         "For the watch, turn on **GuardDuty** and **Security Hub** in the default region of every account, ideally with a delegated administrator and Security Hub's cross-region aggregation in that region, and keep a CloudTrail trail logging. check-access says what is off.",
         "Enter the **AWS access portal URL** from the Identity Center dashboard, and the permission set's name as the role. For the default region, choose the one most activity is in; agents can name any other, and any account.",
         "Choose **Add & Connect**. Your organisation's sign-in page opens with a code: check it matches the one Pion shows, and approve it. Pion stays signed in for as long as your organisation lets a session last, then asks again. Then ask an agent to run check-access.",
     ]
 
+    /// The audit permission set's inline policy: reads that SecurityAudit may not hold, and nothing that changes anything.
+    static let auditPolicy = """
+    {"Version":"2012-10-17","Statement":[{"Sid":"PionAuditReads","Effect":"Allow","Resource":"*","Action":[
+     "logs:StartQuery","logs:GetQueryResults","iam:SimulatePrincipalPolicy","iam:GetAccountAuthorizationDetails","iam:GenerateCredentialReport",
+     "iam:GetCredentialReport","config:GetResourceConfigHistory","config:DescribeConfigurationRecorders","config:DescribeConfigurationRecorderStatus",
+     "s3:ListAllMyBuckets","s3:GetBucketPolicyStatus","s3:GetBucketPolicy","s3:GetBucketAcl","s3:GetBucketOwnershipControls",
+     "s3:GetBucketPublicAccessBlock","s3:GetAccountPublicAccessBlock","access-analyzer:ListAnalyzers","access-analyzer:ListFindings",
+     "sso:ListInstances","sso:ListPermissionSets","sso:DescribePermissionSet","sso:ListManagedPoliciesInPermissionSet",
+     "sso:GetInlinePolicyForPermissionSet","sso:ListAccountsForProvisionedPermissionSet","sso:ListAccountAssignments",
+     "identitystore:DescribeUser","identitystore:DescribeGroup","identitystore:GetUserId","identitystore:GetGroupId",
+     "identitystore:ListGroupMembershipsForMember","inspector2:ListFindings","macie2:ListFindings","macie2:GetFindings"]}]}
+    """
+
     public static let adapter = OperationAdapter(operations: [
         Accounts(), Regions(), CloudTrailEvents(), GuardDutyFindings(), SecurityHubFindings(), AccessKey(), CredentialReport(), IAMAccess(),
-        AccessAnalyzerFindings(), Instances(), OpenSecurityGroups(), LogsInsights(), SecurityEvents(), CheckAccess(),
+        AccessAnalyzerFindings(), Instances(), OpenSecurityGroups(), LogsInsights(), ConfigHistory(), S3Exposure(), IdentityCenterAssignments(),
+        CredentialHygiene(), InspectorFindings(), MacieFindings(), SecurityEvents(), CheckAccess(),
     ], trigger: NewSecurityEvents())
 
     typealias JSON = GoogleCloud.JSON
@@ -81,7 +100,7 @@ public enum AWS {
     /// The AWS services Pion reaches, each at a host built from its name and a checked region: nothing an agent or a
     /// service gives ever picks a host, and a bucket's name only ever goes in a path.
     enum Service: String, Sendable {
-        case cloudtrail, guardduty, securityhub, iam, sts, ec2, logs, config, organizations, s3
+        case cloudtrail, guardduty, securityhub, iam, sts, ec2, logs, config, organizations, s3, sso, identitystore, inspector2, macie2
         case accessAnalyzer = "access-analyzer", s3Control = "s3-control"
     }
 
@@ -297,10 +316,11 @@ public enum AWS {
     }
 
     /// A request, with AWS's refusal of a permission said with what to change, so an agent can tell the champion; any
-    /// other failure, such as throttling, which passes, is left as it is.
+    /// other failure, such as throttling, which passes, or a service that is off, which some say as a denial, is left
+    /// as it is.
     static func read<Value>(_ what: String, needs actions: [String], _ body: () async throws -> Value) async throws -> Value {
         do { return try await body() } catch {
-            guard isDenied(error), let fix = fix(for: error, needs: actions) else { throw error }
+            guard isDenied(error), !isOff(error), let fix = fix(for: error, needs: actions) else { throw error }
             throw ServiceError.input("AWS refused \(what) (\(error.localizedDescription)): \(fix) Running check-access shows everything this tool can and cannot do.")
         }
     }
@@ -708,10 +728,11 @@ extension AWS {
             return rows
         }
 
-        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let (account, signed) = try await AWS.account(input.account, on: service)
-            let iam = try Target(client: signed, account: account, region: "us-east-1", service: .iam).at(.iam)
-            // The report is made on request, usually in seconds.
+        /// An account's credential report: its columns, the rows that split into them, how many did not, and when it was made.
+        struct Report { let columns: [String]; let rows: [[String]]; let broken: Int; let made: String? }
+
+        /// The credential report, made first if none is recent: the report is made on request, usually in seconds.
+        static func report(_ iam: Target) async throws -> Report {
             for attempt in 0..<6 {
                 let state = try await AWS.read("making the credential report", needs: ["iam:GenerateCredentialReport"]) {
                     try await iam.client.xml([], query: ["Action": "GenerateCredentialReport", "Version": "2010-05-08"])
@@ -727,143 +748,18 @@ extension AWS {
                   let csv = String(data: data, encoding: .utf8) else { throw ServiceError.unreadable }
             let lines = Self.rows(csv)
             guard let columns = lines.first, !columns.isEmpty else { throw ServiceError.unreadable }
-            let whole = lines.dropFirst().filter { $0.count == columns.count }, broken = lines.count - 1 - whole.count
-            let made = report.value("GetCredentialReportResult", "GeneratedTime")
-            var notice = "\nFrom \(iam.named)'s credential report made \(made ?? "at an unknown time"); AWS reuses a report up to four hours old, so users and keys made since may be missing."
-            if broken > 0 { notice += " \(broken) row\(broken == 1 ? "" : "s") could not be split into the report's columns and \(broken == 1 ? "is" : "are") left out." }
-            return try ServiceTable(columns: columns, rows: whole.map { $0.map { CellValue.text($0) } }).result().adding(notice)
+            let whole = lines.dropFirst().filter { $0.count == columns.count }
+            return Report(columns: columns, rows: Array(whole), broken: lines.count - 1 - whole.count, made: report.value("GetCredentialReportResult", "GeneratedTime"))
         }
-    }
-
-    /// Who holds which permissions in an account, from IAM's authorization details, which SecurityAudit may read: each
-    /// user with what reaches it through its groups, and each role, with full administrators first. A full administrator
-    /// holds AdministratorAccess, or any policy that allows every action on every resource.
-    struct IAMAccess: ServiceOperation {
-        struct Input: Decodable, Sendable { let account: String? }
-        static let name = "iam-access"
-        static let summary = "Who holds which permissions in an account: each IAM user, with its groups' policies, and each role, with who can assume it, full administrators first; saying when the account had more than was read."
-        static let input = JSONSchema.object(["account": AWS.accountInput])
-
-        struct Principal: Encodable {
-            let kind: String, name: String, arn: String?
-            let policies: [String]
-            let fullAdministrator: Bool
-            /// For a role: who may become it, as its trust policy says.
-            var assumableBy: [String] = []
-        }
-
-        static let pages = 20
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             let (account, signed) = try await AWS.account(input.account, on: service)
             let iam = try Target(client: signed, account: account, region: "us-east-1", service: .iam).at(.iam)
-            var users: [XMLNode] = [], groups: [XMLNode] = [], roles: [XMLNode] = [], managed: [XMLNode] = []
-            var marker: String?, truncated = false
-            // An account answers in pages; a few cover any but the largest.
-            for page in 0..<Self.pages {
-                var query: [String: String?] = ["Action": "GetAccountAuthorizationDetails", "Version": "2010-05-08", "MaxItems": "1000",
-                                                "Filter.member.1": "User", "Filter.member.2": "Group", "Filter.member.3": "Role",
-                                                "Filter.member.4": "LocalManagedPolicy"]
-                if let marker { query["Marker"] = marker }
-                let answer = try await AWS.read("IAM's authorization details", needs: ["iam:GetAccountAuthorizationDetails"]) { try await iam.client.xml([], query: query) }
-                guard let result = answer.child("GetAccountAuthorizationDetailsResult") else { throw ServiceError.unreadable }
-                users += result.child("UserDetailList")?.children ?? []
-                groups += result.child("GroupDetailList")?.children ?? []
-                roles += result.child("RoleDetailList")?.children ?? []
-                managed += result.child("Policies")?.children ?? []
-                guard result.value("IsTruncated") == "true", let next = result.value("Marker") else { marker = nil; break }
-                marker = next
-                if page == Self.pages - 1 { truncated = true }
-            }
-            // A customer managed policy grants what its default version says.
-            let allowsEverything: [String: Bool] = Dictionary(managed.compactMap { policy in
-                let document = policy.child("PolicyVersionList")?.children.first { $0.value("IsDefaultVersion") == "true" }?.value("Document")
-                return policy.value("Arn").map { ($0, document.map(Self.allowsEverything) ?? false) }
-            }, uniquingKeysWith: { first, _ in first })
-            func attached(_ node: XMLNode) -> [(name: String, everything: Bool)] {
-                (node.child("AttachedManagedPolicies")?.children ?? []).compactMap { policy in
-                    guard let name = policy.value("PolicyName") else { return nil }
-                    let arn = policy.value("PolicyArn") ?? ""
-                    return (name, arn.hasSuffix(":policy/AdministratorAccess") || allowsEverything[arn] == true)
-                }
-            }
-            func inline(_ node: XMLNode, _ list: String) -> [(name: String, everything: Bool)] {
-                (node.child(list)?.children ?? []).compactMap { policy in
-                    policy.value("PolicyName").map { ("\($0) (inline)", policy.value("PolicyDocument").map(Self.allowsEverything) ?? false) }
-                }
-            }
-            let groupPolicies = Dictionary(groups.compactMap { group in
-                group.value("GroupName").map { ($0, attached(group) + inline(group, "GroupPolicyList")) }
-            }, uniquingKeysWith: { first, _ in first })
-            var principals = users.compactMap { user -> Principal? in
-                guard let name = user.value("UserName") else { return nil }
-                let through = (user.child("GroupList")?.children ?? []).compactMap { $0.text.isEmpty ? nil : $0.text }.flatMap { group in
-                    (groupPolicies[group] ?? []).map { ("\($0.name) (through group \(group))", $0.everything) }
-                }
-                let held = attached(user) + inline(user, "UserPolicyList") + through
-                return Principal(kind: "user", name: name, arn: user.value("Arn"), policies: held.map(\.name), fullAdministrator: held.contains { $0.everything })
-            }
-            principals += roles.compactMap { role in
-                guard let name = role.value("RoleName") else { return nil }
-                let held = attached(role) + inline(role, "RolePolicyList")
-                let owner = role.value("Arn").map(Self.account)
-                return Principal(kind: "role", name: name, arn: role.value("Arn"), policies: held.map(\.name), fullAdministrator: held.contains { $0.everything },
-                                 assumableBy: role.value("AssumeRolePolicyDocument").map { Self.trusted($0, account: owner) } ?? [])
-            }
-            let admins = principals.filter(\.fullAdministrator), others = principals.filter { !$0.fullAdministrator }
-            func line(_ principal: Principal) -> String {
-                "\(principal.kind) \(principal.name): \(principal.policies.isEmpty ? "no policies" : principal.policies.joined(separator: ", "))"
-                    + (principal.assumableBy.isEmpty ? "" : "; assumable by " + principal.assumableBy.joined(separator: ", "))
-            }
-            var text = ["In \(iam.named):", "Full administrators (\(admins.count)):"] + admins.map { "- " + line($0) }
-            text += ["Everyone else (\(others.count)):"] + others.prefix(100).map { "- " + line($0) }
-            if others.count > 100 { text.append("\(others.count - 100) more; read them from the structured result.") }
-            if truncated {
-                text.append("Stopped after \(Self.pages) pages of the account's authorization details with more remaining, so users, groups and roles past them are missing.")
-            }
-            text.append("Not covered: access through IAM Identity Center permission sets, other AWS managed policies than AdministratorAccess that also allow everything, and permission boundaries and SCPs that limit it.")
-            struct Kept: Encodable { let principals: [Principal]; let account: String; let complete: Bool }
-            return try ServiceResult(text: text.joined(separator: "\n"), structured: Kept(principals: admins + others, account: account.id, complete: !truncated))
-        }
-
-        /// The account an ARN is in, its fifth field, after the region that IAM leaves empty; an account ID alone is itself.
-        static func account(_ arn: String) -> String {
-            let fields = arn.split(separator: ":", omittingEmptySubsequences: false)
-            return fields.count > 4 ? String(fields[4]) : arn
-        }
-
-        /// Who a role's trust policy, as IAM gives it URL-encoded, lets become the role: anyone, another account, a service
-        /// or an identity provider. Another account or anyone reaches whatever the role reaches.
-        static func trusted(_ encoded: String, account: String?) -> [String] {
-            guard let json = encoded.removingPercentEncoding,
-                  let document = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return [] }
-            let statements = (document["Statement"] as? [[String: Any]]) ?? (document["Statement"] as? [String: Any]).map { [$0] } ?? []
-            func values(_ value: Any?) -> [String] { (value as? [String]) ?? (value as? String).map { [$0] } ?? [] }
-            var trusted: [String] = []
-            for statement in statements where statement["Effect"] as? String == "Allow" {
-                if statement["Principal"] as? String == "*" { trusted.append("anyone"); continue }
-                guard let principal = statement["Principal"] as? [String: Any] else { continue }
-                for arn in values(principal["AWS"]) {
-                    let other = arn == "*" ? nil : Self.account(arn)
-                    if arn == "*" { trusted.append("anyone") }
-                    else if let other, other != account { trusted.append("another account \(other)") }
-                    else { trusted.append(arn) }
-                }
-                trusted += values(principal["Service"]) + values(principal["Federated"]).map { $0.split(separator: "/", maxSplits: 1).last.map(String.init) ?? $0 }
-            }
-            return Array(NSOrderedSet(array: trusted)) as? [String] ?? trusted
-        }
-
-        /// Whether a policy document, as IAM gives it URL-encoded, allows every action on every resource.
-        static func allowsEverything(_ encoded: String) -> Bool {
-            guard let json = encoded.removingPercentEncoding,
-                  let document = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return false }
-            let statements = (document["Statement"] as? [[String: Any]]) ?? (document["Statement"] as? [String: Any]).map { [$0] } ?? []
-            func values(_ value: Any?) -> [String] { (value as? [String]) ?? (value as? String).map { [$0] } ?? [] }
-            return statements.contains { statement in
-                statement["Effect"] as? String == "Allow" && values(statement["Action"]).contains { $0 == "*" || $0 == "*:*" }
-                    && values(statement["Resource"]).contains("*")
-            }
+            let report = try await Self.report(iam)
+            var notice = "\nFrom \(iam.named)'s credential report made \(report.made ?? "at an unknown time"); AWS reuses a report up to four hours old, so users and keys made since may be missing."
+            let broken = report.broken
+            if broken > 0 { notice += " \(broken) row\(broken == 1 ? "" : "s") could not be split into the report's columns and \(broken == 1 ? "is" : "are") left out." }
+            return try ServiceTable(columns: report.columns, rows: report.rows.map { $0.map { CellValue.text($0) } }).result().adding(notice)
         }
     }
 
@@ -1093,7 +989,7 @@ extension AWS {
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable { let account: String? }
         static let name = "check-access"
-        static let summary = "Tries each thing this tool reads once, in one account or the first five covered, and says what works and, for what does not, exactly which permission to add; whether GuardDuty, Security Hub (with its administrator and cross-region aggregation), AWS Config and an external access analyzer are on and CloudTrail trails are logging, as the watch relies on them; which regions are on; whether the role could change anything; and which of the organisation's accounts the sign-in does not cover. It changes nothing."
+        static let summary = "Tries each thing this tool reads once, in one account or the first five covered, IAM Identity Center, AWS Config's history, S3's bucket settings, Inspector and Macie included, and says what works and, for what does not, exactly which permission to add; whether GuardDuty, Security Hub (with its administrator and cross-region aggregation), AWS Config and an external access analyzer are on and CloudTrail trails are logging, as the watch relies on them; which regions are on; whether the role could change anything; and which of the organisation's accounts the sign-in does not cover. It changes nothing."
         static let input = JSONSchema.object(["account": .string("Only this account, by its ID or name. The first \(AWS.checkAccounts) the sign-in covers when left out.")])
 
         /// Changes the role should never be able to make, simulated against its own policies.
@@ -1218,7 +1114,58 @@ extension AWS {
             lines.append(await probe("CloudWatch Logs", ["logs:DescribeLogGroups"]) {
                 _ = try await AWS.send(try base.at(.logs), operation: "Logs_20140328.DescribeLogGroups", body: ["limit": 1])
             })
+            lines += await Self.investigation(base)
             lines.append(await Self.writes(base, role: role))
+            return lines
+        }
+
+        /// The reads the deeper lookups take: IAM's authorization details and credential report, AWS Config's history,
+        /// S3's bucket settings, Identity Center's assignments, and Inspector's and Macie's findings, each tried once.
+        static func investigation(_ base: Target) async -> [String] {
+            func probe(_ title: String, _ actions: [String], _ body: () async throws -> Void) async -> String {
+                do { try await body(); return "✓ \(title)" }
+                catch { return "✗ \(title): " + (AWS.fix(for: error, needs: actions) ?? error.localizedDescription) }
+            }
+            var lines: [String] = []
+            lines.append(await probe("IAM's authorization details, for iam-access", ["iam:GetAccountAuthorizationDetails"]) {
+                _ = try await base.at(.iam).client.xml([], query: ["Action": "GetAccountAuthorizationDetails", "Version": "2010-05-08", "MaxItems": "1", "Filter.member.1": "Role"])
+            })
+            lines.append(await probe("The credential report, for credential-report and credential-hygiene", ["iam:GenerateCredentialReport", "iam:GetCredentialReport"]) {
+                do { _ = try await base.at(.iam).client.xml([], query: ["Action": "GetCredentialReport", "Version": "2010-05-08"]) }
+                // No report made lately is no refusal: the lookups make one.
+                catch ServiceError.status(_, let reason?) where reason.contains("ReportNotPresent") || reason.contains("ReportExpired") || reason.contains("ReportInProgress") {}
+                catch ServiceError.refused(let reason) where reason.contains("ReportNotPresent") || reason.contains("ReportExpired") || reason.contains("ReportInProgress") {}
+            })
+            lines.append(await probe("AWS Config's recorders and history, for config-history", ["config:DescribeConfigurationRecorders", "config:GetResourceConfigHistory"]) {
+                _ = try await AWS.call(try base.at(.config), operation: "StarlingDoveService.DescribeConfigurationRecorders", body: [:])
+            })
+            lines.append(await probe("S3's buckets and Block Public Access, for s3-exposure", ["s3:ListAllMyBuckets", "s3:GetAccountPublicAccessBlock", "s3:GetBucketPolicyStatus",
+                                                                                              "s3:GetBucketPolicy", "s3:GetBucketAcl", "s3:GetBucketOwnershipControls", "s3:GetBucketPublicAccessBlock"]) {
+                _ = try await base.at(.s3).client.xml([], query: ["max-buckets": "1"])
+                let control = try base.at(.s3Control)
+                let answer = try await control.client.exchange(["v20180820", "configuration", "publicAccessBlock"], headers: ["x-amz-account-id": base.account.id], returning: [404])
+                if answer.response.statusCode == 404, !(ServiceClient.reason(answer.data) ?? "").contains("NoSuchPublicAccessBlockConfiguration") { throw ServiceError.notFound }
+            })
+            do {
+                let instances = AWS.items(try await AWS.call(try base.at(.sso), operation: "SWBExternalService.ListInstances", body: [:])["Instances"])
+                lines.append(instances.isEmpty ? "· IAM Identity Center: no instance answers in \(base.region) from this account; identity-center-assignments needs Identity Center's region, read from the management account or its delegated administrator."
+                                               : "✓ IAM Identity Center's assignments, for identity-center-assignments.")
+            } catch {
+                lines.append(AWS.isDenied(error)
+                             ? "· IAM Identity Center's assignments: refused here. Only the organisation's management account or Identity Center's delegated administrator may read them; in that account, the permission set needs sso:List*, sso:Describe*, sso:GetInlinePolicyForPermissionSet and identitystore:Describe*, GetUserId, GetGroupId and ListGroupMembershipsForMember."
+                             : "✗ IAM Identity Center's assignments: \(error.localizedDescription)")
+            }
+            for (title, service, path, actions, body) in [("Amazon Inspector", Service.inspector2, ["findings", "list"], ["inspector2:ListFindings"], ["maxResults": 1] as [String: Any]),
+                                                          ("Amazon Macie", Service.macie2, ["findings"], ["macie2:ListFindings", "macie2:GetFindings"], ["maxResults": 1] as [String: Any])] {
+                do {
+                    _ = try await AWS.call(try base.at(service), path, body: body)
+                    lines.append("✓ \(title)'s findings.")
+                } catch let error where AWS.isOff(error) {
+                    lines.append("· \(title) is off in \(base.region), so it finds nothing there.")
+                } catch {
+                    lines.append("✗ \(title)'s findings: " + (AWS.fix(for: error, needs: actions) ?? error.localizedDescription))
+                }
+            }
             return lines
         }
 

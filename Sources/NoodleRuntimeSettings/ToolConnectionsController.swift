@@ -261,7 +261,7 @@ public final class ToolConnectionsController {
                     case nil: break
                     }
                 } else {
-                    let redirect = Self.redirectURI(for: record.endpoint)
+                    let redirect = Self.redirectURI(for: record)
                     let result = try await service.signIn(record, redirectURI: redirect, progress: { [weak self] stage in
                         await self?.setSignInStage(stage)
                     }) { [browser] url in
@@ -283,10 +283,20 @@ public final class ToolConnectionsController {
     public func cancelSignIn() { loginTask?.cancel() }
 
     /// Where a sign-in for a connection at `endpoint` returns to this app.
+    /// By address alone, for a connection kept on a Noodle Hub: a Hub keeps only presets that need no form, so never one
+    /// whose sign-in server is each account's own, which `redirectURI(for:)` given the connection finds.
     public static func redirectURI(for endpoint: URL) -> URL {
+        ToolConnectionService.configuredRedirectURI(for: endpoint) ?? appRedirectURI
+    }
+    /// Where a sign-in for `connection` returns to this app, found from the account, so one whose sign-in server is the
+    /// account's own, such as an Okta org's, is found too.
+    public static func redirectURI(for connection: ToolConnection) -> URL {
+        ToolConnectionService.configuredRedirectURI(for: connection) ?? appRedirectURI
+    }
+    private static var appRedirectURI: URL {
         let types = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]]
         let scheme = (types?.first?["CFBundleURLSchemes"] as? [String])?.first ?? "noodle-dev"
-        return ToolConnectionService.configuredRedirectURI(for: endpoint) ?? URL(string: "\(scheme)://mcp/oauth/callback")!
+        return URL(string: "\(scheme)://mcp/oauth/callback")!
     }
 
     /// Opens the sign-in page of a connection kept elsewhere, as on a Noodle Hub, and returns

@@ -1,11 +1,12 @@
 import Foundation
 import NoodleCore
+import NoodleToolConnections
 @testable import PionCore
 import XCTest
 
 final class OktaTests: XCTestCase {
-    private let acme = try! Okta.preset.makeConnection(name: "Okta — Acme", values: ["domain": "acme.okta.com"])
-    private let contoso = try! Okta.preset.makeConnection(name: "Okta — Contoso", values: ["domain": "contoso.okta.com"])
+    private let acme = try! Okta.preset.makeConnection(name: "Okta — Acme", values: ["domain": "acme.okta.com", "clientID": "0oaPionAudit"])
+    private let contoso = try! Okta.preset.makeConnection(name: "Okta — Contoso", values: ["domain": "contoso.okta.com", "clientID": "0oaPionAudit"])
 
     private func call(_ tool: String, _ arguments: String, on service: FakeService, in connection: ToolConnection? = nil)
         async throws -> (text: String, isError: Bool, structured: [String: Any]?) {
@@ -22,12 +23,41 @@ final class OktaTests: XCTestCase {
 
     private let user = #"{"id":"00u1","status":"ACTIVE","created":"2024-01-02T03:04:05.000Z","lastLogin":"2026-11-14T09:03:00.000Z","passwordChanged":"2026-10-01T00:00:00.000Z","profile":{"login":"m.okafor@acme.example","email":"m.okafor@acme.example","firstName":"Mira","lastName":"Okafor"}}"#
 
-    func testEachAccountIsItsOwnOrgWithAnSSWSToken() throws {
+    func testEachAccountIsItsOwnOrgSignedInAtItsOwnAuthorizationServer() throws {
         XCTAssertEqual(acme.endpoint.absoluteString, "https://acme.okta.com/api/v1")
         XCTAssertEqual(contoso.endpoint.absoluteString, "https://contoso.okta.com/api/v1")
-        XCTAssertEqual(acme.tokenHeader, "Authorization")
-        XCTAssertEqual(acme.tokenScheme, "SSWS")
+        XCTAssertNil(acme.tokenHeader, "no API token: it signs in through OAuth")
+        XCTAssertNil(acme.tokenScheme)
+        XCTAssertFalse(acme.keepsSecret)
+        XCTAssertEqual(acme.settings?["clientID"], "0oaPionAudit")
         XCTAssertEqual(acme.adapter, "okta")
+        guard case .connection(let configuration) = Okta.preset.configuration else { return XCTFail() }
+        XCTAssertNil(configuration.tokenRevocation)
+        XCTAssertEqual(configuration.oauthClientField, "clientID")
+        XCTAssertEqual(configuration.oauthHostField, "domain")
+        let oauth = try XCTUnwrap(configuration.oauth(for: acme.settings))
+        XCTAssertEqual(oauth.issuer.absoluteString, "https://acme.okta.com")
+        XCTAssertEqual(oauth.authorizationEndpoint.absoluteString, "https://acme.okta.com/oauth2/v1/authorize")
+        XCTAssertEqual(oauth.tokenEndpoint.absoluteString, "https://acme.okta.com/oauth2/v1/token")
+        XCTAssertEqual(oauth.revocationEndpoint?.absoluteString, "https://acme.okta.com/oauth2/v1/revoke")
+        XCTAssertEqual(configuration.oauth(for: contoso.settings)?.tokenEndpoint.host, "contoso.okta.com")
+        XCTAssertNil(oauth.deviceAuthorizationEndpoint, "an authorization code with PKCE, not a device code")
+        XCTAssertFalse(oauth.usesResourceIndicator)
+        XCTAssertEqual(oauth.authorizationParameters, ["prompt": "login"], "the admin signs in afresh, never as whoever the browser is signed in as")
+        XCTAssertEqual(configuration.oauth?.tokenEndpoint.host, "okta.invalid", "the preset's own host is never reachable")
+        XCTAssertTrue(oauth.scopes.allSatisfy { $0.hasSuffix(".read") || $0.hasSuffix(".read.self") || $0 == "offline_access" }, "Okta Audit only reads")
+        XCTAssertEqual(Set(oauth.scopes), ["okta.users.read", "okta.users.read.self", "okta.groups.read", "okta.apps.read", "okta.logs.read",
+                                           "okta.roles.read", "okta.apiTokens.read", "offline_access"])
+        XCTAssertTrue(Okta.setup.contains { $0.contains("com.pdparchitect.pion:/oauth2callback") }, "the setup names the redirect URI Pion uses")
+        XCTAssertTrue(Okta.auditScopes.allSatisfy { scope in Okta.setup.contains { $0.contains("`\(scope)`") } }, "the setup grants every scope asked for")
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use(PionCatalogue.entries)
+        XCTAssertTrue(ToolConnectionService.signsInThroughBrowser(acme))
+        XCTAssertFalse(ToolConnectionService.signsInWithCode(acme))
+        XCTAssertEqual(ToolConnectionService.configuredRedirectURI(for: acme, bundleIdentifier: "com.pdparchitect.pion")?.absoluteString,
+                       "com.pdparchitect.pion:/oauth2callback")
+        XCTAssertEqual(ToolConnectionService.configuredRedirectURI(for: contoso, bundleIdentifier: "com.pdparchitect.pion.local")?.absoluteString,
+                       "com.pdparchitect.pion.local:/oauth2callback")
         XCTAssertEqual(Okta.preset.name, "Okta Audit")
         XCTAssertEqual(Okta.preset.id, "bdc65def-9c77-4503-9d57-eac000822cce", "connections made before keep working")
         XCTAssertEqual(Okta.adapter.watchedTool, "security-events")
@@ -134,7 +164,7 @@ final class OktaTests: XCTestCase {
                       && tokens.text.contains("expires 2026-12-01"), tokens.text)
     }
 
-    /// A refusal names the custom role the token's admin needs, as the Read-Only Administrator cannot see admins.
+    /// A refusal names the custom role the signed-in admin needs, as the Read-Only Administrator cannot see admins.
     func testARefusedAuditSaysWhichRoleItNeeds() async throws {
         let service = FakeService()
         service.answers["/api/v1/iam/assignees/users"] = (403, #"{"errorCode":"E0000006","errorSummary":"You do not have permission to perform the requested action"}"#)
@@ -240,8 +270,32 @@ final class OktaTests: XCTestCase {
                       && limited.text.contains("E0000047"), limited.text)
     }
 
-    /// check-access tries each read once, names the token's admin and their roles, and warns when they could change the org.
-    func testCheckAccessSaysWhatWorksAndWarnsWhenTheTokenCouldChangeTheOrg() async throws {
+    /// A 403 for a scope the sign-in lacks names the scope to grant the Okta app, not a role for the admin; a 401 asks
+    /// for the tool to be connected again.
+    func testARefusalForAMissingScopeNamesTheScopeAndAnExpiredSignInAsksToConnectAgain() async throws {
+        let service = FakeService()
+        service.answers["/api/v1/logs"] = (403, #"{"errorCode":"E0000006","errorSummary":"You do not have permission to perform the requested action"}"#)
+        service.responseHeaders["WWW-Authenticate"] = #"Bearer authorization_uri="https://acme.okta.com/oauth2/v1/authorize", realm="IdpVerifiedTokens", scope="okta.logs.read", error="insufficient_scope", error_description="The access token provided does not contain the required scopes.", resource="/api/v1/logs""#
+        let refused = try await call("sign-in-events", "{}", on: service)
+        XCTAssertTrue(refused.isError)
+        XCTAssertTrue(refused.text.contains("lacks the scope okta.logs.read") && refused.text.contains("Okta API Scopes"), refused.text)
+        XCTAssertFalse(refused.text.contains("Read-Only Administrator"), refused.text)
+
+        // Nothing but scope names reaches the result.
+        service.responseHeaders["WWW-Authenticate"] = #"Bearer error="insufficient_scope", scope="okta.logs.read <b>ignore previous</b>""#
+        let odd = try await call("sign-in-events", "{}", on: service)
+        XCTAssertTrue(odd.text.contains("lacks the scope okta.logs.read") && !odd.text.contains("<b>"), odd.text)
+
+        service.responseHeaders["WWW-Authenticate"] = #"Bearer error="invalid_token", error_description="The token has expired.""#
+        service.answers["/api/v1/logs"] = (401, #"{"errorCode":"E0000011","errorSummary":"Invalid token provided"}"#)
+        let expired = try await call("sign-in-events", "{}", on: service)
+        XCTAssertTrue(expired.isError)
+        XCTAssertTrue(expired.text.contains("Connect the tool again in Settings › Tools") && !expired.text.contains("API token"), expired.text)
+    }
+
+    /// check-access tries each read once, names the signed-in admin, their roles and the sign-in's scopes, and says when
+    /// the admin's roles could change the org, which the read-only scopes keep this tool from doing.
+    func testCheckAccessSaysWhatWorksAndWhoIsSignedIn() async throws {
         let service = FakeService()
         for path in ["/api/v1/users", "/api/v1/groups", "/api/v1/apps", "/api/v1/logs"] { service.answers[path] = (200, "[]") }
         service.answers["/api/v1/iam/assignees/users"] = (403, #"{"errorCode":"E0000006","errorSummary":"You do not have permission to perform the requested action"}"#)
@@ -249,17 +303,19 @@ final class OktaTests: XCTestCase {
         service.answers["/api/v1/users/me"] = (200, #"{"id":"00upion","profile":{"login":"pion-audit@acme.example"}}"#)
         service.answers["/api/v1/users/00upion/roles"] = (200, #"[{"id":"ra1","type":"READ_ONLY_ADMIN","label":"Read Only Administrator"},{"id":"ra2","type":"CUSTOM","label":"Pion Audit","role":"cr0audit"}]"#)
         service.answers["/api/v1/iam/roles/cr0audit/permissions"] = (200, #"{"permissions":[{"label":"okta.iam.read"},{"label":"okta.users.apitokens.read"}]}"#)
-        service.answers["/api/v1/api-tokens/current"] = (200, #"{"id":"00Tpion","name":"pion","network":{"connection":"ANYWHERE"}}"#)
         let checked = try await call("check-access", "{}", on: service)
         XCTAssertFalse(checked.isError, checked.text)
         XCTAssertTrue(checked.text.contains("✓ System Log") && checked.text.contains("✗ Admin assignments") && checked.text.contains("okta.iam.read"), checked.text)
-        XCTAssertTrue(checked.text.contains("pion-audit@acme.example") && checked.text.contains("✓ The token's admin cannot change the org"), checked.text)
-        XCTAssertTrue(checked.text.contains("works from anywhere"), checked.text)
+        XCTAssertTrue(checked.text.contains("Signed in as pion-audit@acme.example") && checked.text.contains("✓ The signed-in admin cannot change the org"), checked.text)
+        XCTAssertTrue(checked.text.contains("okta.logs.read") && checked.text.contains("offline_access") && checked.text.contains("0oaPionAudit"),
+                      "it reports the sign-in's scopes and the app they are granted to: \(checked.text)")
+        XCTAssertFalse(service.requests.contains { $0.url!.path.hasSuffix("/current") }, "no API token of its own to read")
         XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" }, "it changes nothing")
 
         service.answers["/api/v1/iam/roles/cr0audit/permissions"] = (200, #"{"permissions":[{"label":"okta.iam.read"},{"label":"okta.users.lifecycle.suspend"}]}"#)
         let broad = try await call("check-access", "{}", on: service)
-        XCTAssertTrue(broad.text.contains("⚠ The token's admin can change the org: okta.users.lifecycle.suspend"), broad.text)
+        XCTAssertTrue(broad.text.contains("⚠ The signed-in admin's roles also allow changes: okta.users.lifecycle.suspend")
+                      && broad.text.contains("scopes only read"), broad.text)
     }
 
     /// A page that fails after others keeps what they held, saying where and why it stopped; the first failing fails

@@ -10,9 +10,17 @@ are assigned:
   what [GuardDuty](https://docs.aws.amazon.com/guardduty/latest/ug/what-is-guardduty.html),
   [Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/what-is-securityhub.html)
   and [IAM Access Analyzer](https://docs.aws.amazon.com/IAM/latest/UserGuide/what-is-access-analyzer.html)
-  found, who an access key belongs to, every user's credentials, who holds
-  which permissions, instances and security groups open to the internet, and
-  CloudWatch Logs Insights queries. It wakes the agents it is assigned to when
+  found, who an access key belongs to, every user's credentials and which are
+  weak or stale, who holds which permissions and who could make themselves an
+  administrator, which roles outsiders could assume, who holds which
+  [IAM Identity Center](https://docs.aws.amazon.com/singlesignon/latest/userguide/permissionsetsconcept.html)
+  permission set where, how a resource's configuration changed in
+  [AWS Config](https://docs.aws.amazon.com/config/latest/developerguide/WhatIsConfig.html)
+  and who changed it, which S3 buckets are public or shared, what
+  [Inspector](https://docs.aws.amazon.com/inspector/latest/user/what-is-inspector.html)
+  and [Macie](https://docs.aws.amazon.com/macie/latest/user/what-is-macie.html)
+  found, instances and security groups open to the internet, and CloudWatch
+  Logs Insights queries. It wakes the agents it is assigned to when
   GuardDuty or Security Hub raises a high or critical finding, or CloudTrail
   shows the way in being opened or what follows being hidden. It only reads.
 - **AWS Containment** acts on the same accounts to contain an incident: it
@@ -71,20 +79,29 @@ sending anything.
 1. **Make a permission set** for AWS Audit in IAM Identity Center from the
    AWS managed policy **SecurityAudit**, named such as `SecurityAudit`, with a
    session of an hour or so.
-2. **Add an inline policy** to it allowing `logs:StartQuery` and
-   `logs:GetQueryResults` for Logs Insights, and `iam:SimulatePrincipalPolicy`
-   so **check-access** can tell whether the role could change anything:
+2. **Add an inline policy** to it for the reads SecurityAudit may leave out:
+   Logs Insights queries; IAM's policy simulator, so `iam-access` can confirm
+   who could make themselves an administrator and **check-access** can tell
+   whether the role could change anything; AWS Config's history; each
+   bucket's policy, ACL, ownership and Block Public Access; IAM Identity
+   Center's permission sets and assignments, with users' and groups' names;
+   and Inspector's and Macie's findings. Every action in it only reads:
 
    ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [{
-       "Effect": "Allow",
-       "Action": ["logs:StartQuery", "logs:GetQueryResults", "iam:SimulatePrincipalPolicy"],
-       "Resource": "*"
-     }]
-   }
+   {"Version":"2012-10-17","Statement":[{"Sid":"PionAuditReads","Effect":"Allow","Resource":"*","Action":[
+    "logs:StartQuery","logs:GetQueryResults","iam:SimulatePrincipalPolicy","iam:GetAccountAuthorizationDetails","iam:GenerateCredentialReport",
+    "iam:GetCredentialReport","config:GetResourceConfigHistory","config:DescribeConfigurationRecorders","config:DescribeConfigurationRecorderStatus",
+    "s3:ListAllMyBuckets","s3:GetBucketPolicyStatus","s3:GetBucketPolicy","s3:GetBucketAcl","s3:GetBucketOwnershipControls",
+    "s3:GetBucketPublicAccessBlock","s3:GetAccountPublicAccessBlock","access-analyzer:ListAnalyzers","access-analyzer:ListFindings",
+    "sso:ListInstances","sso:ListPermissionSets","sso:DescribePermissionSet","sso:ListManagedPoliciesInPermissionSet",
+    "sso:GetInlinePolicyForPermissionSet","sso:ListAccountsForProvisionedPermissionSet","sso:ListAccountAssignments",
+    "identitystore:DescribeUser","identitystore:DescribeGroup","identitystore:GetUserId","identitystore:GetGroupId",
+    "identitystore:ListGroupMembershipsForMember","inspector2:ListFindings","macie2:ListFindings","macie2:GetFindings"]}]}
    ```
+
+   Identity Center's assignments can be read only in the organisation's
+   management account or Identity Center's delegated administrator, so the
+   permission set must be assigned there for `identity-center-assignments`.
 
 3. **Assign it** to whoever signs in to Pion, in every account to investigate.
    Select them all to cover the organisation.
@@ -126,7 +143,42 @@ sign-in page matches the one Pion shows, approve it, and ask an agent to run
   outside your assignment are not reached; **check-access** compares them with
   the organisation's own list where the role may read it.
 - **Access through Identity Center is not in IAM.** `iam-access` lists IAM
-  users and roles; who holds which permission set is in IAM Identity Center.
+  users and roles; `identity-center-assignments` lists who holds which
+  permission set in which account, read in Identity Center's own region from
+  the management account or its delegated administrator.
+- **Who could become an administrator is judged from policies.** `iam-access`
+  reads every policy a user or role holds, AWS managed ones included, for the
+  well-known ways to more power, then asks IAM's policy simulator about each
+  action of those paths alone, on every resource, for up to 20 principals, and
+  shows its answer per action, with whether service control policies and a
+  permission boundary allowed it where the simulator says. It does not judge a
+  path as a whole, resource policies, or which role would be passed, so
+  "allowed" for every action is not proof a path works. A policy that could
+  not be read is named, and the result is then marked incomplete.
+- **AWS Config keeps what a resource looked like, not who changed it.**
+  `config-history` says who made a change only from the CloudTrail event
+  Config links to it. Otherwise it lists CloudTrail's writes to the resource,
+  by its ID, name or ARN, between the configuration before and the capture, as
+  candidates, any of which may or may not be the change, and says plainly
+  when there are none, or only that none was found in the events read when
+  CloudTrail could not search the whole interval, saying why. A linked event that could not be read, because CloudTrail
+  no longer holds it, refused, or more than ten were linked, is said as such,
+  never as no link. CloudTrail keeps only 90 days, and Config
+  records only the resource types and regions its recorder covers, IAM's in
+  one region only; the result says when it does not record the type asked for.
+- **A bucket is called public or private only from what was read.**
+  `s3-exposure` reads the account's and each bucket's Block Public Access,
+  whether S3 judges its policy public, its policy's statements for anyone or
+  other accounts, its ACL, its object ownership and Access Analyzer's findings.
+  It shows the grants it saw apart from the access in effect: a bucket is
+  "PUBLIC" only when every control that could block the grant was read and is
+  off, "possibly public" when a public grant was seen but a control, or S3's
+  own judgement of the policy, could not be read, and "not known" when
+  settings could not be read and no grant was seen. Grants to other accounts in
+  a policy S3 judges public are blocked when RestrictPublicBuckets is on, and
+  "possibly shared" when that could not be read; a policy that is not public
+  keeps them. Macie's and Inspector's listings say there are no findings only
+  once read to their end. Objects' own ACLs and access points are not read.
 
 ## What agents can do
 
@@ -144,8 +196,28 @@ sign-in page matches the one Pion shows, approve it, and ask an agent to run
   user and when, where and with which service it was last used. A temporary
   key is traced to its account, and its use to `cloudtrail-events`.
 - `credential-report`: every IAM user's password, keys and MFA.
-- `iam-access`: who holds which permissions, full administrators first, and who
-  can assume each role.
+- `credential-hygiene`: root's MFA and access keys, console users and other
+  users without MFA, active access keys older than 90 days, or a number you
+  give, or unused that long, and console passwords unused that long, saying
+  how old the credential report is.
+- `iam-access`: who holds which permissions, full administrators first; who
+  could make themselves one, through `iam:PassRole` with Lambda, EC2 or
+  CloudFormation, policy versions, attaching or writing policies, changing a
+  role's trust, other users' keys or passwords, or assuming an administrator
+  role; and which roles anyone, an account outside those the sign-in covers,
+  or an identity provider's tokens for any subject could assume, such as a
+  role trusting GitHub's tokens with no condition naming a repository.
+- `identity-center-assignments`: who holds which Identity Center permission set
+  in which account, users and groups by name, with permission sets that make
+  their holders full administrators flagged; for one account, permission set,
+  group, or user with the groups they are in.
+- `config-history`: how one resource's configuration changed, newest first,
+  what each change made different, and who made it.
+- `s3-exposure`: whether one bucket, or each of the account's, is public or
+  shared with other accounts, and which settings make it so.
+- `inspector-findings` and `macie-findings`: Inspector's active critical and
+  high vulnerability findings, and Macie's sensitive data findings that are
+  not archived.
 - `access-analyzer-findings`: resources shared outside the organisation or
   account, from its external access analyzer.
 - `ec2-instances` and `open-security-groups`: instances by ID or address, and
@@ -234,6 +306,10 @@ changes nothing, and tries once each:
 - whether GuardDuty is on, with its administrator; Security Hub, with its
   administrator and cross-region aggregation; AWS Config recording; and an
   external access analyzer;
+- IAM's authorization details, the credential report, AWS Config's recorders,
+  S3's buckets and Block Public Access, Identity Center's assignments, which
+  are refused outside the management account and its delegated administrator,
+  and Inspector's and Macie's findings, saying when either is off;
 - whether the role could make changes, simulated against its own policies;
 - which of the organisation's accounts the sign-in does not cover.
 
@@ -250,6 +326,9 @@ tries again, as AWS's own tools do.
 - **A caller is the credential used, not the person.** An assumed role's
   session name is what its holder chose; the role behind it, and the
   Identity Center user or federated identity that took it, say who.
+- **Not read:** Amazon Detective's behaviour graphs and CloudTrail Lake's
+  event data stores. Inspector's and Macie's findings also reach Security Hub
+  when it is on.
 
 ## Containing an incident
 

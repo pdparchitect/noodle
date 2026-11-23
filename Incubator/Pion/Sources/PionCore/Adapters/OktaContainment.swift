@@ -2,9 +2,9 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// Okta Containment: acting on one org to contain an incident, with an API token of its own, made by an admin of its own
-/// with a custom role of only the permissions its operations take, kept apart from Okta Audit's so the audit token
-/// stays read-only. Everything that cuts off or restores access, removes a factor, a group, a role, a grant or a token,
+/// Okta Containment: acting on one org to contain an incident, signed in through an Okta app of its own as an admin of
+/// its own with a custom role of only the permissions its operations take, kept apart from Okta Audit's so the audit
+/// sign-in stays read-only. Everything that cuts off or restores access, removes a factor, a group, a role, a grant or a token,
 /// waits for the champion's approval, and each says how it is undone.
 ///
 /// Okta takes no condition on a change, such as an ETag, so what Pion read before acting may have changed by the time
@@ -17,7 +17,7 @@ extension Okta {
         Use Okta Containment to contain an account in one Okta org. Find the user with Okta Audit first, then read them \
         here with user, which lists their status, admin roles with each assignment's ID, groups, sign-in factors with \
         their IDs and how many app grants they hold: record it as evidence before acting. Give each user by their full \
-        Okta ID (00u…) or full login; Pion never acts on a short name, on the admin this connection's token belongs to, \
+        Okta ID (00u…) or full login; Pion never acts on a short name, on the admin signed in to this connection, \
         or on a super administrator unless allowSuperAdmin is set because the champion confirmed it. suspend stops sign-in \
         but leaves sessions already open: clear-sessions ends them and revokes the OAuth tokens Okta issued the user, \
         though not the sessions apps keep for themselves. A typical containment is suspend, clear-sessions, \
@@ -33,12 +33,14 @@ extension Okta {
         to add to the admin's role.
         """,
         iconName: "okta",
-        configuration: .connection(.init(endpointTemplate: "https://{domain}/api/v1",
-                                  fields: [ToolField(key: "domain", title: "Okta domain", placeholder: "acme.okta.com", kind: .host)],
-                                  tokenHeader: "Authorization", tokenScheme: "SSWS",
-                                  tokenRevocation: TokenRevocation(method: "DELETE", path: "api-tokens/current", authorized: true),
+        configuration: .connection(.init(endpointTemplate: "https://{domain}/api/v1", fields: fields,
+                                  oauth: oauth(scopes: containmentScopes), oauthClientField: "clientID", oauthHostField: "domain",
                                   adapter: "okta-containment")),
         setup: containmentSetup)
+
+    /// The scopes its operations take, each of which also reads what it covers: users, their lifecycle, sessions,
+    /// factors, password and grants, and the signed-in admin; group memberships; admin roles; API tokens.
+    static let containmentScopes = ["okta.users.manage", "okta.users.read.self", "okta.groups.manage", "okta.roles.manage", "okta.apiTokens.manage"]
 
     /// The custom role's permissions, by Okta's names, with what each lets this tool do.
     static let containmentPermissions: [(permission: String, use: String)] = [
@@ -49,12 +51,11 @@ extension Okta {
         ("okta.users.apitokens.clear", "revoke-api-token"),
     ]
 
-    static let containmentSetup = [
-        "In the Okta Admin Console, create a user for Pion Containment alone, such as pion-containment@example.com, apart from Okta Audit's, so each token has only its own tool's access.",
+    static let containmentSetup = appSteps("Pion Containment", scopes: containmentScopes) + [
+        "Okta allows a request only when both the app's scopes and the signed-in admin's role allow it, so the role is what limits this tool. Keep an admin for Pion Containment alone, such as pion-containment@example.com, apart from Okta Audit's.",
         "Under **Security › Administrators › Roles**, create a role such as **Pion Containment** with only these permissions: \(containmentPermissions.map { "`\($0.permission)`" }.joined(separator: ", ")). Leave out any whose action you do not want agents to have.",
-        "Under **Security › Administrators › Resources**, make a resource set of all users and all groups, and assign the role with it to that user. Never make it a super or organization administrator: its role, not Pion, limits what it can do. Revoking admin roles and users' app grants has no custom-role permission, so those two are refused unless you choose to give more.",
-        "Sign in to the Admin Console as that user, open **Security › API › Tokens**, choose **Create Token** and, where Okta offers it, limit it to your network zone.",
-        "Paste the token here with your org's domain, such as `acme.okta.com`. Then ask an agent to run check-access.",
+        "Under **Security › Administrators › Resources**, make a resource set of all users and all groups, and assign the role with it to that admin. Never make it a super or organization administrator. Revoking admin roles and users' app grants has no custom-role permission, so those two are refused unless you choose to give more.",
+        "Give your org's domain, such as `acme.okta.com`, and the app's **Client ID**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
 
     public static let containmentAdapter = OperationAdapter(operations: [
@@ -64,7 +65,7 @@ extension Okta {
 
     // MARK: Who is acted on
 
-    /// The user an action is for, as read just before it: never a short name, never the token's own admin, and never a
+    /// The user an action is for, as read just before it: never a short name, never the signed-in admin, and never a
     /// super administrator unless asked.
     struct Target {
         let user: User, roles: [Role]?, readAt: String
@@ -85,14 +86,15 @@ extension Okta {
             throw ServiceError.input("Nothing was changed: Okta resolved \(value) to \(user.profile?.login ?? "?") (\(user.id)), not exactly the user given.")
         }
         _ = try userID(user.id)
-        let me = try await get(service, ["users", "me"], as: User.self)
+        // The admin the sign-in is for, as Okta reads it from the access token.
+        let me = try await read(.signedIn) { try await get(service, ["users", "me"], as: User.self) }
         guard me.id != user.id else {
-            throw ServiceError.input("Nothing was changed: \(value) is the admin this connection's token belongs to, and Pion does not act on its own sign-in. Contain them in the Admin Console, and make Okta Containment a new token as another admin.")
+            throw ServiceError.input("Nothing was changed: \(value) is the admin signed in to this connection, and Pion does not act on its own sign-in. Contain them in the Admin Console, and sign Okta Containment in as another admin.")
         }
         var roles: [Role]?
         do { roles = try await get(service, ["users", user.id, "roles"], as: [Role].self) } catch {
             guard allowSuperAdmin == true else {
-                throw ServiceError.input("Nothing was changed: whether \(user.profile?.login ?? user.id) is a super administrator could not be read (\(error.localizedDescription)). Give the containment admin okta.iam.read, as check-access says, or set allowSuperAdmin once the champion confirms acting on a super administrator is intended.")
+                throw ServiceError.input("Nothing was changed: whether \(user.profile?.login ?? user.id) is a super administrator could not be read (\(error.localizedDescription)). Give the containment admin okta.iam.read and its Okta app okta.roles.manage, as check-access says, or set allowSuperAdmin once the champion confirms acting on a super administrator is intended.")
             }
         }
         if roles?.contains(where: { $0.type == "SUPER_ADMIN" }) == true, allowSuperAdmin != true {
@@ -460,17 +462,13 @@ extension Okta {
         struct Input: Decodable, Sendable { let token: String }
         static let name = "revoke-api-token"
         static let recovery = "Recovery: none. A revoked token is gone for good; whatever used it needs a new token made by an admin."
-        static let summary = "Revoke one API token, by its ID from Okta Audit's api-tokens, saying whose it was; never this connection's own. \(recovery)"
+        static let summary = "Revoke one API token, by its ID from Okta Audit's api-tokens, saying whose it was. This connection signs in through OAuth, not with an API token. \(recovery)"
         static let input = JSONSchema.object(["token": .string("The API token's ID, 00T….")], required: ["token"])
         static let readOnly = false
         static let destructive = true
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             let id = try Okta.tokenID(input.token)
-            let current = try await Okta.get(service, ["api-tokens", "current"], as: APITokens.Token.self)
-            guard current.id != id else {
-                throw ServiceError.input("Nothing was changed: that is this connection's own token. Sign Out of the tool in Settings › Tools revokes it.")
-            }
             let token = try await Okta.read(.tokens) { try await Okta.get(service, ["api-tokens", id], as: APITokens.Token.self) }
             let owner = token.userId.map { "made by \($0)" } ?? "of unknown maker"
             let (steps, _) = await Okta.inTurn([("revoke-api-token", "revoke API token \(token.name ?? id) [\(id)], \(owner)", {
@@ -500,12 +498,12 @@ extension Okta {
     struct ContainmentCheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
-        static let summary = "Reads the admin roles of the admin this token belongs to and says which containment operations they allow, what permission to add for the rest, and when they allow far more; and where the token may be used from. It changes nothing."
+        static let summary = "Reads the admin roles of the signed-in admin and says which containment operations they allow, what permission to add for the rest, and when they allow far more; and which scopes the sign-in holds. It changes nothing."
         static let input = JSONSchema.object([:])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             let (me, roles) = try await Okta.read(.admins) { try await Okta.signedIn(service) }
-            var lines = ["· The token acts as \(me.profile?.login ?? me.id), who holds \(roles.isEmpty ? "no admin role" : roles.map { $0.label ?? $0.type ?? "?" }.joined(separator: ", "))."]
+            var lines = ["· Signed in as \(me.profile?.login ?? me.id), who holds \(roles.isEmpty ? "no admin role" : roles.map { $0.label ?? $0.type ?? "?" }.joined(separator: ", "))."]
             let types = Set(roles.compactMap(\.type))
             var held = Set<String>(), unread: [String] = []
             for role in roles where role.type == "CUSTOM" {
@@ -513,7 +511,7 @@ extension Okta {
                 do { held.formUnion(try await Okta.permissions(custom, service)) } catch { unread.append("\(role.label ?? custom): \(error.localizedDescription)") }
             }
             if types.contains("SUPER_ADMIN") {
-                lines.append("⚠ The admin is a super administrator: every operation works, and far more than containment needs is possible with this token. Give Okta Containment an admin of its own with only the custom role its Setup Steps list.")
+                lines.append("⚠ The admin is a super administrator: every operation works, and whatever its scopes allow besides is possible with this sign-in. Sign Okta Containment in as an admin of its own with only the custom role its Setup Steps list.")
             } else {
                 if types.contains("ORG_ADMIN") {
                     lines.append("⚠ The admin is an organization administrator, which allows most of these and much more besides; a custom role with only the listed permissions is safer.")
@@ -530,7 +528,7 @@ extension Okta {
                 for line in unread { lines.append("· A custom role's permissions could not be read, so it counts as none: \(line)") }
                 lines.append("· The custom role's resource set decides which users and groups these apply to; Okta refuses users outside it, and lets only a super administrator act on another admin.")
             }
-            lines.append(await Okta.tokenNetwork(service))
+            lines.append(Okta.scopesLine(Okta.containmentScopes, service))
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
         }
     }

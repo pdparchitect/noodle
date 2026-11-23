@@ -325,23 +325,25 @@ struct ToolSetupSteps: View {
     }
 }
 
-/// The numbered steps with Copy, and in the popover Open in Window.
+/// The numbered steps with Copy, and in the popover Open in Window. In the popover the steps take their own height up
+/// to most of the screen and scroll past it, with the buttons kept in view; in the window they fill it and scroll.
 private struct ToolSetupStepsList: View {
     let steps: [String]
     var openInWindow: (() -> Void)?
+    var inWindow = false
+    @State private var stepsHeight: CGFloat?
+
+    /// The tallest the popover's steps grow before they scroll: most of the screen Settings is on.
+    static var popoverStepsMaxHeight: CGFloat { ((ToolSetupStepsWindow.settingsScreen?.visibleFrame.height ?? 800) * 0.7).rounded() }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("\(index + 1).").monospacedDigit().foregroundStyle(.secondary).frame(minWidth: 18, alignment: .trailing)
-                        Text(ToolSetupSteps.markdown(step)).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
+        VStack(spacing: 0) {
+            ScrollView {
+                ToolSetupStepsText(steps: steps)
+                    .onGeometryChange(for: CGFloat.self, of: \.size.height) { stepsHeight = $0 }
             }
-            .font(.callout)
-            .textSelection(.enabled)
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(height: inWindow ? nil : min(stepsHeight ?? Self.popoverStepsMaxHeight, Self.popoverStepsMaxHeight))
             HStack {
                 if let openInWindow { Button("Open in Window", action: openInWindow) }
                 Spacer()
@@ -350,32 +352,64 @@ private struct ToolSetupStepsList: View {
                     NSPasteboard.general.setString(ToolSetupSteps.plainText(steps), forType: .string)
                 }
             }
+            .padding(16)
         }
-        .padding(16)
-        .frame(width: 400)
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(width: inWindow ? nil : 400)
+        .frame(minWidth: inWindow ? 320 : nil, maxWidth: inWindow ? .infinity : nil,
+               minHeight: inWindow ? 160 : nil, maxHeight: inWindow ? .infinity : nil)
+    }
+}
+
+/// The numbered steps themselves, wrapping to the width they are given.
+private struct ToolSetupStepsText: View {
+    let steps: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("\(index + 1).").monospacedDigit().foregroundStyle(.secondary).frame(minWidth: 18, alignment: .trailing)
+                    Text(ToolSetupSteps.markdown(step)).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .font(.callout)
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding([.horizontal, .top], 16)
     }
 }
 
 /// A service's setup steps in a small window that floats in front of every app's windows until closed, so they stay
-/// in view while the person works through them in the service's console. One window for each service.
+/// in view while the person works through them in the service's console. One window for each service. It can be
+/// resized, the steps reflowing to its width and scrolling, and it opens no taller than most of the screen.
 @MainActor
 enum ToolSetupStepsWindow {
     private static var open: [String: NSPanel] = [:]
 
+    /// The screen holding the window the Setup Steps button is in, which is key while it is clicked.
+    static var settingsScreen: NSScreen? { NSApp.keyWindow?.screen ?? NSApp.mainWindow?.screen ?? NSScreen.main }
+
     static func show(title: String, steps: [String]) {
         if let panel = open[title] { panel.orderFrontRegardless(); return }
-        let panel = NSPanel(contentRect: .zero, styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+        let panel = NSPanel(contentRect: .zero, styleMask: [.titled, .closable, .resizable, .utilityWindow], backing: .buffered,
+                            defer: false)
         panel.title = "\(title) Setup Steps"
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
-        let hosting = NSHostingController(rootView: ToolSetupStepsList(steps: steps))
-        hosting.sizingOptions = [.preferredContentSize]
-        panel.contentViewController = hosting
-        panel.center()
+        panel.contentViewController = NSHostingController(rootView: ToolSetupStepsList(steps: steps, inWindow: true))
+        // Open at the steps' own height, with room for the buttons, but no taller than most of the screen.
+        let width: CGFloat = 440
+        let measure = NSHostingView(rootView: ToolSetupStepsText(steps: steps).frame(width: width))
+        let screen = settingsScreen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
+        panel.setContentSize(NSSize(width: width, height: min(measure.fittingSize.height + 64, (screen.height * 0.8).rounded())))
+        panel.contentMinSize = NSSize(width: 320, height: 160)
+        // Centred on the screen Settings is on, not the main one.
+        let size = panel.frame.size
+        panel.setFrameOrigin(NSPoint(x: (screen.midX - size.width / 2).rounded(), y: (screen.midY - size.height / 2).rounded()))
         open[title] = panel
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: panel, queue: .main) { _ in
             MainActor.assumeIsolated { open[title] = nil }

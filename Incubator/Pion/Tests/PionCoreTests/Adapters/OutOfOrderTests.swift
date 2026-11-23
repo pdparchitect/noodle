@@ -29,13 +29,13 @@ final class OutOfOrderTests: XCTestCase {
     }
 
     func testEntraRoleHolders() async throws {
-        let connection = try Entra.preset.makeConnection(name: "Entra", values: ["tenant": "contoso.onmicrosoft.com"])
+        let connection = try Entra.preset.makeConnection(name: "Entra", values: ["tenant": "contoso.onmicrosoft.com", "clientID": EntraTests.client])
         let service = service()
         let roles = (0..<20).map { #"{"id":"r-\#($0)","displayName":"Role \#($0)"}"# }
-        service.answers["/v1.0/directoryRoles"] = (200, #"{"value":[\#(roles.joined(separator: ","))]}"#)
-        for index in 0..<20 {
-            service.answers["/v1.0/directoryRoles/r-\(index)/members"] = (200, ##"{"value":[{"@odata.type":"#microsoft.graph.user","id":"u\##(index)","userPrincipalName":"u\##(index)@contoso.com"}]}"##)
-        }
+        service.answers["/v1.0/roleManagement/directory/roleDefinitions"] = (200, #"{"value":[\#(roles.joined(separator: ","))]}"#)
+        let held = (0..<20).map { ##"{"id":"a-\##($0)","principalId":"u\##($0)","roleDefinitionId":"r-\##($0)","directoryScopeId":"/","principal":{"@odata.type":"#microsoft.graph.user","id":"u\##($0)","userPrincipalName":"u\##($0)@contoso.com"}}"## }
+        service.answers["/v1.0/roleManagement/directory/roleAssignments"] = (200, #"{"value":[\#(held.joined(separator: ","))]}"#)
+        service.answers["/v1.0/roleManagement/directory/roleEligibilitySchedules"] = (200, #"{"value":[]}"#)
         for _ in 0..<Self.rounds {
             let holders = try await callTool(Entra.adapter, "role-holders", "{}", on: service, in: connection)
             XCTAssertTrue((0..<20).allSatisfy { holders.text.contains("Role \($0) (1): user u\($0)@contoso.com") }, holders.text)
@@ -43,7 +43,7 @@ final class OutOfOrderTests: XCTestCase {
     }
 
     func testEntraAppCredentials() async throws {
-        let connection = try Entra.preset.makeConnection(name: "Entra", values: ["tenant": "contoso.onmicrosoft.com"])
+        let connection = try Entra.preset.makeConnection(name: "Entra", values: ["tenant": "contoso.onmicrosoft.com", "clientID": EntraTests.client])
         let service = service()
         let app = #"{"value":[{"id":"a","displayName":"Payroll Sync","passwordCredentials":[{"keyId":"k1","startDateTime":"2026-01-01T00:00:00Z","endDateTime":"2027-01-01T00:00:00Z"}],"keyCredentials":[]}]}"#
         service.answers["/v1.0/applications"] = (200, app)
@@ -66,7 +66,7 @@ final class OutOfOrderTests: XCTestCase {
     }
 
     func testOktaAdminRoles() async throws {
-        let connection = try Okta.preset.makeConnection(name: "Okta", values: ["domain": "acme.okta.com"])
+        let connection = try Okta.preset.makeConnection(name: "Okta", values: ["domain": "acme.okta.com", "clientID": "0oaPionAudit"])
         let service = service()
         service.answers["/api/v1/iam/assignees/users"] = (200, #"{"value":[\#((0..<20).map { #"{"id":"00u\#($0)"}"# }.joined(separator: ","))]}"#)
         for index in 0..<20 {
