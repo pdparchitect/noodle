@@ -191,9 +191,9 @@ import UserNotifications
 
     nonisolated static func click(in response: UNNotificationResponse) -> Click {
         let info = response.notification.request.content.userInfo
-        var click = Click(conversationID: (info[conversationIDKey] as? String).flatMap(UUID.init),
-                          messageID: (info[messageIDKey] as? String).flatMap(UUID.init), isSignIn: info[signInKey] != nil)
-        if let id = (info[approvalKey] as? String).flatMap(UUID.init), let agent = (info[agentKey] as? String).flatMap(UUID.init) {
+        var click = Click(conversationID: (info[conversationIDKey] as? String).flatMap { UUID(uuidString: $0) },
+                          messageID: (info[messageIDKey] as? String).flatMap { UUID(uuidString: $0) }, isSignIn: info[signInKey] != nil)
+        if let id = (info[approvalKey] as? String).flatMap({ UUID(uuidString: $0) }), let agent = (info[agentKey] as? String).flatMap({ UUID(uuidString: $0) }) {
             click.approval = (id, agent)
             click.approve = response.actionIdentifier == approveAction ? true : response.actionIdentifier == declineAction ? false : nil
         }

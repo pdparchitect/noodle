@@ -42,11 +42,13 @@ private struct Heading: View {
 struct CaseRecordView: View {
     let model: RookModel
     let mission: Mission
+    @Environment(\.rookComputers) private var computers
 
     var body: some View {
         let record = model.caseRecord(mission.id)
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                if let computers { MissionComputersSection(model: model, mission: mission, computers: computers) }
                 if let note = mission.closingNote {
                     VStack(alignment: .leading, spacing: 6) {
                         Heading(title: "Closing Note")
@@ -287,6 +289,7 @@ private struct AuditRow: View {
         case "severity": "Severity Set"
         case "staff": "Team Changed"
         case "opened": "Opened"
+        case "computer": "Computers Changed"
         default: event.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
@@ -300,6 +303,7 @@ private struct AuditRow: View {
         case "severity": "exclamationmark.triangle"
         case "staff": "person.2.fill"
         case "opened": "flag.fill"
+        case "computer": "desktopcomputer"
         default: "circle.fill"
         }
     }

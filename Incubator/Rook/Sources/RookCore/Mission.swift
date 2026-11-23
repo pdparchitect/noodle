@@ -58,6 +58,12 @@ public struct Mission: Codable, Identifiable, Hashable, Sendable {
     public let openedAt: Date
     public var updatedAt: Date
     public var closedAt: Date?
+    /// The computers the champion assigned, in the order assigned. A computer may serve several Missions.
+    public var computers: [UUID] {
+        get { computerIDs ?? [] }
+        set { computerIDs = newValue.isEmpty ? nil : newValue }
+    }
+    private var computerIDs: [UUID]?
 
     public init(id: UUID, number: Int, title: String, objective: String, severity: Severity? = nil,
                 champion: String, source: String? = nil,
@@ -79,4 +85,19 @@ public struct Mission: Codable, Identifiable, Hashable, Sendable {
     /// What its severity reads as, "Unassessed" until the lead sets it.
     public var severityTitle: String { severity?.title ?? "Unassessed" }
 
+}
+
+/// Which computers each agent may use: those of every Mission it is in that is not closed.
+public enum MissionComputers {
+    /// The tool kind Noodle's computer tool is assigned under.
+    public static let kind = "computer"
+
+    /// `members` gives a Mission's agents, from its group conversation.
+    public static func assignments(missions: [Mission], members: (UUID) -> [UUID]) -> [UUID: Set<String>] {
+        var access: [UUID: Set<String>] = [:]
+        for mission in missions where !mission.isClosed && !mission.computers.isEmpty {
+            for agent in members(mission.id) { access[agent, default: []].formUnion(mission.computers.map(\.uuidString)) }
+        }
+        return access
+    }
 }

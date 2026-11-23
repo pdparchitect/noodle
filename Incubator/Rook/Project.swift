@@ -55,6 +55,24 @@ let trimSparkle: TargetScript = .post(script: """
        "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Sparkle-LICENSE.txt"
     """, name: "Trim Sparkle", basedOnDependencyAnalysis: false)
 
+/// Missions' computers run inside Rook, on Noodle Computer's engine: Linux computers boot its pinned kernel,
+/// so a build refuses any other, and their file helper is built for the guest. Windows and this Mac are left out.
+let computerRuntime: TargetScript = .post(script: """
+    set -euo pipefail
+    kernel="$SRCROOT/../../Computer/Resources/Runtime/vmlinux-arm64"
+    if [ ! -f "$kernel" ] || [ "$(stat -f %z "$kernel")" -lt 1000000 ]; then
+        echo "error: Missing Noodle Computer's runtime kernel. See Computer/README.md (git lfs pull)." >&2; exit 1
+    fi
+    [ "$(shasum -a 256 "$kernel" | awk '{print $1}')" = 08c33f0a0580e92a7ed08e4d40d593a7dd4ca738ee5906b06f329d973d37e616 ] || {
+        echo "error: Noodle Computer's runtime kernel does not match its pinned checksum." >&2; exit 1
+    }
+    export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:/usr/local/go/bin"
+    command -v go >/dev/null || { echo "error: Building Rook requires Go for the Linux guest file helper." >&2; exit 1; }
+    export GOCACHE="$DERIVED_FILE_DIR/GoCache"
+    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' \\
+        -o "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Runtime/noodle-files" "$SRCROOT/../../Computer/GuestFiles/main.go"
+    """, name: "Computer Runtime", basedOnDependencyAnalysis: false)
+
 /// A command-line helper the app runs from Contents/Helpers. The app signs it when it embeds it.
 func helper(_ name: String, sources: SourceFilesList, dependencies: [TargetDependency],
             settings: SettingsDictionary = [:]) -> Target {
@@ -80,6 +98,8 @@ let project = Project(
         .local(path: "../../Shared/HubLink"),
         .local(path: "../../Shared/Wallpaper"),
         .local(path: "../../Shared/Brand"),
+        .local(path: "../../Computer"),
+        .local(path: "../../Computer/Bridge"),
         .remote(url: "https://github.com/sparkle-project/Sparkle", requirement: .exact("2.9.4")),
     ],
     settings: .settings(
@@ -194,9 +214,11 @@ let project = Project(
                 "../../Support/Assets.xcassets",
                 .folderReference(path: "../../Support/ToolIcons"),
                 "Support/AppSymbol.svg",
+                .folderReference(path: "../../Computer/Resources/Runtime"),
+                "../../Computer/Support/KERNEL-NOTICE.txt",
             ],
             entitlements: .file(path: "Support/Rook.entitlements"),
-            scripts: [embedHelpers, trimSparkle],
+            scripts: [embedHelpers, trimSparkle, computerRuntime],
             dependencies: [
                 .package(product: "RookCore"),
                 .package(product: "NoodleBrand"),
@@ -211,6 +233,10 @@ let project = Project(
                 .package(product: "NoodleWallpaper"),
                 .package(product: "Sparkle"),
                 .package(product: "NoodleSharing"),
+                .package(product: "ComputerEngine"),
+                .package(product: "ComputerCore"),
+                .package(product: "ComputerBridge"),
+                .package(product: "NoodleComputerTools"),
                 .target(name: "NoodleAgentHost"),
                 .target(name: "messenger"),
                 .target(name: "NoodleAppleAgent"),

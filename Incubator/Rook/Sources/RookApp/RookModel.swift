@@ -91,6 +91,8 @@ import UniformTypeIdentifiers
     private var toolBroker: ToolBridgeBroker?
     private let tools = ToolProviderRegistry()
     private let toolAssignments = ToolAssignmentStore()
+    /// Which computers each agent may use, as last published to the broker.
+    private var computerAccess: [UUID: Set<String>]?
     private var loop: Task<Void, Never>?
     private var transcriptRevisions: [UUID: TranscriptRevision] = [:]
     /// Pinned conversations, in the order pinned, kept where Noodle keeps them.
@@ -155,6 +157,29 @@ import UniformTypeIdentifiers
             self?.toolBroker?.synchronizeSkills()
         }
         connectionsController.refreshSkills = { [weak self] in await self?.toolBroker?.synchronizeSkills().value }
+    }
+
+    /// Noodle's computer tool over the computers Rook runs. The app hands it over; scenarios and tests run none.
+    func registerComputerTool(_ provider: any ToolProvider) {
+        try? tools.register(provider)
+        computerAccess = nil
+        publishComputerAccess()
+    }
+
+    /// Assigns a computer to a Mission or takes it away, as the champion.
+    func setComputer(_ computer: UUID, named name: String, assigned: Bool, in mission: Mission) {
+        do { try store.setComputer(computer, named: name, assigned: assigned, in: mission.id, by: .champion(champion)) }
+        catch { problem = error.localizedDescription }
+    }
+
+    /// Tells the broker which computers each agent may use: those of the open Missions it is in.
+    private func publishComputerAccess() {
+        let members = Dictionary(conversations.map { ($0.id, $0.participantIDs) }) { first, _ in first }
+        let access = MissionComputers.assignments(missions: missions) { members[$0] ?? [] }
+        guard access != computerAccess else { return }
+        computerAccess = access
+        toolAssignments.replace(MissionComputers.kind, with: access)
+        toolBroker?.synchronizeSkills()
     }
 
     // MARK: Running
@@ -354,11 +379,13 @@ import UniformTypeIdentifiers
         runtime.archivedAgentIDs = Set(allAgents.filter { $0.archivedAt != nil }.map(\.id))
         let loadedConversations = allConversations.filter { !$0.isArchived(among: allAgents) }
         if loadedConversations != conversations { conversations = loadedConversations }
+        publishComputerAccess()
     }
 
     private func reloadRook() {
         let loaded = store.missions()
         if loaded != missions { missions = loaded }
+        publishComputerAccess()
         caseRevision += 1
     }
 

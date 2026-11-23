@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Computers: Rook runs Linux computers itself and reaches servers over SSH. Make them in Settings › Computers and add them to a Mission from its inspector; its agents use them, run commands and move files, only while the Mission is open. One computer can serve several Missions.
+
 ### Changed
 
 - Restricted agents are siloed: they reach the network only for their harness's own model services and sign-in, so a web page, a package download or any other address a tool asks for is refused. An agent given unrestricted access is not siloed.

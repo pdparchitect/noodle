@@ -27,6 +27,7 @@ struct RookApp: App {
             MainWindow(model: delegate.model, window: delegate.window, setup: delegate.settings.setup)
                 .environment(delegate.calls)
                 .environment(delegate.settings)
+                .environment(\.rookComputers, delegate.computers)
                 .frame(minWidth: 980, minHeight: 640)
                 // Rook's background effect over the window's own background, frosted or solid.
                 .background { Backdrop().ignoresSafeArea() }
@@ -53,6 +54,7 @@ struct RookApp: App {
             ConversationWindow(model: delegate.model, selection: $id)
                 .environment(delegate.calls)
                 .environment(delegate.settings)
+                .environment(\.rookComputers, delegate.computers)
                 .frame(minWidth: 720, minHeight: 540)
                 .background { Backdrop().ignoresSafeArea() }
                 .modifier(WindowSurfaceBackground())
@@ -79,6 +81,7 @@ struct RookApp: App {
             RookSettingsView(host: delegate.settings)
                 .environment(delegate.calls)
                 .environment(delegate.settings)
+                .environment(\.rookComputers, delegate.computers)
         }
         .windowResizability(.contentSize)
     }
@@ -87,6 +90,9 @@ struct RookApp: App {
 @MainActor final class RookDelegate: NSObject, NSApplicationDelegate {
     let model: RookModel
     let window = WindowState()
+    /// The computers Missions use, run in Rook; nil in a scenario, or when their library could not open.
+    let computers: RookComputers?
+    private var computersFailure: String?
     lazy var settings = RookSettingsHost(model: model)
     /// What Rook keeps on disk, for the Usage window.
     lazy var storage: StorageUsage = {
@@ -111,6 +117,7 @@ struct RookApp: App {
         #if ROOK_DEV_HOOKS
         if let scenario = ScenarioSession.launch() {
             model = scenario.model
+            computers = nil
             super.init()
             scenario.window = window
             return
@@ -136,6 +143,11 @@ struct RookApp: App {
         model = RookModel(root: HarnessStorage.dataRoot(applicationSupport: applicationSupport),
                           messenger: FileManager.default.isExecutableFile(atPath: messenger.path) ? messenger : nil,
                           hidesInstalledHarnesses: rehearsing)
+        do { computers = try RookComputers(model: model, root: model.repository.rootURL.appendingPathComponent("Computers", isDirectory: true)) }
+        catch {
+            computers = nil
+            computersFailure = "Rook could not open its computers: \(error.localizedDescription)"
+        }
         super.init()
     }
 
@@ -166,13 +178,16 @@ struct RookApp: App {
             guard let self else { return NSView() }
             let view = NSHostingView(rootView: ConversationWindow(model: self.model, selection: .constant(id))
                 .environment(self.calls).environment(self.settings).environment(\.floatingPanelCommands, commands)
+                .environment(\.rookComputers, self.computers)
                 .background { FloatingWindowBackdrop().ignoresSafeArea() })
             // The panel owns its size; the conversation must not resize it to fit.
             view.sizingOptions = []
             return view
         }
         if !model.isScripted { connectNotifications() }
+        if let computers { model.registerComputerTool(computers.tool) }
         model.start()
+        if let computersFailure { model.problem = computersFailure }
         if !model.isScripted { calls.ringPendingCalls() }
         // As in Noodle, what floated when Rook quit floats again.
         FloatingConversations.shared.retain(Set(model.conversations.map(\.id)))

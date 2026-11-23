@@ -16,6 +16,9 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- Missions' Linux computers, run by Noodle Computer's engine inside Rook. -->
+	<key>com.apple.security.virtualization</key>
+	<true/>
 	<!-- The harnesses a person installed themselves, as Noodle reads them. -->
 	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
 	<array>

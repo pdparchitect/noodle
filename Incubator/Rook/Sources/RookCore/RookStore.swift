@@ -116,6 +116,29 @@ public final class RookStore: @unchecked Sendable {
         }
     }
 
+    // MARK: Computers
+
+    /// Assigns a computer to a Mission or takes it away. Only the champion does; agents never choose their computers.
+    public func setComputer(_ computer: UUID, named name: String, assigned: Bool, in id: UUID, by actor: CaseActor,
+                            now: Date = Date()) throws {
+        guard case .champion = actor else { throw CaseError("Only the champion assigns computers to a Mission.") }
+        try update(id, by: actor, now: now) { mission in
+            guard mission.computers.contains(computer) != assigned else { return [] }
+            if assigned { mission.computers.append(computer) } else { mission.computers.removeAll { $0 == computer } }
+            return [("computer", "\(assigned ? "Added" : "Removed") \(name).")]
+        }
+    }
+
+    /// Takes a deleted computer out of every Mission that had it.
+    public func forgetComputer(_ computer: UUID, named name: String, by actor: CaseActor, now: Date = Date()) throws {
+        for mission in missions() where mission.computers.contains(computer) {
+            try update(mission.id, by: actor, now: now) { mission in
+                mission.computers.removeAll { $0 == computer }
+                return [("computer", "Removed \(name), which was deleted.")]
+            }
+        }
+    }
+
     // MARK: Case record
 
     public func caseRecord(_ id: UUID) -> CaseRecord {

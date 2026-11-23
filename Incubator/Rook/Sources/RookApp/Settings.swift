@@ -9,7 +9,7 @@ import SwiftUI
 
 /// Gives Noodle's shared Harness, Agents and Tools settings what they need from Rook.
 @MainActor @Observable final class RookSettingsHost: BotSettingsHost {
-    enum Tab: Hashable { case general, conversation, harnesses, agents, groups, keybindings, permissions, updates }
+    enum Tab: Hashable { case general, conversation, harnesses, agents, groups, computers, keybindings, permissions, updates }
 
     let model: RookModel
     let setup: HarnessSetupController
@@ -59,6 +59,7 @@ import SwiftUI
 struct RookSettingsView: View {
     @Bindable var host: RookSettingsHost
     @ObservedObject private var appUpdater = AppUpdater.shared
+    @Environment(\.rookComputers) private var computers
     private let permissions = AppPermissionChecker.shared
     /// As Noodle's: wide enough for every tab in the toolbar, none left in its overflow menu.
     private static let width: CGFloat = 740
@@ -89,6 +90,12 @@ struct RookSettingsView: View {
                 .settingsContentSize(width: Self.width)
                 .tabItem { Label("Groups", systemImage: "person.3") }
                 .tag(RookSettingsHost.Tab.groups)
+            if let computers {
+                ComputersSettingsView(computers: computers)
+                    .settingsContentSize(width: Self.width)
+                    .tabItem { Label("Computers", systemImage: "desktopcomputer") }
+                    .tag(RookSettingsHost.Tab.computers)
+            }
             KeybindingsSettingsView(sections: [
                 KeybindingsSection(title: "Conversations", actions: [RookShortcuts.newMission, RookShortcuts.newGroup, RookShortcuts.newAgent,
                                                                      RookShortcuts.searchConversations,
