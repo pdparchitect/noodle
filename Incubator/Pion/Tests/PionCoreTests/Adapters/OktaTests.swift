@@ -28,6 +28,9 @@ final class OktaTests: XCTestCase {
         XCTAssertEqual(acme.tokenHeader, "Authorization")
         XCTAssertEqual(acme.tokenScheme, "SSWS")
         XCTAssertEqual(acme.adapter, "okta")
+        XCTAssertEqual(Okta.preset.name, "Okta Audit")
+        XCTAssertEqual(Okta.preset.id, "bdc65def-9c77-4503-9d57-eac000822cce", "connections made before keep working")
+        XCTAssertEqual(Okta.adapter.watchedTool, "security-events")
         XCTAssertNotEqual(acme.id, contoso.id)
         XCTAssertNotNil(PionAdapters.all["okta"])
     }
@@ -50,12 +53,14 @@ final class OktaTests: XCTestCase {
     func testAUsersGroupsAppsAndFactors() async throws {
         let service = FakeService()
         service.answers["/api/v1/users/00u1/groups"] = (200, #"[{"id":"00g1","profile":{"name":"Finance","description":"Payroll team"}}]"#)
-        service.answers["/api/v1/users/00u1/appLinks"] = (200, #"[{"label":"Workday","appName":"workday","appInstanceId":"0oa1"}]"#)
+        service.answers["/api/v1/users/00u1"] = (200, user)
+        service.answers["/api/v1/apps"] = (200, #"[{"id":"0oa1","label":"Workday","name":"workday","status":"ACTIVE"}]"#)
         service.answers["/api/v1/users/00u1/factors"] = (200, #"[{"id":"opf1","factorType":"push","provider":"OKTA","status":"ACTIVE","created":"2025-01-01T00:00:00.000Z"}]"#)
         let groups = try await call("user-groups", #"{"user":"00u1"}"#, on: service)
         XCTAssertTrue(groups.text.contains("Finance"), groups.text)
         let apps = try await call("user-apps", #"{"user":"00u1"}"#, on: service)
         XCTAssertEqual((apps.structured?["apps"] as? [[String: Any]])?.first?["label"] as? String, "Workday")
+        XCTAssertEqual(queryItems(service.requests.last)["filter"], #"user.id eq "00u1""#, "every app assigned, hidden ones and those through groups too")
         let factors = try await call("user-factors", #"{"user":"00u1"}"#, on: service)
         XCTAssertTrue(factors.text.contains("push"), factors.text)
         XCTAssertEqual((factors.structured?["factors"] as? [[String: Any]])?.first?["status"] as? String, "ACTIVE")
@@ -64,13 +69,15 @@ final class OktaTests: XCTestCase {
     func testSignInEventsAreFilteredOnTheServiceNewestFirst() async throws {
         let service = FakeService()
         service.answers["/api/v1/logs"] = (200, #"[{"uuid":"e1","published":"2026-11-14T09:06:00.000Z","eventType":"user.session.start","displayMessage":"User login to Okta","outcome":{"result":"SUCCESS"},"actor":{"alternateId":"m.okafor@acme.example","displayName":"Mira Okafor"},"client":{"ipAddress":"203.0.113.77","geographicalContext":{"city":"Lagos","country":"Nigeria"},"userAgent":{"rawUserAgent":"Mozilla/5.0"}}}]"#)
-        let events = try await call("sign-in-events", #"{"user":"m.okafor@acme.example","ip":"203.0.113.77","failuresOnly":true,"since":"2026-11-13T00:00:00Z","limit":20}"#, on: service)
+        let since = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-3 * 86_400))
+        let events = try await call("sign-in-events", #"{"user":"m.okafor@acme.example","ip":"203.0.113.77","failuresOnly":true,"since":"\#(since)","limit":20}"#, on: service)
         XCTAssertFalse(events.isError, events.text)
         XCTAssertTrue(events.text.contains("203.0.113.77"), events.text)
         XCTAssertEqual((events.structured?["events"] as? [[String: Any]])?.first?["city"] as? String, "Lagos")
         let sent = query(service.requests.first)
         XCTAssertEqual(sent["filter"], #"actor.alternateId eq "m.okafor@acme.example" and client.ipAddress eq "203.0.113.77" and outcome.result eq "FAILURE""#)
-        XCTAssertEqual(sent["since"], "2026-11-13T00:00:00Z")
+        XCTAssertEqual(sent["since"], since)
+        XCTAssertNotNil(sent["until"], "always bounded, so Okta's pages end")
         XCTAssertEqual(sent["limit"], "20")
         XCTAssertEqual(sent["sortOrder"], "DESCENDING")
 
@@ -81,7 +88,8 @@ final class OktaTests: XCTestCase {
     func testValuesThatCouldChangeAFilterAreRefused() async throws {
         let service = FakeService()
         for arguments in [#"{"user":"x\" or actor.id pr \"y"}"#, #"{"ip":"not an ip"}"#, #"{"since":"yesterday"}"#,
-                          #"{"eventType":"a\\b"}"#, #"{"limit":500}"#] {
+                          #"{"eventType":"a\\b"}"#, #"{"limit":500}"#, #"{"target":"x\" or target.id pr \"y"}"#,
+                          #"{"since":"2020-01-01T00:00:00Z"}"#, #"{"since":"2026-11-20T00:00:00Z","until":"2026-11-19T00:00:00Z"}"#] {
             let result = try await call("sign-in-events", arguments, on: service)
             XCTAssertTrue(result.isError, arguments)
         }
@@ -133,6 +141,166 @@ final class OktaTests: XCTestCase {
         let refused = try await callTool(Okta.adapter, "admin-roles", "{}", on: service, in: acme)
         XCTAssertTrue(refused.isError)
         XCTAssertTrue(refused.text.contains("View roles, resources, and admin assignments"), refused.text)
+    }
+
+    // MARK: Honest listings
+
+    private func link(_ query: String, host: String = "acme.okta.com", path: String = "/api/v1/users/00u1/groups") -> [String: String] {
+        ["Link": #"<https://\#(host)\#(path)?limit=200>; rel="self", <https://\#(host)\#(path)?\#(query)>; rel="next""#]
+    }
+
+    /// Every page is read, each asked of the org's own host with only Okta's cursor taken from its link.
+    func testListingsFollowOktaNextLinksOnlyOnTheOrgsOwnHost() async throws {
+        let service = FakeService()
+        let path = "/api/v1/users/00u1/groups"
+        service.sequences[path] = [(200, #"[{"id":"00g1","type":"OKTA_GROUP","profile":{"name":"Finance"}}]"#),
+                                   (200, #"[{"id":"00g2","type":"APP_GROUP","profile":{"name":"AD Admins"}}]"#)]
+        service.sequenceHeaders[path] = [link("after=00g1&limit=200&evil=1"), [:]]
+        let groups = try await call("user-groups", #"{"user":"00u1"}"#, on: service)
+        XCTAssertFalse(groups.isError, groups.text)
+        XCTAssertTrue(groups.text.contains("Finance") && groups.text.contains("AD Admins (from an app)"), groups.text)
+        XCTAssertEqual(groups.structured?["complete"] as? Bool, true)
+        XCTAssertEqual(service.requests.count, 2)
+        XCTAssertEqual(queryItems(service.requests.last), ["after": "00g1", "limit": "200"], "only the cursor is taken from Okta's link")
+        XCTAssertTrue(service.requests.allSatisfy { $0.url?.host == "acme.okta.com" && $0.url?.path == path })
+
+        // A next link anywhere else is never followed, and the result says it stopped.
+        for elsewhere in [link("after=x", host: "evil.example"), link("after=x", path: "/api/v1/users"), link("cursor=x")] {
+            let other = FakeService()
+            other.sequences[path] = [(200, #"[{"id":"00g1","type":"OKTA_GROUP","profile":{"name":"Finance"}}]"#)]
+            other.sequenceHeaders[path] = [elsewhere]
+            let cut = try await call("user-groups", #"{"user":"00u1"}"#, on: other)
+            XCTAssertEqual(other.requests.count, 1)
+            XCTAssertTrue(cut.text.contains("read so far") && cut.text.contains("Incomplete: stopped at page 2 reading groups"), cut.text)
+            XCTAssertEqual(cut.structured?["complete"] as? Bool, false)
+        }
+    }
+
+    /// Find-user, grants, admins and tokens each say when they kept less than matched.
+    func testEveryListingSaysWhenItStoppedEarlyOrMatchedMore() async throws {
+        let service = FakeService()
+        service.sequences["/api/v1/users"] = [(200, "[\(user)]")]
+        service.sequenceHeaders["/api/v1/users"] = [link("after=00u1&limit=1&q=mira", path: "/api/v1/users")]
+        let found = try await call("find-user", #"{"query":"mira","limit":1}"#, on: service)
+        XCTAssertTrue(found.text.contains("More users match than the 1 kept"), found.text)
+        XCTAssertEqual(service.requests.count, 1, "find-user reads one page and says more match")
+
+        // Admins come in pages whose next link is in the body.
+        let admins = FakeService()
+        admins.sequences["/api/v1/iam/assignees/users"] = [
+            (200, #"{"value":[{"id":"00u1"}],"_links":{"next":{"href":"https://acme.okta.com/api/v1/iam/assignees/users?after=00u1&limit=100"}}}"#),
+            (200, #"{"value":[{"id":"00u2"}],"_links":{}}"#)]
+        for id in ["00u1", "00u2"] {
+            admins.answers["/api/v1/users/\(id)/roles"] = (200, #"[{"id":"ra\#(id)","type":"ORG_ADMIN","label":"Organization Administrator","assignmentType":"USER"}]"#)
+        }
+        admins.answers["/api/v1/users/00u1"] = (200, #"{"id":"00u1","profile":{"login":"one@acme.example"}}"#)
+        admins.answers["/api/v1/users/00u2"] = (429, #"{"errorCode":"E0000047","errorSummary":"API call exceeded rate limit due to too many requests."}"#)
+        let listed = try await callTool(Okta.adapter, "admin-roles", "{}", on: admins, in: acme)
+        XCTAssertFalse(listed.isError, listed.text)
+        XCTAssertTrue(listed.text.contains("one@acme.example") && listed.text.contains("00u2: Organization Administrator"), listed.text)
+        XCTAssertTrue(listed.text.contains("1 admin's login could not be read"), listed.text)
+        XCTAssertEqual(queryItems(admins.requests.first { $0.url?.path == "/api/v1/iam/assignees/users" && queryItems($0)["after"] != nil }), ["after": "00u1", "limit": "100"])
+
+        // Grants and tokens past the first page are read too.
+        let grants = FakeService()
+        grants.sequences["/api/v1/users/00u1/grants"] = [(200, #"[{"id":"oag1","clientId":"0oa-crm","source":"END_USER"}]"#), (200, #"[{"id":"oag2","clientId":"0oa-mail","source":"ADMIN"}]"#)]
+        grants.sequenceHeaders["/api/v1/users/00u1/grants"] = [link("after=oag1&expand=scope&limit=200", path: "/api/v1/users/00u1/grants"), [:]]
+        let read = try await callTool(Okta.adapter, "user-grants", #"{"user":"00u1"}"#, on: grants, in: acme)
+        XCTAssertTrue(read.text.contains("0oa-crm") && read.text.contains("0oa-mail") && read.text.contains("granted by an admin"), read.text)
+        let tokens = FakeService()
+        tokens.sequences["/api/v1/api-tokens"] = [(200, #"[{"id":"00T1","name":"one","userId":"00u1"}]"#), (200, #"[{"id":"00T2","name":"two","userId":"00u1"}]"#)]
+        tokens.sequenceHeaders["/api/v1/api-tokens"] = [link("after=00T1&limit=200", path: "/api/v1/api-tokens"), [:]]
+        tokens.answers["/api/v1/users/00u1"] = (200, #"{"id":"00u1","profile":{"login":"it@acme.example"}}"#)
+        let all = try await callTool(Okta.adapter, "api-tokens", "{}", on: tokens, in: acme)
+        XCTAssertTrue(all.text.contains("one [00T1]") && all.text.contains("two [00T2]"), all.text)
+    }
+
+    /// Okta's System Log search is bounded, newest first, and says when more matched than it kept.
+    func testSignInEventsSayWhenMoreMatchedThanKept() async throws {
+        let service = FakeService()
+        service.sequences["/api/v1/logs"] = [(200, #"[{"uuid":"e1","published":"2026-11-14T09:06:00.000Z","eventType":"user.mfa.factor.reset_all","outcome":{"result":"SUCCESS"},"actor":{"alternateId":"admin@acme.example"},"target":[{"id":"00u1","type":"User","alternateId":"m.okafor@acme.example"}]}]"#)]
+        service.sequenceHeaders["/api/v1/logs"] = [link("after=e1&limit=1", path: "/api/v1/logs")]
+        let events = try await call("sign-in-events", #"{"target":"m.okafor@acme.example","limit":1}"#, on: service)
+        XCTAssertFalse(events.isError, events.text)
+        XCTAssertTrue(events.text.contains("on m.okafor@acme.example") && events.text.contains("More events match than the 1 kept"), events.text)
+        XCTAssertEqual(events.structured?["complete"] as? Bool, false)
+        XCTAssertEqual(queryItems(service.requests.first)["filter"], #"(target.id eq "m.okafor@acme.example" or target.alternateId eq "m.okafor@acme.example")"#)
+        XCTAssertEqual(service.requests.count, 1)
+    }
+
+    /// When Okta rate limits, the answer says when its limit resets.
+    func testARateLimitSaysWhenOktaResetsIt() async throws {
+        let service = FakeService()
+        let reset = Int(Date().timeIntervalSince1970) + 42
+        service.responseHeaders = ["X-Rate-Limit-Reset": String(reset)]
+        service.answers["/api/v1/users/00u1/factors"] = (429, #"{"errorCode":"E0000047","errorSummary":"API call exceeded rate limit due to too many requests."}"#)
+        let limited = try await call("user-factors", #"{"user":"00u1"}"#, on: service)
+        XCTAssertTrue(limited.isError)
+        XCTAssertTrue(limited.text.contains("rate limiting") && limited.text.contains("resets at \(Okta.iso(Date(timeIntervalSince1970: Double(reset))))")
+                      && limited.text.contains("E0000047"), limited.text)
+    }
+
+    /// check-access tries each read once, names the token's admin and their roles, and warns when they could change the org.
+    func testCheckAccessSaysWhatWorksAndWarnsWhenTheTokenCouldChangeTheOrg() async throws {
+        let service = FakeService()
+        for path in ["/api/v1/users", "/api/v1/groups", "/api/v1/apps", "/api/v1/logs"] { service.answers[path] = (200, "[]") }
+        service.answers["/api/v1/iam/assignees/users"] = (403, #"{"errorCode":"E0000006","errorSummary":"You do not have permission to perform the requested action"}"#)
+        service.answers["/api/v1/api-tokens"] = (200, "[]")
+        service.answers["/api/v1/users/me"] = (200, #"{"id":"00upion","profile":{"login":"pion-audit@acme.example"}}"#)
+        service.answers["/api/v1/users/00upion/roles"] = (200, #"[{"id":"ra1","type":"READ_ONLY_ADMIN","label":"Read Only Administrator"},{"id":"ra2","type":"CUSTOM","label":"Pion Audit","role":"cr0audit"}]"#)
+        service.answers["/api/v1/iam/roles/cr0audit/permissions"] = (200, #"{"permissions":[{"label":"okta.iam.read"},{"label":"okta.users.apitokens.read"}]}"#)
+        service.answers["/api/v1/api-tokens/current"] = (200, #"{"id":"00Tpion","name":"pion","network":{"connection":"ANYWHERE"}}"#)
+        let checked = try await call("check-access", "{}", on: service)
+        XCTAssertFalse(checked.isError, checked.text)
+        XCTAssertTrue(checked.text.contains("✓ System Log") && checked.text.contains("✗ Admin assignments") && checked.text.contains("okta.iam.read"), checked.text)
+        XCTAssertTrue(checked.text.contains("pion-audit@acme.example") && checked.text.contains("✓ The token's admin cannot change the org"), checked.text)
+        XCTAssertTrue(checked.text.contains("works from anywhere"), checked.text)
+        XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" }, "it changes nothing")
+
+        service.answers["/api/v1/iam/roles/cr0audit/permissions"] = (200, #"{"permissions":[{"label":"okta.iam.read"},{"label":"okta.users.lifecycle.suspend"}]}"#)
+        let broad = try await call("check-access", "{}", on: service)
+        XCTAssertTrue(broad.text.contains("⚠ The token's admin can change the org: okta.users.lifecycle.suspend"), broad.text)
+    }
+
+    /// A page that fails after others keeps what they held, saying where and why it stopped; the first failing fails
+    /// the call.
+    func testAListingThatFailsPartWayKeepsWhatItReadAndSaysWhere() async throws {
+        let service = FakeService()
+        let path = "/api/v1/users/00u1/grants"
+        service.sequences[path] = [(200, #"[{"id":"oag1","clientId":"0oa-crm","source":"END_USER"}]"#),
+                                   (500, #"{"errorCode":"E0000009","errorSummary":"Internal Server Error"}"#)]
+        service.sequenceHeaders[path] = [link("after=oag1&limit=200", path: path), [:]]
+        let partial = try await call("user-grants", #"{"user":"00u1"}"#, on: service)
+        XCTAssertFalse(partial.isError, partial.text)
+        XCTAssertTrue(partial.text.contains("0oa-crm"), "the first page's evidence is kept: \(partial.text)")
+        XCTAssertTrue(partial.text.contains("Incomplete: stopped at page 2 reading grants because") && partial.text.contains("HTTP 500"), partial.text)
+        XCTAssertEqual(partial.structured?["complete"] as? Bool, false)
+
+        let first = FakeService()
+        first.answers[path] = (500, #"{"errorCode":"E0000009","errorSummary":"Internal Server Error"}"#)
+        let failed = try await call("user-grants", #"{"user":"00u1"}"#, on: first)
+        XCTAssertTrue(failed.isError, failed.text)
+    }
+
+    /// An answer that is not the listing Okta gives, such as an envelope without its value, is an error, never "nothing
+    /// found".
+    func testAMalformedListingIsAnErrorNotAnEmptyResult() async throws {
+        for body in [#"{"_links":{}}"#, #"{"value":null}"#, #"{"value":{"id":"00u1"}}"#, #"{"errorSummary":"odd"}"#] {
+            let service = FakeService()
+            service.answers["/api/v1/iam/assignees/users"] = (200, body)
+            let admins = try await call("admin-roles", "{}", on: service)
+            XCTAssertTrue(admins.isError, body)
+            XCTAssertFalse(admins.text.contains("Nobody holds"), admins.text)
+        }
+        let service = FakeService()
+        service.answers["/api/v1/users/00u1/groups"] = (200, #"{"groups":[]}"#)
+        let groups = try await call("user-groups", #"{"user":"00u1"}"#, on: service)
+        XCTAssertTrue(groups.isError && !groups.text.contains("in no groups"), groups.text)
+        // An empty array is an honest empty listing.
+        service.answers["/api/v1/users/00u1/groups"] = (200, "[]")
+        let none = try await call("user-groups", #"{"user":"00u1"}"#, on: service)
+        XCTAssertFalse(none.isError, none.text)
+        XCTAssertTrue(none.text.contains("in no groups"), none.text)
     }
 }
 

@@ -13,6 +13,8 @@ final class FakeService: ServiceAccess, @unchecked Sendable {
     var sequences: [String: [(Int, String)]] = [:]
     /// Headers every answer carries, such as a cookie the service sets.
     var responseHeaders: [String: String] = [:]
+    /// Headers for the answers of `sequences`, given in turn with them, such as a link to the next page.
+    var sequenceHeaders: [String: [[String: String]]] = [:]
     /// For an AWS connection: the accounts its sign-in covers, and each one a lookup signed as, in turn.
     var awsAccountList = [AWSAccount(id: "111111111111", name: "Production", email: nil)]
     var awsAccountsUsed: [String] = []
@@ -38,13 +40,16 @@ final class FakeService: ServiceAccess, @unchecked Sendable {
         // An answer for the request's target or action first, as AWS names its calls, then an exact one, then one for
         // the path whatever the query.
         let candidates = [request.value(forHTTPHeaderField: "X-Amz-Target"), action.map { "action:" + $0 }, key, request.url!.path]
-        let (status, body) = lock.withLock {
+        let (status, body, headers) = lock.withLock {
             if let path = candidates.compactMap({ $0 }).first(where: { self.sequences[$0]?.isEmpty == false }) {
-                return self.sequences[path]!.removeFirst()
+                let (status, body) = self.sequences[path]!.removeFirst()
+                let extra = self.sequenceHeaders[path]?.isEmpty == false ? self.sequenceHeaders[path]!.removeFirst() : [:]
+                return (status, body, self.responseHeaders.merging(extra) { $1 })
             }
-            return candidates.lazy.compactMap { $0 }.compactMap { self.answers[$0] }.first ?? (404, #"{"error":"NotFound"}"#)
+            let (status, body) = candidates.lazy.compactMap { $0 }.compactMap { self.answers[$0] }.first ?? (404, #"{"error":"NotFound"}"#)
+            return (status, body, self.responseHeaders)
         }
-        return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: responseHeaders)!)
+        return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: headers)!)
     }
 }
 
