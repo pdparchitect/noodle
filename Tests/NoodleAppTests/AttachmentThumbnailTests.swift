@@ -1,5 +1,6 @@
 import AppKit
 import ImageIO
+import Metal
 import UniformTypeIdentifiers
 import XCTest
 @testable import Noodle
@@ -24,6 +25,34 @@ import XCTest
     }
 
     /// Scrolling back to a picture after memory was reclaimed reads a small copy, not the original.
+    /// A shader sent in a conversation shows a still of what it draws, not a blank file card; one that
+    /// does not compile keeps the card.
+    func testAShaderFileShowsAStillOfWhatItDraws() async throws {
+        guard MTLCreateSystemDefaultDevice() != nil else { throw XCTSkip("No Metal device") }
+        let shader = root.appendingPathComponent("Aurora.metal")
+        try """
+            #include <metal_stdlib>
+            #include <SwiftUI/SwiftUI_Metal.h>
+            using namespace metal;
+            [[ stitchable ]] half4 aurora(float2 position, half4 color, float2 size, float time) {
+                float2 uv = position / size;
+                return half4(half3(uv.y, 0.5 + 0.5 * sin(uv.x * 6.0 + time), 1.0 - uv.y), 1.0h);
+            }
+            """.write(to: shader, atomically: true, encoding: .utf8)
+        let still = try XCTUnwrap(await AttachmentThumbnailCache.shaderStill(for: shader))
+        XCTAssertEqual(still.size, CGSize(width: 520, height: 300))
+        XCTAssertEqual(still.representations.first?.pixelsWide, 1040, "drawn for a Retina display")
+
+        let broken = root.appendingPathComponent("Broken.metal")
+        try "[[ stitchable ]] half4 broken(float2 position) { return nope; }".write(to: broken, atomically: true, encoding: .utf8)
+        let brokenStill = await AttachmentThumbnailCache.shaderStill(for: broken)
+        XCTAssertNil(brokenStill)
+        let text = root.appendingPathComponent("Notes.txt")
+        try "half4 not a shader".write(to: text, atomically: true, encoding: .utf8)
+        let textStill = await AttachmentThumbnailCache.shaderStill(for: text)
+        XCTAssertNil(textStill)
+    }
+
     func testAThumbnailIsDecodedOnceAtTheSizeItIsShown() throws {
         let original = root.appendingPathComponent("photo.png"), cache = root.appendingPathComponent("Cache")
         try writePNG(width: 2_400, height: 1_200, to: original)

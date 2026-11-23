@@ -397,6 +397,13 @@ struct AttachmentInlinePreview: View {
             return
         }
 
+        if let still = await AttachmentThumbnailCache.shaderStill(for: fileURL) {
+            guard !Task.isCancelled else { return }
+            AttachmentThumbnailCache.shared.setObject(still, forKey: key)
+            withAnimation(.easeOut(duration: 0.15)) { thumbnail = still }
+            return
+        }
+
         let request = QLThumbnailGenerator.Request(
             fileAt: fileURL,
             size: CGSize(width: 520, height: 300),
@@ -539,6 +546,16 @@ enum AttachmentThumbnailCache {
         }
         try? FileManager.default.removeItem(at: partial)
         return NSImage(cgImage: image, size: .zero)
+    }
+
+    /// A Metal shader file drawn as a still, as it would show behind a conversation. Nil for any other file
+    /// and for a shader that does not compile, which keeps the file's card.
+    nonisolated static func shaderStill(for url: URL) async -> NSImage? {
+        guard ShaderSourceFile.isShader(url) else { return nil }
+        let size = CGSize(width: 520, height: 300)
+        guard let image = try? await ShaderPipeline.still(of: url, width: Int(size.width) * 2, height: Int(size.height) * 2, scale: 2)
+        else { return nil }
+        return NSImage(cgImage: image, size: size)
     }
 
     /// The picture a browser tab or computer card carries.
