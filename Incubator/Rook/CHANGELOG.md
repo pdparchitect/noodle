@@ -6,6 +6,9 @@
 
 - The send button is Noodle's: an outline arrow while there is nothing to send, and a white arrow on the accent colour once there is.
 - In Settings › Tools, the line between two connections ends where their status ends, instead of running to the edge.
+- Agent and group marks are drawn in two shades of Rook's red accent in place of white on grey: a deep disc with a light piece on a dark window, a pale disc with the accent's piece on a light one, so the sidebar carries the app's colour, each piece stays easy to tell apart and the marks do not read as buttons.
+- The window carries a faint wash of Rook's red accent over both the Frosted and Solid backgrounds, in place of plain grey.
+- Rook's accent is a crimson in place of the dusty rose, so its buttons, marks and window read as the red team.
 
 ## [0.3.0] - 2026-11-22
 

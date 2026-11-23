@@ -375,9 +375,23 @@ struct WindowSurfaceBackground: ViewModifier {
 
     func body(content: Content) -> some View {
         content.background {
-            if surface == .frosted { FrostedWindowBackground().ignoresSafeArea() }
+            ZStack {
+                if surface == .frosted { FrostedWindowBackground() }
+                // A faint wash of the accent over either surface, so the window reads as Rook's red team.
+                Color.windowWash
+            }
+            .ignoresSafeArea()
         }
     }
+}
+
+extension Color {
+    /// The accent, faint enough to tint the window without colouring its text or controls; a touch stronger on a dark
+    /// window, where the same amount reads weaker.
+    static let windowWash = Color(nsColor: NSColor(name: nil) { appearance in
+        let accent = NSColor(named: "AccentColor") ?? .controlAccentColor
+        return accent.withAlphaComponent(appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? 0.16 : 0.07)
+    })
 }
 
 /// The desktop behind the window, blurred, as macOS draws translucent window backgrounds.

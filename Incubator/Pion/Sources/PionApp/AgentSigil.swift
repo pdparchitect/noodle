@@ -14,9 +14,9 @@ struct AgentSigil: View {
         // Small marks draw the piece larger and simpler, so it stays clear in a list.
         let compact = size < 30
         Canvas { context, canvas in
-            let side = canvas.width * (compact ? 0.64 : 0.58)
+            let side = canvas.width * (compact ? 0.72 : 0.6)
             let box = CGRect(x: (canvas.width - side) / 2, y: (canvas.height - side) / 2, width: side, height: side)
-            context.fill(piece.path(in: box, compact: compact), with: .color(.white.opacity(0.92)), style: FillStyle(eoFill: true))
+            context.fill(piece.path(in: box, compact: compact), with: .color(.markInk), style: FillStyle(eoFill: true))
         }
         .graphiteDisc(size: size)
     }
@@ -59,7 +59,7 @@ struct GroupSigil: View {
         let compact = size < 30
         Canvas { context, canvas in
             let width = canvas.width
-            let back = width * (compact ? 0.42 : 0.38), front = width * (compact ? 0.56 : 0.5)
+            let back = width * (compact ? 0.46 : 0.4), front = width * (compact ? 0.62 : 0.52)
             // Behind, left and right, then the front piece over them.
             for (offset, side, piece) in [(-0.2, back, pieces[1 % pieces.count]), (0.2, back, pieces[2 % pieces.count]), (0, front, pieces[0])] {
                 let isFront = side == front
@@ -68,10 +68,10 @@ struct GroupSigil: View {
                 let path = piece.path(in: box, compact: compact)
                 // A dark outline parts the front piece from those behind it.
                 if isFront {
-                    context.stroke(path, with: .color(Color(white: 0.12)),
+                    context.stroke(path, with: .color(Color(nsColor: .windowBackgroundColor)),
                                    style: StrokeStyle(lineWidth: width * 0.05, lineCap: .round, lineJoin: .round))
                 }
-                context.fill(path, with: .color(.white.opacity(isFront ? 0.92 : 0.5)), style: FillStyle(eoFill: true))
+                context.fill(path, with: .color(.markInk.opacity(isFront ? 1 : 0.5)), style: FillStyle(eoFill: true))
             }
         }
         .graphiteDisc(size: size)
@@ -181,20 +181,18 @@ struct SymbolMark: View {
     var body: some View {
         Image(systemName: symbol)
             .font(.system(size: size * 0.4, weight: .medium))
-            .foregroundStyle(.white.opacity(0.9))
+            .foregroundStyle(Color.markInk)
             .graphiteDisc(size: size)
     }
 }
 
 extension View {
-    /// A flat graphite disc, a touch lighter on a light window so it does not read as a hole, as the sidebar's flat
-    /// tool icons are.
+    /// A flat disc in a tint of the app's accent, the mark on it in a contrasting shade of the same accent, so marks
+    /// carry the app's colour, blue for Pion and red for Rook, without reading as buttons.
     func graphiteDisc(size: CGFloat) -> some View {
         frame(width: size, height: size)
             .background {
-                Circle().fill(Color(nsColor: NSColor(name: nil) { appearance in
-                    NSColor(white: appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? 0.24 : 0.32, alpha: 1)
-                }))
+                Circle().fill(Color.markDisc)
             }
             .accessibilityHidden(true)
     }
@@ -339,4 +337,24 @@ struct GroupProfileButton<Label: View>: View {
                     }
             }
     }
+}
+
+extension Color {
+    /// The app's accent from its asset catalogue, as SwiftUI's `accentColor` is.
+    private static let accent = NSColor(named: "AccentColor") ?? .controlAccentColor
+
+    /// A mark's disc: a pale tint of the accent on a light window, a deep shade of it on a dark one.
+    static let markDisc = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? (accent.blended(withFraction: 0.45, of: .black) ?? accent)
+            : (accent.blended(withFraction: 0.8, of: .white) ?? accent)
+    })
+
+    /// A mark's piece or symbol: the accent itself on a light window, a light tint of it on a dark one, so the piece
+    /// stands out from its disc.
+    static let markInk = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? (accent.blended(withFraction: 0.75, of: .white) ?? .white)
+            : accent
+    })
 }
