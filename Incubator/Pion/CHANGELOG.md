@@ -13,6 +13,7 @@
 
 ### Changed
 
+- In Settings › Tools, the line between two connections ends where their status ends, instead of running to the edge.
 - AWS Security is now AWS Audit; connections made before keep working.
 - AWS Audit's results say what they covered: each names the account and region it read, CloudTrail lookups read every page and also us-east-1, where IAM and console sign-ins are logged, and every lookup says when more matched than it read or kept. CloudTrail events say who acted, root, an IAM user or the role behind an assumed role, from which account and whether MFA was used; GuardDuty and Security Hub findings name their own account and region, leave out archived, suppressed and resolved ones, and GuardDuty's critical band can be asked for alone; open security groups include IPv6; Access Analyzer reads the organisation's or account's external access analyzer; Logs Insights says how many records matched; the credential report says when it was made.
 

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- In Settings › Tools, the line between two connections ends where their status ends, instead of running to the edge.
+
 ## [0.3.0] - 2026-11-22
 
 ### Added
