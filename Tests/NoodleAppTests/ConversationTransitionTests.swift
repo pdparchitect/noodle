@@ -48,4 +48,50 @@ import XCTest
         XCTAssertEqual(surface.conversationID, finalID)
         XCTAssertNil(surface.layer?.animationKeys())
     }
+
+    /// A background that turns the window dark does so after the conversation's last update, so the
+    /// transcript takes the window's appearance, not the colour scheme its conversation last had.
+    func testTranscriptTakesTheWindowsAppearanceWhenItChanges() async {
+        let seen = SeenColorScheme()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close(); window.contentView = nil }
+        window.appearance = NSAppearance(named: .aqua)
+        // The conversation as it was last updated, while the window was still light.
+        window.contentView = NSHostingView(rootView: ConversationTransition(conversationID: UUID()) {
+            ColorSchemeReader(seen: seen)
+        }.environment(\.colorScheme, .light))
+        window.orderFront(nil)
+        await settle(window)
+        XCTAssertEqual(seen.scheme, .light)
+
+        window.appearance = NSAppearance(named: .darkAqua)
+        await settle(window)
+        XCTAssertEqual(seen.scheme, .dark, "The transcript kept light colours in a window that turned dark")
+
+        window.appearance = NSAppearance(named: .aqua)
+        await settle(window)
+        XCTAssertEqual(seen.scheme, .light)
+    }
+
+    private func settle(_ window: NSWindow) async {
+        for _ in 0..<5 {
+            await Task.yield()
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        }
+    }
+}
+
+@MainActor private final class SeenColorScheme { var scheme: ColorScheme? }
+
+private struct ColorSchemeReader: View {
+    let seen: SeenColorScheme
+    @Environment(\.colorScheme) private var colorScheme
+    var body: some View {
+        let _ = { seen.scheme = colorScheme }()
+        Text("Transcript")
+    }
 }

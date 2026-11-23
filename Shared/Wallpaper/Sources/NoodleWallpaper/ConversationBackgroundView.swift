@@ -111,17 +111,41 @@ public struct ConversationBackgroundView: View {
     return Color(nsColor: color)
 }
 
-/// Crossfades the whole window, chrome included, when its appearance changes.
+/// Crossfades the whole window, chrome included, when its appearance changes. A window can hold
+/// several wallpapers, one behind each column besides its own, so it is dark while any of them shows
+/// a background. Its appearance is the wallpapers' to keep: when anything else resets it, as a change
+/// of the system's appearance or a closing sheet may, it turns dark again.
 private struct WallpaperWindowAppearance: NSViewRepresentable {
     let isDark: Bool
 
     final class Probe: NSView {
-        var isDark = false { didSet { apply() } }
-        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); apply() }
+        private static let all = NSHashTable<Probe>.weakObjects()
+        var isDark = false { didSet { Self.apply(to: window) } }
+        private weak var shownIn: NSWindow?
+        private var observation: NSKeyValueObservation?
 
-        private func apply() {
+        override init(frame: NSRect) { super.init(frame: frame); Self.all.add(self) }
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            let previous = shownIn
+            shownIn = window
+            observation = window?.observe(\.appearance) { window, _ in
+                // After whatever reset it has finished, not inside it.
+                DispatchQueue.main.async { MainActor.assumeIsolated { Probe.apply(to: window) } }
+            }
+            if previous !== window { Self.apply(to: previous) }
+            Self.apply(to: window)
+        }
+
+        static func wantsDark(_ window: NSWindow) -> Bool {
+            all.allObjects.contains { $0.window === window && $0.isDark }
+        }
+
+        static func apply(to window: NSWindow?) {
             guard let window else { return }
-            let appearance = isDark ? NSAppearance(named: .darkAqua) : nil
+            let appearance = wantsDark(window) ? NSAppearance(named: .darkAqua) : nil
             guard window.appearance?.name != appearance?.name else { return }
             if window.isVisible, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
                let frame = window.contentView?.superview?.layer {
@@ -129,7 +153,7 @@ private struct WallpaperWindowAppearance: NSViewRepresentable {
                 fade.type = .fade
                 fade.duration = 0.35
                 fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                frame.add(fade, forKey: Self.fadeKey)
+                frame.add(fade, forKey: fadeKey)
             }
             window.appearance = appearance
         }
@@ -140,4 +164,3 @@ private struct WallpaperWindowAppearance: NSViewRepresentable {
     func makeNSView(context: Context) -> Probe { Probe() }
     func updateNSView(_ nsView: Probe, context: Context) { nsView.isDark = isDark }
 }
-

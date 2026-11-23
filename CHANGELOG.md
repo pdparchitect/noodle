@@ -13,6 +13,10 @@ All notable changes to Noodle are documented here, following
 - The send button's arrow is white on the accent colour, so it reads the same in light and dark mode.
 - In Settings › Tools, the line between two connections ends where their status ends, instead of running to the edge.
 
+### Fixed
+
+- A conversation background turns the whole window dark at once in light mode too: the messages no longer keep light colours until you select the conversation again, using a second shader no longer turns the window light, and switching the Mac to light mode no longer turns a window with a shader, video or picture background light.
+
 ## [0.93.0] - 2026-11-22
 
 ### Added
