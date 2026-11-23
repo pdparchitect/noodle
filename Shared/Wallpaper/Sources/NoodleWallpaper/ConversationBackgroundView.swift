@@ -67,6 +67,12 @@ public struct ConversationBackgroundView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var loadedImage: NSImage?
 
+    /// The black laid over the background. Presets are drawn to sit behind bubbles, and photos are dimmed for
+    /// them. A video or shader keeps its colours: the bubbles over it are dark glass instead.
+    static func dim(for background: ConversationBackground) -> Double {
+        background.imageFilename != nil && !background.isMoving ? 0.25 : 0
+    }
+
     public var body: some View {
         GeometryReader { geometry in
             ZStack {
@@ -83,8 +89,7 @@ public struct ConversationBackgroundView: View {
                 } else if let imageURL, let kind = background.mediaKind, kind != .image {
                     AnimatedWallpaper(url: imageURL, kind: kind, reduceMotion: reduceMotion)
                 }
-                // Presets are drawn to sit behind bubbles; photos, videos and shaders are dimmed for them.
-                if background.imageFilename != nil { Color.black.opacity(0.25) }
+                Color.black.opacity(Self.dim(for: background))
             }
             .clipped()
         }

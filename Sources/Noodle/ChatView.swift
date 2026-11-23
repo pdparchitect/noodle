@@ -167,6 +167,7 @@ struct ChatView: View {
         ConversationTransition(conversationID: conversation.id) {
             transcript
                 .conversationTopFade()
+                .environment(\.transcriptOverMotion, store.background(for: conversation).isMoving)
         }
         // The transcript runs up behind the toolbar so the mask has content to fade there;
         // the scroll view still rests its content below the toolbar.
@@ -492,7 +493,7 @@ private struct ConversationTranscript: View {
                                                                  after: index > 0 ? all[index - 1].createdAt : nil) {
                         Text(caption)
                             .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(.secondary)
+                            .modifier(TranscriptCaptionStyle(style: .secondary))
                             .frame(maxWidth: .infinity)
                             .padding(.top, 8)
                     }

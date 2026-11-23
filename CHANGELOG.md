@@ -16,6 +16,7 @@ All notable changes to Noodle are documented here, following
 - Links in dark mode use the accent colour itself, so they match the rest of the accent-coloured text.
 - The send button's arrow is white on the accent colour, so it reads the same in light and dark mode.
 - In Settings › Tools, the line between two connections ends where their status ends, instead of running to the edge.
+- A video or shader background plays in its own colours, no longer dimmed: over it the window is dark, messages from bots and files sit on dark glass with white text, your messages are solid accent, and times read in white. Pictures and presets look as before.
 
 ### Fixed
 

@@ -70,6 +70,19 @@ extension ConversationAttachment {
     }
 }
 
+/// Over a moving background a card with a title sits on dark glass, as bubbles do, so the title reads.
+private struct CardGlass: ViewModifier {
+    @Environment(\.transcriptOverMotion) private var overMotion
+
+    func body(content: Content) -> some View {
+        if overMotion {
+            content.padding(8).background { TranscriptGlass(shape: RoundedRectangle(cornerRadius: 19, style: .continuous)) }
+        } else {
+            content
+        }
+    }
+}
+
 struct AttachmentInlinePreview: View {
     let attachment: ConversationAttachment
     let fileURL: URL
@@ -137,16 +150,16 @@ struct AttachmentInlinePreview: View {
             } else if let url = attachment.url, NoodletLink.id(in: url) != nil {
                 NoodletAttachmentCard(url: url, shouldLoad: shouldLoad)
             } else if let card = attachment.card {
-                linkCardPreview(card)
+                linkCardPreview(card).modifier(CardGlass())
             } else if let webLink {
                 // A shared web page looks like one unfurled from a message, not like its bookmark file.
                 LinkPreviewCard(url: webLink, shouldLoad: shouldLoad)
             } else if let patch {
-                patchPreview(patch)
+                patchPreview(patch).modifier(CardGlass())
             } else if displaysAsImage {
                 imagePreview
             } else {
-                documentPreview
+                documentPreview.modifier(CardGlass())
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))

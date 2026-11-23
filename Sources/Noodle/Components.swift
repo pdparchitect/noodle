@@ -262,6 +262,7 @@ struct MessageBubble: View {
     @Environment(NoodleStore.self) private var store
     @Environment(\.forwardAttachment) private var forwardAttachment
     @Environment(\.isNarrowTranscript) private var isNarrowTranscript
+    @Environment(\.transcriptOverMotion) private var overMotion
     @AppStorage(ChatAttachmentLayout.defaultsKey) private var attachmentLayout = ChatAttachmentLayout.defaultValue.rawValue
     @AppStorage(MessageTextLayout.defaultsKey) private var textLayout = MessageTextLayout.defaultValue.rawValue
     @State private var isVisible = false
@@ -446,7 +447,9 @@ struct MessageBubble: View {
     @ViewBuilder private var messageBackground: some View {
         let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
 
-        if hasConversationBackground {
+        if overMotion {
+            if isUser { shape.fill(Color.accentColor) } else { TranscriptGlass(shape: shape) }
+        } else if hasConversationBackground {
             shape
                 .fill(.ultraThinMaterial)
                 .overlay {
