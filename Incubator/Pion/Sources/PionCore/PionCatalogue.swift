@@ -29,7 +29,7 @@ public enum PionCatalogue {
     public static let triggers: [String: MCPTrigger] = [CVENow.preset.id: CVENow.trigger]
 
     public static let entries: [ToolDefinition] = [
-        VirusTotal.preset, Shodan.preset, Okta.preset, Okta.containment, Entra.preset, Entra.containment, Defender.preset, Defender.containment, CrowdStrike.preset, SentinelOne.preset,
+        VirusTotal.preset, Shodan.preset, Okta.preset, Okta.containment, Entra.preset, Entra.containment, Defender.preset, Defender.containment, CrowdStrike.preset, CrowdStrike.containment, SentinelOne.preset,
         Splunk.preset, Elastic.preset, Sentinel.preset, Cloudflare.preset, Cloudflare.radar, Wiz.preset, GitHub.preset, AbuseIPDB.preset,
         URLScan.preset, GreyNoise.preset, CrowdSec.cti, OTX.preset, NVD.preset, CrtSh.preset, DNS.preset, CVENow.preset, HaveIBeenPwned.preset, AWS.preset, AWS.containment, GoogleCloud.preset, Azure.preset, Azure.containment, GoogleWorkspace.preset, GoogleWorkspace.containment,
         Proofpoint.preset, SumoLogic.preset, Tenable.preset, Censys.preset, Grafana.cloud, Grafana.server, Sentry.cloud, Sentry.server,

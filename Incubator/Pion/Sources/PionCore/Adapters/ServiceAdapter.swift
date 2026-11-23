@@ -616,7 +616,7 @@ public struct OperationAdapter: ToolConnectionAdapter {
 public enum PionAdapters {
     public static let all: [String: any ToolConnectionAdapter] = ["virustotal": VirusTotal.adapter, "okta": Okta.adapter, "okta-containment": Okta.containmentAdapter, "shodan": Shodan.adapter,
                                                                   "entra": Entra.adapter, "entra-containment": Entra.containmentAdapter, "defender": Defender.adapter, "defender-containment": Defender.containmentAdapter,
-                                                                  "crowdstrike": CrowdStrike.adapter, "sentinelone": SentinelOne.adapter,
+                                                                  "crowdstrike": CrowdStrike.adapter, "crowdstrike-containment": CrowdStrike.containmentAdapter, "sentinelone": SentinelOne.adapter,
                                                                   "splunk": Splunk.adapter, "elastic": Elastic.adapter, "sentinel": Sentinel.adapter,
                                                                   "cloudflare": Cloudflare.adapter, "wiz": Wiz.adapter, "github": GitHub.adapter,
                                                                   "abuseipdb": AbuseIPDB.adapter, "urlscan": URLScan.adapter, "greynoise": GreyNoise.adapter, "crowdsec-cti": CrowdSec.adapter, "nvd": NVD.adapter, "crtsh": CrtSh.adapter, "dns": DNS.adapter,

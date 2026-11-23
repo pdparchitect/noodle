@@ -115,6 +115,8 @@ import UniformTypeIdentifiers
         connectionsController = ToolConnectionsController(repository: repository)
         transcriptPositions = TranscriptPositionStore(fileURL: root.appendingPathComponent("scroll-positions.json"))
         store = PionStore(root: root.appendingPathComponent("Pion", isDirectory: true))
+        // The custom indicators CrowdStrike Falcon Containment made, which alone it may remove, kept across launches.
+        CrowdStrike.keepIndicatorRecords(at: store.root.appendingPathComponent("falcon-indicators.json"))
         var environment = ProcessInfo.processInfo.environment
         if hidesInstalledHarnesses { environment["NOODLE_SIMULATE_NO_HARNESSES"] = "1" }
         let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses, environment: environment)
