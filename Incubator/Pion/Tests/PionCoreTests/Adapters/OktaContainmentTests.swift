@@ -4,7 +4,7 @@ import NoodleCore
 import XCTest
 
 final class OktaContainmentTests: XCTestCase {
-    private let org = try! Okta.containment.makeConnection(name: "Okta Containment — Acme", values: ["domain": "acme.okta.com"])
+    private let org = try! Okta.containment.makeConnection(name: "Okta Containment — Acme", values: ["domain": "acme.okta.com", "clientID": "0oaPionContain"])
     private let mallory = "00umallory0000000001", pion = "00upion0000000000001", boss = "00uboss0000000000001"
     private let finance = "00gfinance000000001x", appGroup = "00gadgroup000000001x"
 
@@ -35,7 +35,7 @@ final class OktaContainmentTests: XCTestCase {
         return service
     }
 
-    func testContainmentIsItsOwnToolWithItsOwnToken() throws {
+    func testContainmentIsItsOwnToolWithASignInOfItsOwn() throws {
         XCTAssertEqual(Okta.containment.name, "Okta Containment")
         XCTAssertNotEqual(Okta.containment.id, Okta.preset.id)
         XCTAssertNotNil(UUID(uuidString: Okta.containment.id))
@@ -43,8 +43,22 @@ final class OktaContainmentTests: XCTestCase {
         XCTAssertNotNil(PionAdapters.all["okta-containment"])
         XCTAssertNil(Okta.containmentAdapter.watchedTool)
         XCTAssertTrue(PionCatalogue.entries.contains { $0.id == Okta.containment.id })
-        XCTAssertEqual(org.tokenScheme, "SSWS")
+        XCTAssertNil(org.tokenHeader)
+        XCTAssertNil(org.tokenScheme)
         XCTAssertEqual(org.endpoint.absoluteString, "https://acme.okta.com/api/v1")
+        guard case .connection(let configuration) = Okta.containment.configuration,
+              case .connection(let audit) = Okta.preset.configuration else { return XCTFail() }
+        XCTAssertNil(configuration.tokenRevocation)
+        XCTAssertEqual(configuration.oauthClientField, "clientID")
+        XCTAssertEqual(configuration.oauthHostField, "domain")
+        let oauth = try XCTUnwrap(configuration.oauth(for: org.settings))
+        XCTAssertEqual(oauth.tokenEndpoint.absoluteString, "https://acme.okta.com/oauth2/v1/token")
+        XCTAssertEqual(Set(oauth.scopes), ["okta.users.manage", "okta.users.read.self", "okta.groups.manage", "okta.roles.manage",
+                                           "okta.apiTokens.manage", "offline_access"])
+        XCTAssertTrue(Set(oauth.scopes).isDisjoint(with: Set(audit.oauth!.scopes).subtracting(["okta.users.read.self", "offline_access"])),
+                      "a grant of its own, apart from Okta Audit's read-only one")
+        XCTAssertTrue(Okta.containmentSetup.contains { $0.contains("com.pdparchitect.pion:/oauth2callback") })
+        XCTAssertTrue(Okta.containmentScopes.allSatisfy { scope in Okta.containmentSetup.contains { $0.contains("`\(scope)`") } })
         XCTAssertTrue(Okta.containmentSetup.contains { $0.contains("okta.users.lifecycle.suspend") && $0.contains("okta.users.apitokens.clear") })
         for need in Okta.containmentNeeds {
             XCTAssertTrue(Okta.containmentPermissions.contains { $0.permission == need.any[0] }, "the setup gives \(need.operation)'s permission")
@@ -95,6 +109,10 @@ final class OktaContainmentTests: XCTestCase {
             XCTAssertTrue(refused.isError, arguments)
             XCTAssertTrue(refused.text.contains("Nothing was changed"), refused.text)
         }
+        // The signed-in admin is who the access token says, by /users/me, never an API token's owner.
+        service.answers["/api/v1/users/pion-containment@acme.example"] = service.answers["/api/v1/users/me"]
+        let own = try await call("suspend", #"{"user":"pion-containment@acme.example"}"#, service)
+        XCTAssertTrue(own.isError && own.text.contains("the admin signed in to this connection"), own.text)
         service.answers["/api/v1/users/m@acme.example"] = service.answers["/api/v1/users/\(mallory)"]
         let other = try await call("suspend", #"{"user":"m@acme.example"}"#, service)
         XCTAssertTrue(other.text.contains("not exactly the user given"), other.text)
@@ -227,10 +245,6 @@ final class OktaContainmentTests: XCTestCase {
         XCTAssertTrue(grants.text.contains("2 grants to 0oa-crm, 0oa-mail"), grants.text)
         XCTAssertEqual(changes(service), ["DELETE /api/v1/users/\(mallory)/grants"])
 
-        service.answers["/api/v1/api-tokens/current"] = (200, #"{"id":"00Tpion0000000000001","name":"pion"}"#)
-        service.answers["/api/v1/api-tokens/00Tterraform00000001"] = (200, #"{"id":"00Tterraform00000001","name":"terraform","userId":"\#(boss)"}"#)
-        let own = try await call("revoke-api-token", #"{"token":"00Tpion0000000000001"}"#, service)
-        XCTAssertTrue(own.isError && own.text.contains("this connection's own token"), own.text)
         let malformed = try await call("revoke-api-token", #"{"token":"00T/../x"}"#, service)
         XCTAssertTrue(malformed.isError)
         service.answers["/api/v1/api-tokens/00Tterraform00000001"] = nil
@@ -239,6 +253,7 @@ final class OktaContainmentTests: XCTestCase {
         XCTAssertFalse(token.isError, token.text)
         XCTAssertTrue(token.text.contains("terraform") && token.text.contains("gone for good"), token.text)
         XCTAssertEqual(changes(service).last, "DELETE /api/v1/api-tokens/00Tterraform00000001")
+        XCTAssertFalse(service.requests.contains { $0.url!.path.hasSuffix("/current") }, "it signs in through OAuth, with no API token of its own")
     }
 
     /// check-access reads the admin's custom role and says, for each operation, whether it may run and what to add.
@@ -246,13 +261,13 @@ final class OktaContainmentTests: XCTestCase {
         let service = service()
         service.answers["/api/v1/users/\(pion)/roles"] = (200, #"[{"id":"ra9","type":"CUSTOM","label":"Pion Containment","role":"cr0contain"}]"#)
         service.answers["/api/v1/iam/roles/cr0contain/permissions"] = (200, #"{"permissions":[{"label":"okta.users.read"},{"label":"okta.iam.read"},{"label":"okta.users.lifecycle.suspend"},{"label":"okta.users.lifecycle.clearSessions"},{"label":"okta.apps.manage"}]}"#)
-        service.answers["/api/v1/api-tokens/current"] = (200, #"{"id":"00Tpion0000000000001","network":{"connection":"ZONE"}}"#)
         let checked = try await call("check-access", "{}", service)
         XCTAssertFalse(checked.isError, checked.text)
         XCTAssertTrue(checked.text.contains("✓ suspend") && checked.text.contains("✓ clear-sessions"), checked.text)
         XCTAssertTrue(checked.text.contains("✗ unsuspend: add okta.users.lifecycle.unsuspend"), checked.text)
         XCTAssertTrue(checked.text.contains("✗ revoke-admin-role") && checked.text.contains("okta.apps.manage"), checked.text)
-        XCTAssertTrue(checked.text.contains("works only from zone networks"), checked.text)
+        XCTAssertTrue(checked.text.contains("Signed in as pion-containment@acme.example") && checked.text.contains("okta.users.manage")
+                      && checked.text.contains("0oaPionContain"), checked.text)
         XCTAssertEqual(changes(service), [])
 
         service.answers["/api/v1/users/\(pion)/roles"] = (200, #"[{"id":"ra8","type":"SUPER_ADMIN","label":"Super Administrator"}]"#)

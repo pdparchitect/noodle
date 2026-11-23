@@ -202,6 +202,9 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
     /// in `oauth`: the field its client ID is entered in. The client returns to the app's bundle ID as a URL scheme,
     /// which the app's Info.plist lists.
     public let oauthClientField: String?
+    /// For a service whose sign-in server is each account's own, such as an Okta org's: the `.host` field naming it.
+    /// The host of every address in `oauth` stands for the account's, checked as that field checks it.
+    public let oauthHostField: String?
 
     public init(endpoint: URL, oauth: MCPOAuthConfiguration? = nil, authorizationServer: URL? = nil, tokenHeader: String? = nil,
                 tokenScheme: String? = nil, tokenParameter: String? = nil, composedToken: ComposedToken? = nil,
@@ -214,6 +217,7 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
         signsInWithAWSIdentityCenter = false
         tokenRevocation = nil
         oauthClientField = nil
+        oauthHostField = nil
         self.endpoint = endpoint
         self.oauth = oauth
         self.authorizationServer = authorizationServer
@@ -227,10 +231,14 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
     public init(endpointTemplate: String, fields: [ToolField], oauth: MCPOAuthConfiguration? = nil,
                 authorizationServer: URL? = nil, tokenHeader: String? = nil, tokenScheme: String? = nil,
                 tokenParameter: String? = nil, composedToken: ComposedToken? = nil, clientCredentials: ClientCredentialsPreset? = nil,
-                signsInWithAWSIdentityCenter: Bool = false, oauthClientField: String? = nil,
+                signsInWithAWSIdentityCenter: Bool = false, oauthClientField: String? = nil, oauthHostField: String? = nil,
                 tokenRevocation: TokenRevocation? = nil, adapter: String? = nil) {
         self.tokenRevocation = tokenRevocation
         self.oauthClientField = oauthClientField
+        self.oauthHostField = oauthHostField
+        if let oauthHostField, oauth == nil || !fields.contains(where: { $0.key == oauthHostField && $0.kind == .host }) {
+            preconditionFailure("\(oauthHostField) is no host field of a sign-in.")
+        }
         self.composedToken = composedToken
         self.signsInWithAWSIdentityCenter = signsInWithAWSIdentityCenter
         self.tokenParameter = tokenParameter
@@ -270,6 +278,16 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
                                         scope: $0.scope, parameters: $0.parameters)
         }
         return (try endpointTemplate.map(address) ?? endpoint, fields.isEmpty ? nil : settings, client)
+    }
+
+    /// How one account signs in: `oauth`, at the account's own host for an entry whose sign-in server is each account's;
+    /// nil when that host is missing or not a host alone.
+    public func oauth(for settings: [String: String]?) -> MCPOAuthConfiguration? {
+        guard let oauth else { return nil }
+        guard let key = oauthHostField else { return oauth }
+        guard let field = fields.first(where: { $0.key == key }), field.kind == .host,
+              let value = settings?[key], let host = try? field.validated(value) else { return nil }
+        return oauth.at(host: host)
     }
 
     /// Every addition is a separate account, including repeated presets.

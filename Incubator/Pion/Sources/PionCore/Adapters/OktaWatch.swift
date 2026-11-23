@@ -193,7 +193,7 @@ extension Okta {
     /// kind in turn, tells once that more follow, and owes the oldest left out until a later read returns it: the
     /// boundary owed moves on only with what a check read whole and returned.
     ///
-    /// A System Log that cannot be read is never dropped unsaid: refused, or the token rejected, it is told as an alert
+    /// A System Log that cannot be read is never dropped unsaid: refused, or the sign-in rejected, it is told as an alert
     /// of its own, which wakes the agents to read security-events, whose result says why. It is told once each time it
     /// starts, and again after a relaunch, dated at the start of the window read so it never moves the watch past what
     /// was not yet read. A cursor Okta rejects is given up and its window read again from its start, told the same way.
@@ -254,7 +254,7 @@ extension Okta {
             return new.map { ServiceAlert(id: $0.1, time: since) }
         }
 
-        /// Whether Okta turned down the request itself, such as a cursor it no longer takes, rather than the token or
+        /// Whether Okta turned down the request itself, such as a cursor it no longer takes, rather than the sign-in or
         /// for now.
         static func rejects(_ error: Error) -> Bool {
             switch error {

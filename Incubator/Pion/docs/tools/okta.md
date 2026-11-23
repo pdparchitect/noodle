@@ -1,6 +1,6 @@
 # Okta
 
-Pion has two Okta tools, each added per org with an API token of its own:
+Pion has two Okta tools, each added per org with a sign-in of its own:
 
 - **Okta Audit** reads an org the way a defender does: who a user is, their
   groups, apps, sign-in factors and the apps they let act for them, who holds
@@ -19,55 +19,73 @@ explains them.
 
 The pages they use, in the Okta Admin Console:
 
+- **Applications › Applications**, for each tool's app and its **Okta API
+  Scopes**.
 - **Security › Administrators**, for each tool's admin and their roles.
-- **Security › API › Tokens**, for each token.
 - **Reports › System Log**, to see what the tools read.
 
 ## How Okta limits what Pion can do
 
-Both tools sign in with an Okta API token, sent as `SSWS`. A token has exactly
-the access of the admin who made it, so each tool gets an admin of its own, made
-for it alone, and that admin's roles are all the tool can do.
+Both tools sign in as an Okta admin through OAuth, at the org's own
+authorization server (`https://<your domain>/oauth2/v1/authorize` and
+`/oauth2/v1/token`). Each signs in through a native app your org makes for that
+tool alone, with an authorization code and PKCE, so Pion keeps no client secret.
+Every sign-in asks for the admin's password again, so a browser already signed
+in to Okta as someone else never answers for them.
 
-- **Okta Audit's admin** has the Read-Only Administrator role and a custom role
-  that only views admins and API tokens, so it cannot change anything, whatever
-  Pion asks for. **check-access** warns when that admin holds anything that
-  changes the org.
-- **Okta Containment's admin** has a custom role with only the permissions its
-  actions take. Leave out any you do not want agents to have, and never make it
-  a super or organization administrator.
+Okta allows a request only when **both** of these allow it:
 
-Okta also offers OAuth for its API, but only through each org's own
-authorization server at the org's domain. Pion's sign-in reaches fixed
-addresses for each tool, so it cannot use Okta OAuth yet. When it can, these
-tools will move to an OAuth admin sign-in. Meanwhile:
+- **the app's scopes**, which you grant on its **Okta API Scopes** tab. Pion
+  asks for exactly the scopes below, and refuses a sign-in that lacks any.
+- **the signed-in admin's role.** Each tool gets an admin of its own.
 
-- Okta revokes a token left unused for 30 days.
-- **Sign Out** in **Settings → Tools** revokes the token at Okta.
-- Where Okta offers it, limit each token to your network zone, so that a copy
-  works nowhere else. **check-access** says whether a token is limited.
+| Tool | Scopes | Admin's role |
+| --- | --- | --- |
+| Okta Audit | `okta.users.read`, `okta.users.read.self`, `okta.groups.read`, `okta.apps.read`, `okta.logs.read`, `okta.roles.read`, `okta.apiTokens.read` | Read-Only Administrator, and a custom role that views admins and API tokens |
+| Okta Containment | `okta.users.manage`, `okta.users.read.self`, `okta.groups.manage`, `okta.roles.manage`, `okta.apiTokens.manage` | a custom role with only the permissions its actions take |
 
-Both tools reach only the org's own domain, such as `acme.okta.com`. Okta pages
-its listings with a link to the next page. Pion follows that link only when it
-is on the same domain and at the same path, and takes only Okta's cursor from
-it, so a listing never leads anywhere else.
+Both also ask for `offline_access`, so the sign-in renews itself without asking
+again. Okta Audit's scopes only read, so it cannot change anything, whatever its
+admin's role allows. Okta Containment's scopes are broad, as Okta has none
+narrower, so its admin's custom role is what limits it: never make that admin a
+super or organization administrator.
+
+- **Sign Out** in **Settings → Tools** revokes the sign-in at Okta.
+- When the sign-in expires or is revoked, or the admin is deactivated, the tool
+  says to connect it again.
+
+Both tools reach only the org's own domain, such as `acme.okta.com`: the
+sign-in, its tokens and every call go there and nowhere else. Pion checks the
+domain is a domain name alone, with no scheme, port or path. Okta pages its
+listings with a link to the next page. Pion follows that link only when it is on
+the same domain and at the same path, and takes only Okta's cursor from it, so
+a listing never leads anywhere else.
 
 ## Setting it up with least access
 
-1. **Create a user for Okta Audit alone**, such as `pion-audit@example.com`, so
-   the token belongs to no person.
-2. **Give it the Read-Only Administrator role** under **Security ›
-   Administrators**.
-3. **To audit admins and API tokens too**, create a custom role under
+1. **Create the app.** In **Applications › Applications**, choose **Create App
+   Integration**, then **OIDC - OpenID Connect** and **Native Application**.
+   Name it **Pion Audit**.
+2. **Set its sign-in.** Keep the grant type **Authorization Code** and tick
+   **Refresh Token**. Give `com.pdparchitect.pion:/oauth2callback` as the
+   **Sign-in redirect URI** (`com.pdparchitect.pion.local:/oauth2callback` for
+   Pion Dev). Under **Assignments**, allow only the admin who will sign in.
+   Keep client authentication as PKCE, a native app's default.
+3. **Grant its scopes.** On the app's **Okta API Scopes** tab, grant exactly
+   Okta Audit's scopes from the table above. Only a super administrator can
+   grant them.
+4. **Choose its admin.** Keep an admin for Okta Audit alone, such as
+   `pion-audit@example.com`, with the **Read-Only Administrator** role under
+   **Security › Administrators**.
+5. **To audit admins and API tokens too**, create a custom role under
    **Security › Administrators › Roles**, such as **Pion Audit**, with only
    **View roles, resources, and admin assignments** (`okta.iam.read`) and
-   **View API tokens** (`okta.users.apitokens.read`). Assign it to the same user
-   for all users and all Identity and Access Management resources. The
+   **View API tokens** (`okta.users.apitokens.read`). Assign it to the same
+   admin for all users and all Identity and Access Management resources. The
    Read-Only Administrator cannot see admins or tokens.
-4. **Sign in as that user and create a token** under **Security › API ›
-   Tokens**. Limit it to your network zone where Okta offers it.
-5. **Add the account** with your org's domain, such as `acme.okta.com`, not its
-   `-admin` address, and paste the token.
+6. **Add the account** with your org's domain, such as `acme.okta.com`, not its
+   `-admin` address, and the app's **Client ID**. Choose **Add & Connect** and
+   sign in as that admin.
 
 Then ask an agent to run **check-access**.
 
@@ -167,7 +185,7 @@ General**.
 
 **When it cannot read the System Log**, it says so rather than going quiet:
 
-- A token refused or rejected wakes the agents once, and once more after Pion
+- A sign-in refused or rejected wakes the agents once, and once more after Pion
   relaunches if it is still so. It wakes them again only after the log has been
   read once since.
 - A failure that passes, such as Okta rate limiting, holds the watch back for up
@@ -179,13 +197,14 @@ General**.
 Ask an agent to run **check-access**. It changes nothing, and tries once each:
 
 - users, groups, apps, the System Log, admin assignments and API tokens;
-- which admin roles the token's admin holds, warning when they can change the
-  org;
-- where the token may be used from.
+- who is signed in and which admin roles they hold, saying when those roles
+  could change the org;
+- the scopes the sign-in holds, and the app they are granted to.
 
 For anything that does not work, it says what to change. Any refused call says
-the same: the role or permission the admin lacks, or a token that Okta no longer
-accepts.
+the same: a scope the app lacks, which Okta names, the role or permission the
+admin lacks, or a sign-in that Okta no longer accepts, which needs connecting
+again.
 
 ## Reading results
 
@@ -199,11 +218,13 @@ accepts.
 
 ## Containing an incident
 
-**Okta Containment** is a separate tool, with its own admin and token, so the
-audit token stays read-only.
+**Okta Containment** is a separate tool, with its own app, admin and sign-in, so
+the audit sign-in stays read-only.
 
-1. **Create another user**, such as `pion-containment@example.com`.
-2. **Create a custom role** under **Security › Administrators › Roles**, such as
+1. **Create another app** as in steps 1 to 3 above, named **Pion Containment**,
+   and grant it Okta Containment's scopes from the table above.
+2. **Choose another admin**, such as `pion-containment@example.com`.
+3. **Create a custom role** under **Security › Administrators › Roles**, such as
    **Pion Containment**, with only these permissions, leaving out any you do not
    want:
 
@@ -219,11 +240,12 @@ audit token stays read-only.
    | `okta.users.groupMembership.manage` | `remove-from-group` |
    | `okta.users.apitokens.clear` | `revoke-api-token` |
 
-3. **Assign it to the user** with a resource set of all users and all groups.
-   Never make the user a super or organization administrator.
-4. **Create its token** as that user, add the account, and ask an agent to run
-   its **check-access**. It reads the admin's role and says which actions it
-   allows and what to add for the rest, warning when the role allows far more.
+4. **Assign it to the admin** with a resource set of all users and all groups.
+   Never make them a super or organization administrator.
+5. **Add the account** with the domain and this app's **Client ID**, sign in
+   as that admin, and ask an agent to run its **check-access**. It reads the
+   admin's role and says which actions it allows and what to add for the rest,
+   warning when the role allows far more.
 
 Revoking admin roles and users' app grants has no custom-role permission:
 
@@ -250,14 +272,14 @@ description and result say how it is recovered:
 | `remove-from-group` | Removes the user from up to 20 groups. Checks every group first, and reports each removal. | Re-add by hand. A group rule may add them back. |
 | `revoke-admin-role` | Revokes roles the user holds directly, by assignment ID. Roles held through a group are refused. | Re-assign by hand. |
 | `revoke-app-grants` | Revokes all the OAuth grants the user gave apps, or one. | The user consents again. |
-| `revoke-api-token` | Revokes one API token, never the connection's own. | None: a new token must be made. |
-| **check-access** (not held) | See step 4. | Nothing changes. |
+| `revoke-api-token` | Revokes one API token. | None: a new token must be made. |
+| **check-access** (not held) | See step 5. | Nothing changes. |
 
 Every action takes a user by their full Okta ID (`00u…`) or full login. Okta
 also resolves short names, loosely, so Pion refuses them and checks that Okta
 resolved exactly the user given. Pion refuses to act on:
 
-- the admin its own token belongs to;
+- the admin signed in to it, as Okta names them from the sign-in;
 - a super administrator, unless told the champion confirmed it with
   `allowSuperAdmin`.
 

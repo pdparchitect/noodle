@@ -39,6 +39,28 @@ public extension MCPOAuthConfiguration {
                               usesResourceIndicator: usesResourceIndicator, revocationEndpoint: revocationEndpoint,
                               deviceAuthorizationEndpoint: deviceAuthorizationEndpoint)
     }
+
+    /// The same sign-in with every address at `host`, for a service whose sign-in server is each account's own; nil
+    /// unless `host` is a host alone and every address stays https on its default port, so only the host changes.
+    func at(host: String) -> MCPOAuthConfiguration? {
+        // Checked as a host field checks it, and as it keeps it: lowercase labels of letters, digits and hyphens.
+        guard (try? ToolField(key: "host", title: "Host", placeholder: "", kind: .host).validated(host)) == host else { return nil }
+        func moved(_ url: URL) -> URL? {
+            guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false), components.scheme == "https",
+                  components.port == nil, components.user == nil, components.password == nil else { return nil }
+            components.host = host
+            guard let moved = components.url, moved.host == host, moved.scheme == "https", moved.port == nil else { return nil }
+            return moved
+        }
+        guard let issuer = moved(issuer), let authorization = moved(authorizationEndpoint), let token = moved(tokenEndpoint) else { return nil }
+        var revocation: URL?, device: URL?
+        if let revocationEndpoint { guard let url = moved(revocationEndpoint) else { return nil }; revocation = url }
+        if let deviceAuthorizationEndpoint { guard let url = moved(deviceAuthorizationEndpoint) else { return nil }; device = url }
+        return MCPOAuthConfiguration(issuer: issuer, authorizationEndpoint: authorization, tokenEndpoint: token,
+                                     clients: clients, scopes: scopes, authorizationParameters: authorizationParameters,
+                                     usesResourceIndicator: usesResourceIndicator, revocationEndpoint: revocation,
+                                     deviceAuthorizationEndpoint: device)
+    }
 }
 
 public struct MCPOAuthClientConfiguration: Equatable, Sendable {

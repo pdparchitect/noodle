@@ -222,6 +222,52 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(ToolCatalog.definition(for: earlier), notion, "connections made before entries were remembered match by address")
     }
 
+    /// A sign-in server at each account's own host, as an Okta org's is: the preset's OAuth addresses move to the
+    /// account's domain, checked as a host alone, and nothing else about them changes.
+    func testAnAccountsOwnSignInServerIsAtItsHostAloneOverHTTPS() throws {
+        let oauth = MCPOAuthConfiguration(issuer: URL(string: "https://org.invalid")!,
+                                          authorizationEndpoint: URL(string: "https://org.invalid/oauth2/v1/authorize")!,
+                                          tokenEndpoint: URL(string: "https://org.invalid/oauth2/v1/token")!, clients: [],
+                                          scopes: ["org.read"], usesResourceIndicator: false,
+                                          revocationEndpoint: URL(string: "https://org.invalid/oauth2/v1/revoke")!)
+        let configuration = ToolConnectionConfiguration(endpointTemplate: "https://{domain}/api/v1",
+            fields: [ToolField(key: "domain", title: "Domain", placeholder: "acme.okta.com", kind: .host),
+                     ToolField(key: "clientID", title: "Client ID", placeholder: "0oa1", kind: .identifier)],
+            oauth: oauth, oauthClientField: "clientID", oauthHostField: "domain", adapter: "directory")
+        let moved = try XCTUnwrap(configuration.oauth(for: ["domain": "Contoso.Okta.com", "clientID": "0oa1"]))
+        XCTAssertEqual(moved.issuer.absoluteString, "https://contoso.okta.com")
+        XCTAssertEqual(moved.authorizationEndpoint.absoluteString, "https://contoso.okta.com/oauth2/v1/authorize")
+        XCTAssertEqual(moved.tokenEndpoint.absoluteString, "https://contoso.okta.com/oauth2/v1/token")
+        XCTAssertEqual(moved.revocationEndpoint?.absoluteString, "https://contoso.okta.com/oauth2/v1/revoke")
+        XCTAssertEqual(moved.scopes, oauth.scopes)
+        XCTAssertFalse(moved.usesResourceIndicator)
+
+        for bad in ["evil.com/x", "okta.com@evil.com", "http://acme.okta.com", "https://acme.okta.com", "acme.okta.com:8443",
+                    "acme.okta.com:443", "acme.okta.com/oauth2", "acme.okta.com?x=1", "acme.okta.com#x", "acme.okta.com\\evil.com",
+                    "evil.com%2Facme.okta.com", "acme okta.com", "", "localhost", "-acme.okta.com", "acme..okta.com"] {
+            XCTAssertNil(configuration.oauth(for: ["domain": bad, "clientID": "0oa1"]), bad)
+            XCTAssertThrowsError(try configuration.account(["domain": bad, "clientID": "0oa1"]), bad)
+            XCTAssertNil(oauth.at(host: bad), bad)
+        }
+        XCTAssertNil(configuration.oauth(for: nil), "without the account's settings there is no server to name")
+        XCTAssertNil(configuration.oauth(for: ["clientID": "0oa1"]))
+
+        // Only https on its default port moves; a preset's address that is not one is never moved anywhere.
+        let plain = MCPOAuthConfiguration(issuer: URL(string: "http://org.invalid")!, authorizationEndpoint: URL(string: "http://org.invalid/a")!,
+                                          tokenEndpoint: URL(string: "http://org.invalid/t")!, clients: [], scopes: [])
+        XCTAssertNil(plain.at(host: "acme.okta.com"))
+        let ported = MCPOAuthConfiguration(issuer: URL(string: "https://org.invalid")!, authorizationEndpoint: URL(string: "https://org.invalid:8443/a")!,
+                                           tokenEndpoint: URL(string: "https://org.invalid/t")!, clients: [], scopes: [])
+        XCTAssertNil(ported.at(host: "acme.okta.com"))
+
+        // An entry without one keeps its addresses whatever the account holds.
+        let fixed = ToolConnectionConfiguration(endpointTemplate: "https://{domain}/api/v1",
+            fields: [ToolField(key: "domain", title: "Domain", placeholder: "acme.okta.com", kind: .host)], oauth: oauth, adapter: "directory")
+        XCTAssertNil(fixed.oauthHostField)
+        XCTAssertEqual(fixed.oauth(for: ["domain": "contoso.okta.com"]), oauth)
+        XCTAssertEqual(fixed.oauth(for: nil), oauth)
+    }
+
     func testAClientCredentialsPresetBuildsEachAccountsTokenAddress() throws {
         let domain = ToolField(key: "domain", title: "Domain", placeholder: "acme.okta.com", kind: .host)
         let tool = ToolDefinition(id: "service-app", name: "Service App", summary: "As a service.", defaultInstructions: "Work.",

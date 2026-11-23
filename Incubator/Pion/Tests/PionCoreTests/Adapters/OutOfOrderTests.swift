@@ -66,7 +66,7 @@ final class OutOfOrderTests: XCTestCase {
     }
 
     func testOktaAdminRoles() async throws {
-        let connection = try Okta.preset.makeConnection(name: "Okta", values: ["domain": "acme.okta.com"])
+        let connection = try Okta.preset.makeConnection(name: "Okta", values: ["domain": "acme.okta.com", "clientID": "0oaPionAudit"])
         let service = service()
         service.answers["/api/v1/iam/assignees/users"] = (200, #"{"value":[\#((0..<20).map { #"{"id":"00u\#($0)"}"# }.joined(separator: ","))]}"#)
         for index in 0..<20 {

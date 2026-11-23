@@ -137,8 +137,9 @@ scope and a custom role limits it to the actions it takes; GitHub signs in with 
 code, through an OAuth app your organisation registers. Microsoft Azure Audit and Microsoft Azure Containment each use an app
 registration's client ID and secret, one subscription per account: the audit app only reads, and
 the containment app holds a custom role with only the actions it takes. Okta Audit and Okta Containment
-each take an API token made by an admin of their own: the audit admin only reads, and the containment
-admin holds a custom role with only the permissions its actions take.
+each sign in as an Okta admin of their own through OAuth, with a native app your org makes for each:
+the audit sign-in's scopes only read, and the containment admin holds a custom role with only the
+permissions its actions take.
 
 Some services have a guide in [docs/tools](docs/tools) explaining the access each tool asks for,
 the least access to set it up with, and its caveats.

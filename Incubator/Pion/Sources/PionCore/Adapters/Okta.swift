@@ -3,13 +3,13 @@ import NoodleCore
 import NoodleToolConnections
 
 /// An Okta org's users, their groups, apps, sign-in factors and grants, its admins and API tokens, and its System Log,
-/// read with an API token. Each account is its own org, named by its domain. Okta Audit only reads; Okta Containment,
-/// a tool of its own with a token of its own, acts.
+/// read as the admin who signs in. Each account is its own org, named by its domain. Okta Audit only reads; Okta
+/// Containment, a tool of its own with a sign-in of its own, acts.
 ///
-/// Both sign in with an SSWS API token rather than OAuth: Okta's OAuth sign-in for its Management API is each org's own
-/// authorization server, at the org's domain, which the shared sign-in, whose addresses are fixed for each catalogue
-/// entry, cannot reach yet. A token has the access of the admin who made it, so each tool's setup makes an admin of its
-/// own with only the access the tool needs, and check-access warns when it has more.
+/// Both sign in through OAuth at the org's own authorization server, with an authorization code and PKCE, through a
+/// native app the org made, which keeps no client secret. Okta allows a request only when both the sign-in's scopes and
+/// the admin's role allow it, so Okta Audit's scopes only read, whatever the admin may do, and each tool's setup gives
+/// its admin only the role the tool needs, which check-access reports.
 ///
 /// Both tools' guide is Incubator/Pion/docs/tools/okta.md. Change it with the setup steps, permissions or operations here.
 public enum Okta {
@@ -36,21 +36,45 @@ public enum Okta {
         Containment, with the user's login, why, and how to undo it.
         """,
         iconName: "okta",
-        configuration: .connection(.init(endpointTemplate: "https://{domain}/api/v1",
-                                  fields: [ToolField(key: "domain", title: "Okta domain", placeholder: "acme.okta.com", kind: .host)],
-                                  tokenHeader: "Authorization", tokenScheme: "SSWS",
-                                  // Okta revokes the token a request is made with.
-                                  tokenRevocation: TokenRevocation(method: "DELETE", path: "api-tokens/current", authorized: true),
+        configuration: .connection(.init(endpointTemplate: "https://{domain}/api/v1", fields: fields,
+                                  oauth: oauth(scopes: auditScopes), oauthClientField: "clientID", oauthHostField: "domain",
                                   adapter: "okta")),
         setup: setup)
 
-    static let setup = [
-        "In the Okta Admin Console, create a user for Pion Audit alone, such as pion-audit@example.com, so the token belongs to no person and to no other tool.",
-        "Under **Security › Administrators**, give that user the **Read-Only Administrator** role.",
-        "To audit admins and API tokens too, under **Security › Administrators › Roles** create a role such as **Pion Audit** with only **View roles, resources, and admin assignments** (`okta.iam.read`) and **View API tokens** (`okta.users.apitokens.read`), and assign it to the same user for all users and all Identity and Access Management resources. The Read-Only Administrator cannot see them.",
-        "Sign in to the Admin Console as that user, open **Security › API › Tokens** and choose **Create Token**. A token has its creator's access, so this one can only read. Where Okta offers it, limit the token to your network zone.",
-        "Copy the token and paste it here. Okta revokes tokens left unused for 30 days.",
-        "For the domain, give your org's address, such as `acme.okta.com`, not its `-admin` address. Then ask an agent to run check-access.",
+    static let fields = [ToolField(key: "domain", title: "Okta domain", placeholder: "acme.okta.com", kind: .host),
+                         ToolField(key: "clientID", title: "Client ID", placeholder: "0oa1b2c3d4e5f6g7h8i9", kind: .identifier)]
+
+    /// The org authorization server, which alone issues tokens for Okta's own API. Its host stands for the org's domain,
+    /// which each account's sign-in puts in its place; .invalid, so it can never be reached as it is. Every sign-in asks
+    /// for the admin's password again, so a browser already signed in to Okta as someone else never answers for them.
+    static func oauth(scopes: [String]) -> MCPOAuthConfiguration {
+        MCPOAuthConfiguration(issuer: URL(string: "https://okta.invalid")!,
+                              authorizationEndpoint: URL(string: "https://okta.invalid/oauth2/v1/authorize")!,
+                              tokenEndpoint: URL(string: "https://okta.invalid/oauth2/v1/token")!, clients: [],
+                              scopes: scopes + ["offline_access"], authorizationParameters: ["prompt": "login"],
+                              usesResourceIndicator: false, revocationEndpoint: URL(string: "https://okta.invalid/oauth2/v1/revoke")!)
+    }
+
+    /// Only reading scopes, one for each kind of thing Okta Audit reads: users, with their factors and grants, and the
+    /// signed-in admin; groups; apps; the System Log; admin roles and assignments; API tokens.
+    static let auditScopes = ["okta.users.read", "okta.users.read.self", "okta.groups.read", "okta.apps.read", "okta.logs.read",
+                              "okta.roles.read", "okta.apiTokens.read"]
+
+    /// Where Okta sends each sign-in back to: Pion's bundle ID as a URL scheme.
+    static let redirects = "`com.pdparchitect.pion:/oauth2callback` (`com.pdparchitect.pion.local:/oauth2callback` for Pion Dev)"
+
+    static func appSteps(_ name: String, scopes: [String]) -> [String] {
+        [
+            "In the Okta Admin Console, open **Applications › Applications**, choose **Create App Integration**, then **OIDC - OpenID Connect** and **Native Application**, and name it \(name), kept for this tool alone.",
+            "Keep the grant type **Authorization Code** and tick **Refresh Token**. Give \(redirects) as the **Sign-in redirect URI**. Under **Assignments**, allow only the admin who will sign in, and save. Keep client authentication as PKCE, a native app's default: Pion keeps no client secret.",
+            "On the app's **Okta API Scopes** tab, grant exactly \(scopes.map { "`\($0)`" }.joined(separator: ", ")); only a super administrator can grant them. Pion asks for these and `offline_access`, and refuses a sign-in that lacks any.",
+        ]
+    }
+
+    static let setup = appSteps("Pion Audit", scopes: auditScopes) + [
+        "Okta allows a request only when both the app's scopes and the signed-in admin's role allow it. Keep an admin for Pion Audit alone, such as pion-audit@example.com, with the **Read-Only Administrator** role under **Security › Administrators**.",
+        "To audit admins and API tokens too, under **Security › Administrators › Roles** create a role such as **Pion Audit** with only **View roles, resources, and admin assignments** (`okta.iam.read`) and **View API tokens** (`okta.users.apitokens.read`), and assign it to the same admin for all users and all Identity and Access Management resources. The Read-Only Administrator cannot see them.",
+        "Give your org's domain, such as `acme.okta.com`, not its `-admin` address, and the app's **Client ID**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
 
     public static let adapter = OperationAdapter(operations: [FindUser(), UserGroups(), UserApps(), UserFactors(), SignInEvents(),
@@ -146,7 +170,10 @@ public enum Okta {
             let when = reset.map { "Okta's limit for this endpoint resets at \(iso($0)), in \(max(0, Int($0.timeIntervalSinceNow.rounded(.up)))) seconds" }
             throw ServiceError.rateLimited([when, said].compactMap { $0 }.joined(separator: "; "))
         case 401: throw ServiceError.rejected(said)
-        case 403: throw ServiceError.forbidden(said)
+        case 403:
+            // A scope the sign-in lacks is told apart from a permission the admin lacks, as each is changed in its own place.
+            if let scope = lackedScope(answer.response) { throw ServiceError.forbidden(lacking + scope + (said.map { "; " + $0 } ?? "")) }
+            throw ServiceError.forbidden(said)
         case 404: throw ServiceError.notFound
         case 400, 405, 409, 412, 422: throw said.map(ServiceError.refused) ?? ServiceError.status(status)
         default: throw ServiceError.status(status, said)
@@ -277,24 +304,51 @@ public enum Okta {
 
     // MARK: Refusals
 
-    /// What one thing the tool reads needs, to say what to change when Okta refuses it.
+    /// What one thing the tool reads needs, to say what to change when Okta refuses it: the sign-in's scope and the
+    /// admin's permission.
     struct Need: Sendable {
-        let title: String, permission: String
-        static let users = Need(title: "Users", permission: "the Read-Only Administrator role (okta.users.read)")
-        static let groups = Need(title: "Groups", permission: "the Read-Only Administrator role (okta.groups.read)")
-        static let apps = Need(title: "Apps", permission: "the Read-Only Administrator role (okta.apps.read)")
-        static let logs = Need(title: "System Log", permission: "the Read-Only Administrator role, which reads the System Log")
-        static let admins = Need(title: "Admin assignments", permission: "a custom role with View roles, resources, and admin assignments (okta.iam.read)")
-        static let tokens = Need(title: "API tokens", permission: "a custom role with View API tokens (okta.users.apitokens.read)")
+        let title: String, scope: String, permission: String
+        static let users = Need(title: "Users", scope: "okta.users.read", permission: "the Read-Only Administrator role (okta.users.read)")
+        static let groups = Need(title: "Groups", scope: "okta.groups.read", permission: "the Read-Only Administrator role (okta.groups.read)")
+        static let apps = Need(title: "Apps", scope: "okta.apps.read", permission: "the Read-Only Administrator role (okta.apps.read)")
+        static let logs = Need(title: "System Log", scope: "okta.logs.read", permission: "the Read-Only Administrator role, which reads the System Log")
+        static let admins = Need(title: "Admin assignments", scope: "okta.roles.read", permission: "a custom role with View roles, resources, and admin assignments (okta.iam.read)")
+        static let tokens = Need(title: "API tokens", scope: "okta.apiTokens.read", permission: "a custom role with View API tokens (okta.users.apitokens.read)")
+        static let signedIn = Need(title: "The signed-in admin", scope: "okta.users.read.self", permission: "an admin role")
+    }
+
+    /// How a refusal for a scope the sign-in lacks begins, before the scope Okta named.
+    static let lacking = "insufficient_scope: "
+
+    /// The scope Okta's 403 says the sign-in lacks, from its WWW-Authenticate header, such as
+    /// `Bearer …, scope="okta.users.read", error="insufficient_scope"`; nil for any other refusal.
+    static func lackedScope(_ response: HTTPURLResponse) -> String? {
+        guard let header = response.value(forHTTPHeaderField: "WWW-Authenticate"),
+              let regex = try? NSRegularExpression(pattern: #"([A-Za-z_]+)\s*=\s*"([^"]*)""#) else { return nil }
+        var values: [String: String] = [:]
+        for match in regex.matches(in: header, range: NSRange(header.startIndex..., in: header)) {
+            guard let name = Range(match.range(at: 1), in: header), let value = Range(match.range(at: 2), in: header) else { continue }
+            values[header[name].lowercased()] = String(header[value])
+        }
+        guard values["error"] == "insufficient_scope" else { return nil }
+        // Only scope names, so nothing else Okta put there reaches the result.
+        let scope = (values["scope"] ?? "").split(separator: " ").map(String.init).filter {
+            (1...60).contains($0.count) && $0.unicodeScalars.allSatisfy(CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._").contains)
+        }.joined(separator: " ")
+        return scope
     }
 
     /// What to change when Okta refused, from what it said; nil for any other failure.
     static func fix(for error: Error, _ need: Need) -> String? {
         switch error {
         case ServiceError.rejected:
-            return "Okta did not accept the API token: it may have been revoked, expired after 30 days unused, or belong to an admin who was deactivated. Make a new one as the Setup Steps say and paste it in Settings › Tools."
+            return "Okta did not accept the sign-in: it expired or was revoked, the app or its refresh token was turned off, or the admin was deactivated. Connect the tool again in Settings › Tools."
+        case ServiceError.forbidden(let reason?) where reason.hasPrefix(lacking):
+            let named = reason.dropFirst(lacking.count).prefix { $0 != ";" }
+            let scope = named.isEmpty ? need.scope : String(named)
+            return "the sign-in lacks the scope \(scope): if the tool's Setup Steps list it, grant it on the Okta app's Okta API Scopes tab, then connect the tool again in Settings › Tools; if they do not, Okta wants a scope Pion does not ask for, so report it."
         case ServiceError.forbidden:
-            return "the admin this token belongs to may not read this: give them \(need.permission), or, if they have it, check the token's network restriction and the admin's resource set."
+            return "the signed-in admin may not read this: give them \(need.permission), or, if they have it, check the admin's resource set."
         default: return nil
         }
     }
@@ -633,7 +687,7 @@ extension Okta {
         }
     }
 
-    /// The admin this connection's token belongs to, and their roles.
+    /// The admin signed in to this connection, and their roles.
     static func signedIn(_ service: ServiceClient) async throws -> (user: User, roles: [Role]) {
         let me = try await get(service, ["users", "me"], as: User.self)
         let roles = try await get(service, ["users", try id(me.id, length: 1...64, "the signed-in user"), "roles"], as: [Role].self)
@@ -648,12 +702,12 @@ extension Okta {
             .permissions?.compactMap(\.label) ?? []
     }
 
-    /// Tries each thing Okta Audit reads once, says what works and what to change for what does not, and whether the
-    /// token's admin could change the org.
+    /// Tries each thing Okta Audit reads once, says what works and what to change for what does not, which scopes the
+    /// sign-in holds, and which roles the signed-in admin holds.
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
-        static let summary = "Tries each thing this tool reads once and says what works and, for what does not, exactly what to change; which admin roles the token's admin holds, warning when they could change the org; and where the token may be used from. It changes nothing."
+        static let summary = "Tries each thing this tool reads once and says what works and, for what does not, exactly what to change, in the Okta app's scopes or the admin's role; which scopes the sign-in holds; and which admin roles the signed-in admin holds, saying when they could change the org. It changes nothing."
         static let input = JSONSchema.object([:])
 
         /// Standard admin roles that only read.
@@ -689,30 +743,22 @@ extension Okta {
                         writes.append(role.label ?? role.type ?? "?")
                     }
                 }
-                lines.append("· The token acts as \(me.profile?.login ?? me.id), who holds \(named.isEmpty ? "no admin role" : named.joined(separator: ", ")).")
+                lines.append("· Signed in as \(me.profile?.login ?? me.id), who holds \(named.isEmpty ? "no admin role" : named.joined(separator: ", ")).")
                 lines.append(writes.isEmpty
-                    ? "✓ The token's admin cannot change the org: they hold only reading roles."
-                    : "⚠ The token's admin can change the org: \(Array(Set(writes)).sorted().prefix(6).joined(separator: ", ")). Okta Audit only reads, so give its admin only the Read-Only Administrator and a custom role that views roles and API tokens; Okta Containment has an admin of its own.")
+                    ? "✓ The signed-in admin cannot change the org: they hold only reading roles."
+                    : "⚠ The signed-in admin's roles also allow changes: \(Array(Set(writes)).sorted().prefix(6).joined(separator: ", ")). This sign-in's scopes only read, so Okta Audit cannot make them, but an admin kept for it needs only the Read-Only Administrator and a custom role that views roles and API tokens.")
             } catch {
-                lines.append("· Which roles the token's admin holds: not read: \(error.localizedDescription)")
+                lines.append("· Which roles the signed-in admin holds: not read: \(error.localizedDescription)")
             }
-            lines.append(await Okta.tokenNetwork(service))
+            lines.append(Okta.scopesLine(Okta.auditScopes, service))
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
         }
     }
 
-    /// Where the connection's own token may be used from, as a line of check-access.
-    static func tokenNetwork(_ service: ServiceClient) async -> String {
-        do {
-            let token = try await get(service, ["api-tokens", "current"], as: APITokens.Token.self)
-            switch token.network?.connection {
-            case "ANYWHERE", nil:
-                return "· The token works from anywhere. Where Okta offers it, limit it to your network zone in Security › API › Tokens, so a copy stolen from this Mac works nowhere else\(token.expiresAt.map { "; it expires \($0)" } ?? "")."
-            case let limited?:
-                return "✓ The token works only from \(limited.lowercased().replacingOccurrences(of: "_", with: " ")) networks\(token.expiresAt.map { "; it expires \($0)" } ?? "")."
-            }
-        } catch {
-            return "· Where the token may be used from: not read: \(error.localizedDescription)"
-        }
+    /// The scopes a sign-in holds, as a line of check-access: those its tool asks for, as Pion refuses a sign-in Okta
+    /// grants fewer, and the app they are granted to.
+    static func scopesLine(_ scopes: [String], _ service: ServiceClient) -> String {
+        let app = service.settings["clientID"].map { " to the Okta app \($0)" } ?? ""
+        return "· The sign-in holds the scopes \((scopes + ["offline_access"]).joined(separator: ", ")), granted\(app); Pion refuses a sign-in that lacks any. Okta allows a request only when the admin's role allows it too."
     }
 }

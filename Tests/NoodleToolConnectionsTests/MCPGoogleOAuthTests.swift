@@ -277,7 +277,7 @@ final class MCPGoogleOAuthTests: XCTestCase {
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(stored)) as? [String: Any])
         object["scope"] = "https://www.googleapis.com/auth/gmail.readonly"
         vault.save(try JSONDecoder().decode(MCPCredentials.self, from: JSONSerialization.data(withJSONObject: object)), id: record.id)
-        let connected = await client.hasCredentials(record.id)
+        let connected = await client.hasCredentials(record)
         XCTAssertFalse(connected)
         let draft = MCPBridgeRequest(session: "", connectionID: record.id, action: .call, tool: "create_draft",
             arguments: try JSONEncoder().encode(["subject": "Fixture draft"]))
@@ -295,7 +295,7 @@ final class MCPGoogleOAuthTests: XCTestCase {
         // Google can return an earlier grant alongside the requested permission.
         GoogleProtocol.fixture.grantedScope = "https://www.googleapis.com/auth/gmail.readonly " + GmailPreset.scope
         try await client.signIn(record, redirectURI: redirect, browser: Self.browser)
-        let reconnected = await client.hasCredentials(record.id)
+        let reconnected = await client.hasCredentials(record)
         XCTAssertTrue(reconnected)
         XCTAssertEqual(vault.load(record.id)?.scope, GmailPreset.scope)
         let result = try await client.perform(draft, connection: record)
