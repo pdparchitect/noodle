@@ -249,7 +249,7 @@ struct EditComputerView: View {
   var body: some View {
     VStack(spacing: 0) {
       HStack {
-        Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).foregroundStyle(.blue)
+        Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).foregroundStyle(Color.accentColor)
         Spacer()
         Text("Edit Computer").font(.headline).foregroundStyle(.primary)
         Spacer()
@@ -265,7 +265,7 @@ struct EditComputerView: View {
           dismiss()
         }
         .keyboardShortcut(.defaultAction)
-        .foregroundStyle(.blue)
+        .foregroundStyle(Color.accentColor)
         .disabled(
           name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || name.count > 100 || name.contains(where: \.isNewline)
@@ -459,7 +459,7 @@ struct NewComputerView: View {
         VStack(spacing: 0) {
           HStack {
             Button("Cancel") { dismiss() }.disabled(creating).keyboardShortcut(.cancelAction)
-              .buttonStyle(.plain).foregroundStyle(.blue)
+              .buttonStyle(.plain).foregroundStyle(Color.accentColor)
             Spacer()
             Text("New Linux Container").font(.headline)
             Spacer()
@@ -478,7 +478,7 @@ struct NewComputerView: View {
                   store.error = nil
                 }
               }
-            }.buttonStyle(.plain).foregroundStyle(canCreate ? Color.blue : .secondary)
+            }.buttonStyle(.plain).foregroundStyle(canCreate ? Color.accentColor : .secondary)
               .keyboardShortcut(.defaultAction).disabled(!canCreate)
           }.padding(20)
           Divider()
@@ -577,7 +577,7 @@ struct NewWindowsView: View {
         VStack(spacing: 0) {
           HStack {
             Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-              .buttonStyle(.plain).foregroundStyle(.blue)
+              .buttonStyle(.plain).foregroundStyle(Color.accentColor)
             Spacer()
             Text("New Windows").font(.headline)
             Spacer()
@@ -594,7 +594,7 @@ struct NewWindowsView: View {
                   store.error = nil
                 }
               }
-            }.buttonStyle(.plain).foregroundStyle(canCreate ? Color.blue : .secondary)
+            }.buttonStyle(.plain).foregroundStyle(canCreate ? Color.accentColor : .secondary)
               .keyboardShortcut(.defaultAction).disabled(!canCreate)
           }.padding(20)
           Divider()
@@ -801,7 +801,7 @@ struct ComputerCreationProgressView: View {
         Spacer()
         Button(store.creationCancelling ? "Cancelling…" : "Cancel") { store.cancelCreation() }
           .keyboardShortcut(.cancelAction).disabled(store.creationCancelling)
-          .buttonStyle(.plain).foregroundStyle(store.creationCancelling ? Color.secondary : .blue)
+          .buttonStyle(.plain).foregroundStyle(store.creationCancelling ? Color.secondary : .accentColor)
       }
     }
     .padding(24)

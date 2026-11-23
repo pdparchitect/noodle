@@ -21,7 +21,7 @@ struct MissionGraphView: View {
         ZStack {
             if record.entities.isEmpty {
                 ContentUnavailableView("No graph yet", systemImage: "point.3.connected.trianglepath.dotted",
-                    description: Text("Agents build it as they link what they find — a credential that unlocks an account, a host they pivot to."))
+                    description: Text("Agents build it as they link what they find."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 graph(record)

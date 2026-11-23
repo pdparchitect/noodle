@@ -142,12 +142,12 @@ struct NewSSHComputerView: View {
             } else {
                 VStack(spacing: 0) {
                     HStack {
-                        Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).foregroundStyle(.blue)
+                        Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).foregroundStyle(Color.accentColor)
                         Spacer()
                         Text("New SSH Computer").font(.headline)
                         Spacer()
                         Button("Create") { create() }.keyboardShortcut(.defaultAction).disabled(!canCreate)
-                            .foregroundStyle(canCreate ? Color.blue : .secondary)
+                            .foregroundStyle(canCreate ? Color.accentColor : .secondary)
                     }.buttonStyle(.plain).padding(20)
                     Divider()
                     VStack(alignment: .leading, spacing: 16) {
@@ -212,12 +212,12 @@ struct ChangeSSHSignInView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Cancel") { task?.cancel(); dismiss() }.keyboardShortcut(.cancelAction).foregroundStyle(.blue)
+                Button("Cancel") { task?.cancel(); dismiss() }.keyboardShortcut(.cancelAction).foregroundStyle(Color.accentColor)
                 Spacer()
                 Text("Change Sign In").font(.headline)
                 Spacer()
                 Button("Save") { save() }.keyboardShortcut(.defaultAction).disabled(!canSave)
-                    .foregroundStyle(canSave ? Color.blue : .secondary)
+                    .foregroundStyle(canSave ? Color.accentColor : .secondary)
             }.buttonStyle(.plain).padding(20)
             Divider()
             VStack(alignment: .leading, spacing: 16) {

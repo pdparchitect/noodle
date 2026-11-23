@@ -73,6 +73,8 @@ extension EnvironmentValues {
 enum NewComputerKind: String, Identifiable {
     case linux, ssh
     var id: Self { self }
+    /// As Noodle Computer names them, but a server reached over SSH is a connection here.
+    var title: String { self == .linux ? "New Linux Container" : "New SSH Connection" }
 }
 
 /// Shows Noodle Computer's sheet for `kind`, with its download progress, then tells `created` which computer it made.
@@ -141,6 +143,7 @@ private struct ComputerSidebarItem: View {
     let selected: Bool
     let select: () -> Void
     @State private var deleting = false
+    @State private var editing = false
 
     var body: some View {
         Group {
@@ -160,6 +163,8 @@ private struct ComputerSidebarItem: View {
             }
         }
         .contextMenu {
+            Button("Edit Computer…") { editing = true }
+            Divider()
             Button(session.phase == .running ? "Stop" : "Start") {
                 Task { if session.phase == .running { await store.stop(session) } else { await store.start(session) } }
             }
@@ -167,6 +172,7 @@ private struct ComputerSidebarItem: View {
             Divider()
             Button("Delete Computer", role: .destructive) { deleting = true }.disabled(!session.canDelete)
         }
+        .sheet(isPresented: $editing) { EditComputerView(store: store, session: session) }
         .alert(ComputerDeletion.title(session.computer), isPresented: $deleting) {
             Button("Cancel", role: .cancel) {}
             Button(ComputerDeletion.action(session.computer), role: .destructive) { store.remove(session) }
@@ -223,18 +229,15 @@ struct MissionComputersRow: View {
     }
 }
 
-/// Choosing a Mission's computers, laid out as its agents are chosen: the chosen ones in a grid, each with a
-/// button to remove it, and Add Computers to pick from the rest or make a new one.
+/// Choosing a Mission's computers with Noodle's own picker, as Noodle gives a bot its computers: the chosen ones in a
+/// grid, and Add Computers to pick from the rest or make a new one.
 private struct MissionComputersSheet: View {
     let computers: RookComputers
     @Binding var selection: [UUID]
     @Binding var names: [UUID: String]
     @ObservedObject private var store: ComputerStore
     @State private var draft: [UUID]
-    @State private var adding = false
-    @State private var search = ""
     @State private var creating: NewComputerKind?
-    @State private var pendingRemoval: ComputerSession?
     @Environment(\.dismiss) private var dismiss
 
     init(computers: RookComputers, selection: Binding<[UUID]>, names: Binding<[UUID: String]>) {
@@ -245,15 +248,17 @@ private struct MissionComputersSheet: View {
         _draft = State(initialValue: selection.wrappedValue)
     }
 
-    private var chosen: [ComputerSession] { draft.compactMap(computers.session) }
-    private var available: [ComputerSession] {
-        computers.computers.filter { !draft.contains($0.id) && (search.isEmpty || $0.computer.name.localizedCaseInsensitiveContains(search)) }
+    /// The chosen ones as a set for the picker, kept in the order they were chosen.
+    private var chosen: Binding<Set<UUID>> {
+        Binding(get: { Set(draft) }, set: { ids in
+            draft = draft.filter(ids.contains) + computers.computers.map(\.id).filter { ids.contains($0) && !draft.contains($0) }
+        })
     }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Button("Cancel") { dismiss() }.buttonStyle(.plain).foregroundStyle(Color.accentColor).keyboardShortcut(.cancelAction)
+                Button("Cancel") { dismiss() }.buttonStyle(.sheetHeader).keyboardShortcut(.cancelAction)
                 Spacer()
                 Text("Computers").font(.headline)
                 Spacer()
@@ -262,123 +267,32 @@ private struct MissionComputersSheet: View {
                     selection = draft
                     dismiss()
                 }
-                .buttonStyle(.plain).foregroundStyle(Color.accentColor).keyboardShortcut(.defaultAction)
+                .buttonStyle(.sheetHeader).keyboardShortcut(.defaultAction)
             }
-            .padding(20)
+            .padding(16)
             Divider()
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Computers").font(.caption.weight(.semibold))
-                    Spacer()
-                    Button { search = ""; adding = true } label: { Label("Add Computers", systemImage: "plus") }
-                        .popover(isPresented: $adding, arrowEdge: .bottom) { chooser }
-                }
-                ScrollView {
-                    if chosen.isEmpty {
-                        Button { search = ""; adding = true } label: {
-                            VStack(spacing: 10) {
-                                Image(systemName: "desktopcomputer").font(.largeTitle)
-                                Text("Add computers to this mission")
-                            }
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 32)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .help("Add Computers")
-                    } else {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 12)], spacing: 16) {
-                            ForEach(chosen) { session in
-                                ChosenComputerCell(session: session) { pendingRemoval = session }
-                                    .frame(maxWidth: .infinity, alignment: .top)
-                            }
-                        }
-                        .padding(12)
-                    }
-                }
-                .frame(minHeight: 140, maxHeight: 280)
-                .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
-            }
-            .padding(20)
+            CompanionAssignmentPicker(title: "Computers", noun: "computer", symbol: "desktopcomputer",
+                items: computers.computers.map {
+                    CompanionAssignmentItem(id: $0.id, name: $0.computer.name, state: $0.phase.label, symbol: $0.computer.displaySymbol,
+                                            colour: 0, detail: $0.computer.displayType)
+                },
+                selectedIDs: chosen,
+                createPrompt: VStack(spacing: 10) {
+                    Image(systemName: "desktopcomputer").font(.largeTitle)
+                    Text("No computers yet")
+                }.foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(.horizontal, 12),
+                openLibraryButton: EmptyView(), notice: EmptyView(),
+                owner: "mission", newKinds: [NewComputerKind.linux.title, NewComputerKind.ssh.title],
+                onNewKind: { title in creating = title == NewComputerKind.ssh.title ? .ssh : .linux },
+                avatar: { item, size in
+                    AnyView(ComputerIcon(appearance: .init(), symbol: item.symbol, size: size).environment(\.offersComputerAppearance, false))
+                })
+                .padding(20)
         }
         .frame(width: 540)
         .noodleSheetSizing()
-        .confirmationDialog("Remove \(pendingRemoval?.computer.name ?? "computer") from mission?",
-                            isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
-                            titleVisibility: .visible, presenting: pendingRemoval) { session in
-            Button("Remove from Mission", role: .destructive) { draft.removeAll { $0 == session.id } }
-            Button("Cancel", role: .cancel) {}
-        }
         .sheet(item: $creating) { kind in
             NewComputerSheet(computers: computers, kind: kind) { id in if !draft.contains(id) { draft.append(id) } }
-        }
-    }
-
-    /// As the agents' chooser: search, then each computer not chosen yet; making a new one comes last.
-    private var chooser: some View {
-        VStack(spacing: 12) {
-            TextField("Search computers", text: $search).textFieldStyle(.roundedBorder)
-            ScrollView {
-                LazyVStack(spacing: 4) {
-                    ForEach(available) { session in
-                        Button { draft.append(session.id) } label: {
-                            HStack(spacing: 12) {
-                                ComputerMark(session: session, size: 32)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(session.computer.name).foregroundStyle(Color.primary)
-                                    Text(session.computer.displayType).font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor)
-                            }
-                            .padding(8)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Add \(session.computer.name) to mission")
-                    }
-                    if available.isEmpty {
-                        Text(computers.computers.isEmpty ? "No computers yet" : search.isEmpty ? "All computers added" : "No matching computers")
-                            .foregroundStyle(.secondary).padding()
-                    }
-                }
-            }
-            Divider()
-            HStack {
-                Button("New Linux Container") { adding = false; creating = .linux }.buttonStyle(.accentLink)
-                Spacer()
-                Button("New SSH Computer") { adding = false; creating = .ssh }.buttonStyle(.accentLink)
-            }
-        }
-        .padding(16)
-        .frame(width: 300, height: 320)
-    }
-}
-
-/// A chosen computer in the grid: its icon with a button to remove it, and its name, as a chosen agent is shown.
-private struct ChosenComputerCell: View {
-    @ObservedObject var session: ComputerSession
-    let remove: () -> Void
-
-    var body: some View {
-        VStack(spacing: 8) {
-            ComputerMark(session: session, size: 48)
-                .overlay(alignment: .topTrailing) {
-                    Button(action: remove) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 17))
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, Color(nsColor: .darkGray))
-                            .padding(4)
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .offset(x: 10, y: -8)
-                    .help("Remove \(session.computer.name) from mission")
-                    .accessibilityLabel("Remove \(session.computer.name) from mission")
-                }
-            Text(session.computer.name).font(.caption).lineLimit(2).multilineTextAlignment(.center)
         }
     }
 }

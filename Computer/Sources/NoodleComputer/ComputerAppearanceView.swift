@@ -137,9 +137,9 @@ struct ComputerAppearanceSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
-                Button("Cancel") { dismiss() }.foregroundStyle(.blue).disabled(busy)
+                Button("Cancel") { dismiss() }.foregroundStyle(Color.accentColor).disabled(busy)
                 Spacer(); Text("Background & Terminal").font(.headline).foregroundStyle(.primary); Spacer()
-                Button("Apply") { appearance = draft; dismiss() }.keyboardShortcut(.defaultAction).foregroundStyle(.blue)
+                Button("Apply") { appearance = draft; dismiss() }.keyboardShortcut(.defaultAction).foregroundStyle(Color.accentColor)
                     .disabled(busy || draft == appearance)
             }.buttonStyle(.plain)
             ComputerWallpaper(appearance: draft, directory: directory).overlay {

@@ -177,8 +177,8 @@ struct Sidebar: View {
                     Button("New Agent") { window.sheet = .newAgent }
                     if computers != nil {
                         Divider()
-                        Button("New Linux Container") { creatingComputer = .linux }
-                        Button("New SSH Computer") { creatingComputer = .ssh }
+                        Button(NewComputerKind.linux.title) { creatingComputer = .linux }
+                        Button(NewComputerKind.ssh.title) { creatingComputer = .ssh }
                     }
                 } label: { Label("New", systemImage: "plus") }
                     .help("New Mission, Group, Agent or Computer")

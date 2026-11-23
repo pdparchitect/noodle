@@ -208,6 +208,7 @@ let project = Project(
                 "../../Sources/Noodle/ConversationTransition.swift",
                 "../../Sources/Noodle/AgentSettingsCheckpoint.swift",
                 "../../Sources/Noodle/BotFolderPicker.swift",
+                "../../Sources/Noodle/CompanionAssignmentPicker.swift",
                 // Noodle Computer's views for making, showing and changing a computer, over the engine Rook runs.
                 "../../Computer/Sources/NoodleComputer/ComputerViews.swift",
                 "../../Computer/Sources/NoodleComputer/ComputerAppearanceView.swift",

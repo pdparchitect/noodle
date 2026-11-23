@@ -24,7 +24,7 @@ struct NewLocalMacView: View {
         VStack(spacing: 0) {
             HStack {
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                    .foregroundStyle(.blue).disabled(creating)
+                    .foregroundStyle(Color.accentColor).disabled(creating)
                 Spacer()
                 Text("New Local Mac").font(.headline)
                 Spacer()
@@ -43,7 +43,7 @@ struct NewLocalMacView: View {
                         }
                     }
                 }.keyboardShortcut(.defaultAction).disabled(!canCreate)
-                    .foregroundStyle(canCreate ? Color.blue : .secondary)
+                    .foregroundStyle(canCreate ? Color.accentColor : .secondary)
             }.buttonStyle(.plain).padding(20)
             Divider()
             VStack(alignment: .leading, spacing: 16) {

@@ -20,7 +20,7 @@ func companionName(_ noun: String, for bot: String) -> String {
     return bot.isEmpty ? noun : "\(bot)’s \(noun)"
 }
 
-/// The same assignment controls for Computer and Browser in the bot editor.
+/// The same assignment controls for Computer and Browser in the bot editor, and for a Mission's computers in Rook.
 struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View>: View {
     let title: String
     let noun: String
@@ -36,10 +36,18 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
     var onNew: (() -> Void)?
     /// Deletes one in the companion, after the person confirms.
     var onDelete: ((CompanionAssignmentItem) -> Void)?
+    /// What they are given to, as in "Add computers to this bot".
+    var owner = "bot"
+    /// Several kinds to make, offered under New in place of `onNew`, such as a container and an SSH connection.
+    var newKinds: [String] = []
+    var onNewKind: ((String) -> Void)?
+    /// Draws an item's picture in place of the bot-style avatar.
+    var avatar: ((CompanionAssignmentItem, CGFloat) -> AnyView)?
     @State private var showingAdd = false
     @State private var search = ""
     @State private var removing: CompanionAssignmentItem?
-    @State private var wantsNew = false
+    /// What New was chosen for, made once the popover has closed: "" for `onNew`, otherwise one of `newKinds`.
+    @State private var wantsNew: String?
     @State private var deleting: CompanionAssignmentItem?
 
     private var selected: [CompanionAssignmentItem] {
@@ -60,13 +68,16 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
                 .popover(isPresented: $showingAdd, arrowEdge: .bottom) {
                     CompanionAssignmentChooser(title: title, items: items, selectedIDs: $selectedIDs,
                         search: $search, createPrompt: createPrompt, openLibraryButton: openLibraryButton,
-                        newTitle: onNew == nil ? nil : "New \(noun.capitalized)",
-                        onNew: { wantsNew = true; showingAdd = false },
+                        newTitle: onNew == nil && newKinds.isEmpty ? nil : "New \(noun.capitalized)",
+                        onNew: { wantsNew = ""; showingAdd = false },
+                        newKinds: newKinds, onNewKind: { wantsNew = $0; showingAdd = false },
                         deleteTitle: onDelete == nil ? nil : "Delete \(noun.capitalized)",
-                        onDelete: { deleting = $0; showingAdd = false })
+                        onDelete: { deleting = $0; showingAdd = false }, owner: owner, avatar: avatar)
                         .onDisappear {
                             // Wait for the popover to close before presenting a sheet on the bot editor.
-                            if wantsNew { wantsNew = false; onNew?() }
+                            guard let kind = wantsNew else { return }
+                            wantsNew = nil
+                            if kind.isEmpty { onNew?() } else { onNewKind?(kind) }
                         }
                 }
             }
@@ -76,15 +87,15 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
                     Button { search = ""; showingAdd = true } label: {
                         VStack(spacing: 10) {
                             Image(systemName: symbol).font(.largeTitle)
-                            Text("Add \(title.lowercased()) to this bot")
+                            Text("Add \(title.lowercased()) to this \(owner)")
                         }.foregroundStyle(.secondary).frame(maxWidth: .infinity)
                             .padding(.vertical, 32).contentShape(Rectangle())
-                    }.buttonStyle(.plain).accessibilityLabel("Add \(title.lowercased()) to this bot")
+                    }.buttonStyle(.plain).accessibilityLabel("Add \(title.lowercased()) to this \(owner)")
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 12)], spacing: 16) {
                         ForEach(selected) { item in
                             VStack(spacing: 8) {
-                                CompanionAssignmentAvatar(item: item, size: 48)
+                                CompanionAssignmentAvatar(item: item, size: 48, custom: avatar)
                                     .overlay(alignment: .topTrailing) {
                                         Button { removing = item } label: {
                                             Image(systemName: "xmark.circle.fill")
@@ -92,8 +103,8 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
                                                 .foregroundStyle(.white, Color(nsColor: .darkGray))
                                                 .padding(4).contentShape(Circle())
                                         }.buttonStyle(.plain).offset(x: 10, y: -8)
-                                            .help("Remove \(item.name) from bot")
-                                            .accessibilityLabel("Remove \(item.name) from bot")
+                                            .help("Remove \(item.name) from \(owner)")
+                                            .accessibilityLabel("Remove \(item.name) from \(owner)")
                                     }
                                 Text(item.name).font(.caption).lineLimit(2).multilineTextAlignment(.center)
                             }.frame(maxWidth: .infinity, alignment: .top)
@@ -120,7 +131,7 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
             Button("Remove \(noun.capitalized)", role: .destructive) { selectedIDs.remove(item.id) }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("This bot loses access to it when you save. The \(noun) itself is not deleted.")
+            Text("This \(owner) loses access to it when you save. The \(noun) itself is not deleted.")
         }
         .confirmationDialog("Delete “\(deleting?.name ?? "")”?", isPresented: Binding(
             get: { deleting != nil }, set: { if !$0 { deleting = nil } }
@@ -130,7 +141,7 @@ struct CompanionAssignmentPicker<Prompt: View, LibraryButton: View, Notice: View
         } message: { _ in
             // A computer can be put back from the Trash; a browser's website data cannot.
             Text(noun == "browser" ? "Its sign-ins and history are erased for good, and every bot using it loses it."
-                 : "It moves to the Trash, and every bot using it loses it.")
+                 : "It moves to the Trash, and every \(owner) using it loses it.")
         }
     }
 }
@@ -144,8 +155,12 @@ struct CompanionAssignmentChooser<Prompt: View, LibraryButton: View>: View {
     let openLibraryButton: LibraryButton
     var newTitle: String?
     var onNew: () -> Void = {}
+    var newKinds: [String] = []
+    var onNewKind: (String) -> Void = { _ in }
     var deleteTitle: String?
     var onDelete: (CompanionAssignmentItem) -> Void = { _ in }
+    var owner = "bot"
+    var avatar: ((CompanionAssignmentItem, CGFloat) -> AnyView)?
     private var available: [CompanionAssignmentItem] {
         items.filter {
             !selectedIDs.contains($0.id) && (search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)
@@ -160,7 +175,7 @@ struct CompanionAssignmentChooser<Prompt: View, LibraryButton: View>: View {
                     ForEach(available) { item in
                         Button { selectedIDs.insert(item.id) } label: {
                             HStack(spacing: 12) {
-                                CompanionAssignmentAvatar(item: item, size: 32)
+                                CompanionAssignmentAvatar(item: item, size: 32, custom: avatar)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(item.name).foregroundStyle(Color.primary)
                                     Text(item.state).font(.caption).foregroundStyle(Color.secondary)
@@ -169,7 +184,7 @@ struct CompanionAssignmentChooser<Prompt: View, LibraryButton: View>: View {
                                 Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor)
                             }.padding(8).contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain).help(item.tooltip).accessibilityLabel("Add \(item.name) to bot")
+                        .buttonStyle(.plain).help(item.tooltip).accessibilityLabel("Add \(item.name) to \(owner)")
                         .contextMenu {
                             if let deleteTitle { Button(deleteTitle, role: .destructive) { onDelete(item) } }
                         }
@@ -182,7 +197,12 @@ struct CompanionAssignmentChooser<Prompt: View, LibraryButton: View>: View {
                 }
             }
             HStack {
-                if let newTitle { Button(action: onNew) { Label("New", systemImage: "plus") }.help(newTitle).accessibilityLabel(newTitle) }
+                if !newKinds.isEmpty {
+                    Menu { ForEach(newKinds, id: \.self) { kind in Button(kind) { onNewKind(kind) } } } label: { Label("New", systemImage: "plus") }
+                        .fixedSize().help(newTitle ?? "").accessibilityLabel(newTitle ?? "New")
+                } else if let newTitle {
+                    Button(action: onNew) { Label("New", systemImage: "plus") }.help(newTitle).accessibilityLabel(newTitle)
+                }
                 openLibraryButton
                 Spacer()
             }
@@ -193,7 +213,12 @@ struct CompanionAssignmentChooser<Prompt: View, LibraryButton: View>: View {
 struct CompanionAssignmentAvatar: View {
     let item: CompanionAssignmentItem
     let size: CGFloat
+    var custom: ((CompanionAssignmentItem, CGFloat) -> AnyView)?
     var body: some View {
+        if let custom { custom(item, size) } else { avatar }
+    }
+
+    private var avatar: some View {
         var agent = AgentRecord(displayName: item.name, accentSeed: 0)
         agent.avatarSymbolName = item.symbol
         agent.avatarColorIndex = abs(item.colour % BotAvatarPalette.gradients.count)
