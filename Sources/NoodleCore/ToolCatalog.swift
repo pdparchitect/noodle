@@ -205,6 +205,13 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
     /// For a service whose sign-in server is each account's own, such as an Okta org's: the `.host` field naming it.
     /// The host of every address in `oauth` stands for the account's, checked as that field checks it.
     public let oauthHostField: String?
+    /// For a service whose sign-in server names each account in its path, as Microsoft's names its tenant: the
+    /// `.identifier` field it names. Every address in `oauth` holds `{key}` as one whole segment of its path, which
+    /// stands for the account's value, checked as that field checks it.
+    public let oauthPathField: String?
+    /// Values the sign-in server takes in that segment that name no one account, such as Microsoft's common, which
+    /// signs in to whichever tenant the person belongs to: refused whatever their case, at setup and at sign-in.
+    public let oauthPathExcludes: Set<String>
 
     public init(endpoint: URL, oauth: MCPOAuthConfiguration? = nil, authorizationServer: URL? = nil, tokenHeader: String? = nil,
                 tokenScheme: String? = nil, tokenParameter: String? = nil, composedToken: ComposedToken? = nil,
@@ -218,6 +225,8 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
         tokenRevocation = nil
         oauthClientField = nil
         oauthHostField = nil
+        oauthPathField = nil
+        oauthPathExcludes = []
         self.endpoint = endpoint
         self.oauth = oauth
         self.authorizationServer = authorizationServer
@@ -232,12 +241,19 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
                 authorizationServer: URL? = nil, tokenHeader: String? = nil, tokenScheme: String? = nil,
                 tokenParameter: String? = nil, composedToken: ComposedToken? = nil, clientCredentials: ClientCredentialsPreset? = nil,
                 signsInWithAWSIdentityCenter: Bool = false, oauthClientField: String? = nil, oauthHostField: String? = nil,
-                tokenRevocation: TokenRevocation? = nil, adapter: String? = nil) {
+                oauthPathField: String? = nil, oauthPathExcludes: Set<String> = [], tokenRevocation: TokenRevocation? = nil,
+                adapter: String? = nil) {
         self.tokenRevocation = tokenRevocation
         self.oauthClientField = oauthClientField
         self.oauthHostField = oauthHostField
+        self.oauthPathField = oauthPathField
+        self.oauthPathExcludes = Set(oauthPathExcludes.map { $0.lowercased() })
         if let oauthHostField, oauth == nil || !fields.contains(where: { $0.key == oauthHostField && $0.kind == .host }) {
             preconditionFailure("\(oauthHostField) is no host field of a sign-in.")
+        }
+        if let oauthPathField, !fields.contains(where: { $0.key == oauthPathField && $0.kind == .identifier })
+            || oauth?.at(segment: "{\(oauthPathField)}", value: "account") == nil {
+            preconditionFailure("\(oauthPathField) is no identifier field that every address of a sign-in names.")
         }
         self.composedToken = composedToken
         self.signsInWithAWSIdentityCenter = signsInWithAWSIdentityCenter
@@ -267,6 +283,12 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
         -> (endpoint: URL, settings: [String: String]?, clientCredentials: ConnectionClientCredentials?) {
         var settings: [String: String] = [:]
         for field in fields { settings[field.key] = try field.validated(values[field.key] ?? "") }
+        // An account its sign-in server would not name alone, such as by dots only or an address for any account, is
+        // refused before anything signs in.
+        if let key = oauthPathField, oauth(for: settings) == nil {
+            let field = fields.first { $0.key == key }
+            throw ToolConnectionError.message("Enter \(field?.title ?? key) as one account's own, such as \(field?.placeholder ?? ""); \(settings[key] ?? "") names no one account.")
+        }
         func address(_ template: String) throws -> URL {
             guard let url = URL(string: Self.fill(template, fields: fields, values: settings)) else {
                 throw ToolConnectionError.message("These details make no valid address.")
@@ -280,14 +302,23 @@ public struct ToolConnectionConfiguration: Equatable, Sendable {
         return (try endpointTemplate.map(address) ?? endpoint, fields.isEmpty ? nil : settings, client)
     }
 
-    /// How one account signs in: `oauth`, at the account's own host for an entry whose sign-in server is each account's;
-    /// nil when that host is missing or not a host alone.
+    /// How one account signs in: `oauth`, at the account's own host for an entry whose sign-in server is each account's,
+    /// and naming the account's own value in its path for one whose server names each account there; nil when that
+    /// value is missing or not what its field takes.
     public func oauth(for settings: [String: String]?) -> MCPOAuthConfiguration? {
-        guard let oauth else { return nil }
-        guard let key = oauthHostField else { return oauth }
-        guard let field = fields.first(where: { $0.key == key }), field.kind == .host,
-              let value = settings?[key], let host = try? field.validated(value) else { return nil }
-        return oauth.at(host: host)
+        guard var oauth else { return nil }
+        if let key = oauthHostField {
+            guard let field = fields.first(where: { $0.key == key }), field.kind == .host,
+                  let value = settings?[key], let host = try? field.validated(value), let moved = oauth.at(host: host) else { return nil }
+            oauth = moved
+        }
+        if let key = oauthPathField {
+            guard let field = fields.first(where: { $0.key == key }), field.kind == .identifier, let value = settings?[key],
+                  let segment = try? field.validated(value), !oauthPathExcludes.contains(segment.lowercased()),
+                  let moved = oauth.at(segment: "{\(key)}", value: segment) else { return nil }
+            oauth = moved
+        }
+        return oauth
     }
 
     /// Every addition is a separate account, including repeated presets.

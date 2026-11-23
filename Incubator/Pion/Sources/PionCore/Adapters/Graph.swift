@@ -2,9 +2,10 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// What Entra and Defender share: Microsoft Graph, reached as an app registered in the person's tenant, with
-/// its client ID and secret exchanged for tokens at Microsoft's sign-in service. Each account is one tenant.
+/// What the Microsoft Graph tools share. Each account is one tenant.
 enum Graph {
+    /// Microsoft Defender XDR's entry: an app registered in the person's tenant, with its client ID and secret exchanged
+    /// for tokens at Microsoft's sign-in service. The Microsoft Entra ID tools sign in as an admin instead.
     /// `key` names both the entry's icon and the adapter that answers it.
     static func preset(id: String, key: String, name: String, summary: String, instructions: String,
                        setup: [String]) -> ToolDefinition {

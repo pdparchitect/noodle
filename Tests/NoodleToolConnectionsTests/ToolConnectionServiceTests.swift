@@ -86,6 +86,10 @@ private final class FixtureState: @unchecked Sendable {
     var googleRequests: [(host: String, headers: [String: String])] = []
     /// Every request to an org's own sign-in server or API, as an Okta org's are: its host, path, headers and body.
     var orgRequests: [(host: String, path: String, headers: [String: String], body: String)] = []
+    /// The scopes a sign-in server that names its tenant in its path grants, as Microsoft lists them: never offline_access.
+    var tenantScope = "Directory.Read.All User.Read profile openid email"
+    /// How many requests reached any stand-in.
+    var allRequests = 0
     /// Every request made to the AWS stand-in: its host and headers.
     var awsRequests: [(host: String, headers: [String: String])] = []
     /// What the Identity Center stand-in was asked: client registrations' bodies, token exchanges' grants, the access
@@ -136,6 +140,7 @@ private final class FixtureState: @unchecked Sendable {
     var transportError: Error?
     func response(_ request: URLRequest) throws -> (Int, [String: Any]) {
         try lock.withLock {
+            allRequests += 1
             if let transportError { throw transportError }
             if let answer = try identityCenter(request) { return answer }
             switch request.url!.path {
@@ -160,6 +165,12 @@ private final class FixtureState: @unchecked Sendable {
                 guard request.url!.path == "/oauth2/v1/token" else { return (200, [:]) }
                 return (200, ["access_token": "org-access-\(orgRequests.count)", "refresh_token": "org-refresh", "token_type": "Bearer",
                               "expires_in": 3600, "scope": "org.read offline_access"])
+            case let path where path.hasSuffix("/oauth2/v2.0/token") || path == "/v1.0/org":
+                let body = String(data: Self.body(request), encoding: .utf8) ?? ""
+                orgRequests.append((request.url!.host!, path, request.allHTTPHeaderFields ?? [:], body))
+                guard path != "/v1.0/org" else { return (200, [:]) }
+                return (200, ["access_token": "tenant-access-\(orgRequests.count)", "refresh_token": "tenant-refresh", "token_type": "Bearer",
+                              "expires_in": 3600, "scope": tenantScope])
             case "/revoke", "/credentials/revoke", "/v3/api-tokens/current":
                 revocations.append((request.httpMethod ?? "", request.url!.path, request.allHTTPHeaderFields ?? [:],
                                     String(data: Self.body(request), encoding: .utf8) ?? ""))
@@ -755,6 +766,162 @@ final class ToolConnectionServiceTests: XCTestCase {
         XCTAssertEqual(revocation.path, "/oauth2/v1/revoke")
         XCTAssertEqual(revocation.host, "contoso.example.com", "the saved sign-in's address is not followed")
         XCTAssertEqual(Set(FixtureProtocol.state.orgRequests.map(\.host)), ["contoso.example.com"])
+    }
+
+    /// A preset whose sign-in server names each account's tenant in its path, as Microsoft's does.
+    private func tenantDirectory(scopes: [String] = ["Directory.Read.All"]) -> ToolDefinition {
+        ToolDefinition(id: "tenant-directory", name: "Tenant Directory", summary: "People.", defaultInstructions: "Read.", iconName: "directory",
+            configuration: .connection(.init(endpointTemplate: "https://graph.example.com/v1.0",
+                fields: [ToolField(key: "tenant", title: "Tenant", placeholder: "contoso.onmicrosoft.com", kind: .identifier),
+                         ToolField(key: "clientID", title: "Client ID", placeholder: "client", kind: .identifier)],
+                oauth: MCPOAuthConfiguration(issuer: URL(string: "https://login.example.com/%7Btenant%7D/v2.0")!,
+                    authorizationEndpoint: URL(string: "https://login.example.com/%7Btenant%7D/oauth2/v2.0/authorize")!,
+                    tokenEndpoint: URL(string: "https://login.example.com/%7Btenant%7D/oauth2/v2.0/token")!, clients: [], scopes: scopes,
+                    authorizationParameters: ["prompt": "login"], usesResourceIndicator: false, unlistedScopes: ["offline_access"]),
+                oauthClientField: "clientID", oauthPathField: "tenant", oauthPathExcludes: ["common", "organizations", "consumers"],
+                adapter: "directory")))
+    }
+
+    /// A saved sign-in whose account's tenant was changed under it to one that names no one tenant, or no tenant at
+    /// all, is never signed in again, used or refreshed: no saved address and no discovery stands in for the tenant's,
+    /// and nothing is sent anywhere.
+    func testAGrantWhoseTenantNoLongerResolvesIsNeitherSignedInUsedNorRefreshed() async throws {
+        let directory = tenantDirectory()
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use(ToolCatalog.noodle + [directory])
+        let vault = TestVault()
+        let service = service(vault: vault)
+        final class DirectoryAdapter: ToolConnectionAdapter, @unchecked Sendable {
+            func tools(for connection: ToolConnection) async throws -> Data { Data(#"{"tools":[]}"#.utf8) }
+            func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
+                _ = try await access.data(for: URLRequest(url: URL(string: "https://graph.example.com/v1.0/org")!))
+                return Data(#"{"content":[],"isError":false}"#.utf8)
+            }
+        }
+        await service.useAdapters(["directory": DirectoryAdapter()])
+        let record = try directory.makeConnection(name: "Contoso", values: ["tenant": "contoso.onmicrosoft.com", "clientID": "client-contoso"])
+        let redirect = try XCTUnwrap(ToolConnectionService.configuredRedirectURI(for: record, bundleIdentifier: Bundle.main.bundleIdentifier))
+        try await service.signIn(record, redirectURI: redirect) { url in
+            let state = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "state" }?.value ?? ""
+            return URL(string: redirect.absoluteString + "?state=\(state)&code=granted")!
+        }
+        // The grant has expired, so using it would refresh it first.
+        var stored = try XCTUnwrap(vault.load(record.id))
+        stored.expiresAt = Date().addingTimeInterval(-60)
+        vault.save(stored, id: record.id)
+        let sent = FixtureProtocol.state.allRequests
+        let call = MCPBridgeRequest(session: "", connectionID: record.id, action: .call, tool: "x", arguments: Data("{}".utf8))
+        for tenant in ["...", "common", "Organizations", "CONSUMERS", "a%2Fb", "../evil", ""] {
+            var moved = record
+            moved.settings?["tenant"] = tenant
+            do {
+                try await service.signIn(moved, redirectURI: redirect) { _ in XCTFail("opened the browser for \(tenant)"); throw CancellationError() }
+                XCTFail("signed in with \(tenant)")
+            } catch {}
+            do { _ = try await service.perform(call, connection: moved); XCTFail("used with \(tenant)") } catch {}
+            do { _ = try await service.access(for: moved); XCTFail("reached with \(tenant)") } catch {}
+            do { _ = try await service.alerts(since: Date(), connection: moved) } catch {}
+            let has = await service.hasCredentials(moved)
+            XCTAssertFalse(has, tenant)
+        }
+        XCTAssertEqual(FixtureProtocol.state.allRequests, sent, "nothing was sent: no sign-in, discovery, refresh or call")
+        XCTAssertEqual(try XCTUnwrap(vault.load(record.id)).expiresAt, stored.expiresAt, "the grant was not refreshed")
+        // The account as made still refreshes and is used, at its own tenant.
+        _ = try await service.perform(call, connection: record)
+        XCTAssertEqual(FixtureProtocol.state.orgRequests.suffix(2).map(\.path), ["/contoso.onmicrosoft.com/oauth2/v2.0/token", "/v1.0/org"])
+        // A tenant that names no one tenant cannot be set up at all.
+        for generic in ["common", "Organizations", "..."] {
+            XCTAssertThrowsError(try directory.makeConnection(name: "Any", values: ["tenant": generic, "clientID": "client-contoso"]), generic)
+        }
+    }
+
+    /// A sign-in whose server names the account's tenant in its path goes only to that tenant's addresses; it asks for
+    /// a scope the server never lists as granted without refusing the sign-in for it, but still refuses one lacking a
+    /// scope it requires; and once the account's tenant changes under it, its sign-in is no longer used, refreshed or
+    /// sent anywhere to be revoked.
+    func testASignInNamingItsTenantInItsServersPathStaysWithThatTenant() async throws {
+        let directory = tenantDirectory()
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use(ToolCatalog.noodle + [directory])
+        let record = try directory.makeConnection(name: "Contoso", values: ["tenant": "contoso.onmicrosoft.com", "clientID": "client-contoso"])
+        XCTAssertTrue(ToolConnectionService.signsInThroughBrowser(record))
+        XCTAssertFalse(ToolConnectionService.signsInWithCode(record))
+        let redirect = try XCTUnwrap(ToolConnectionService.configuredRedirectURI(for: record, bundleIdentifier: Bundle.main.bundleIdentifier))
+        XCTAssertEqual(redirect.absoluteString, (Bundle.main.bundleIdentifier ?? "") + ":/oauth2callback")
+
+        final class DirectoryAdapter: ToolConnectionAdapter, @unchecked Sendable {
+            func tools(for connection: ToolConnection) async throws -> Data { Data(#"{"tools":[]}"#.utf8) }
+            func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
+                _ = try await access.data(for: URLRequest(url: URL(string: "https://graph.example.com/v1.0/org")!))
+                // Never the sign-in server with the sign-in, nor anywhere else.
+                for elsewhere in ["https://login.example.com/contoso.onmicrosoft.com/oauth2/v2.0/token", "http://graph.example.com/v1.0/org",
+                                  "https://graph.example.com.evil.com/v1.0/org"] {
+                    do { _ = try await access.data(for: URLRequest(url: URL(string: elsewhere)!)); XCTFail(elsewhere) } catch {}
+                }
+                return Data(#"{"content":[],"isError":false}"#.utf8)
+            }
+        }
+        let service = service(vault: TestVault())
+        await service.useAdapters(["directory": DirectoryAdapter()])
+        let signIn = { @Sendable (url: URL) async throws -> URL in
+            let page = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let query = Dictionary(uniqueKeysWithValues: (page?.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+            XCTAssertEqual(page?.scheme, "https")
+            XCTAssertEqual(page?.host, "login.example.com")
+            XCTAssertEqual(page?.path, "/contoso.onmicrosoft.com/oauth2/v2.0/authorize")
+            XCTAssertEqual(query["client_id"], "client-contoso")
+            XCTAssertEqual(query["redirect_uri"], redirect.absoluteString)
+            XCTAssertEqual(query["scope"], "Directory.Read.All offline_access", "the unlisted scope is asked for")
+            XCTAssertEqual(query["code_challenge_method"], "S256")
+            XCTAssertEqual(query["prompt"], "login")
+            XCTAssertNil(query["resource"])
+            return URL(string: redirect.absoluteString + "?state=\(query["state"] ?? "")&code=granted")!
+        }
+        try await service.signIn(record, redirectURI: redirect, browser: signIn)
+        let exchange = try XCTUnwrap(FixtureProtocol.state.orgRequests.first)
+        XCTAssertEqual(exchange.host, "login.example.com")
+        XCTAssertEqual(exchange.path, "/contoso.onmicrosoft.com/oauth2/v2.0/token")
+        XCTAssertTrue(exchange.body.contains("grant_type=authorization_code") && exchange.body.contains("code_verifier="), exchange.body)
+        XCTAssertFalse(exchange.body.contains("client_secret"), "a public client with PKCE")
+        let signedIn = await service.hasCredentials(record)
+        XCTAssertTrue(signedIn, "granted without offline_access listed, as Microsoft grants")
+        let call = MCPBridgeRequest(session: "", connectionID: record.id, action: .call, tool: "x", arguments: Data("{}".utf8))
+        _ = try await service.perform(call, connection: record)
+        let read = try XCTUnwrap(FixtureProtocol.state.orgRequests.last)
+        XCTAssertEqual(read.host, "graph.example.com")
+        XCTAssertEqual(read.headers["Authorization"], "Bearer tenant-access-1")
+
+        // Another tenant under the account: its sign-in is not that tenant's, so it is neither used nor counted.
+        var other = record
+        other.settings?["tenant"] = "fabrikam.onmicrosoft.com"
+        let elsewhere = await service.hasCredentials(other)
+        XCTAssertFalse(elsewhere, "a sign-in made in another tenant")
+        do { _ = try await service.perform(call, connection: other); XCTFail("used another tenant's sign-in") } catch {}
+        // A tenant that would leave its segment no longer fits the preset at all: nothing signs it in or is sent for it.
+        let sent = FixtureProtocol.state.orgRequests.count
+        for climbing in ["../evil", "a%2Fb", "x?y", "x#y", "x@evil.com", "a b", ""] {
+            var moved = record
+            moved.settings?["tenant"] = climbing
+            XCTAssertFalse(ToolConnectionService.signsInThroughBrowser(moved), climbing)
+            XCTAssertNil(ToolConnectionService.configuredRedirectURI(for: moved, bundleIdentifier: Bundle.main.bundleIdentifier), climbing)
+            let has = await service.hasCredentials(moved)
+            XCTAssertFalse(has, climbing)
+            guard case .failed = await service.revoke(moved) else { return XCTFail("revoked with details that no longer fit: \(climbing)") }
+        }
+        XCTAssertEqual(FixtureProtocol.state.orgRequests.count, sent)
+        // Microsoft offers no revocation endpoint: the sign-in is only forgotten, and nothing is sent.
+        let result = await service.revoke(record)
+        XCTAssertEqual(result, .notOffered)
+        XCTAssertEqual(FixtureProtocol.state.orgRequests.count, sent)
+        XCTAssertEqual(Set(FixtureProtocol.state.orgRequests.map(\.host)), ["login.example.com", "graph.example.com"])
+
+        // A sign-in granted without a scope the preset requires is refused.
+        let narrow = try directory.makeConnection(name: "Narrow", values: ["tenant": "contoso.onmicrosoft.com", "clientID": "client-contoso"])
+        FixtureProtocol.state.tenantScope = "User.Read profile openid email"
+        do { try await service.signIn(narrow, redirectURI: redirect, browser: signIn); XCTFail("signed in without a required scope") }
+        catch ToolConnectionServiceError.signInRequired {}
+        let lacking = await service.hasCredentials(narrow)
+        XCTAssertFalse(lacking)
     }
 
     /// An MCP server's own sign-in, found by discovery, is still revoked where it said, as before.

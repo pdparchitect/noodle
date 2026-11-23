@@ -268,6 +268,75 @@ final class ToolCatalogTests: XCTestCase {
         XCTAssertEqual(fixed.oauth(for: nil), oauth)
     }
 
+    /// A sign-in server that names each account in its path, as Microsoft's names its tenant: the placeholder segment of
+    /// every address takes the account's ID, checked as an identifier alone, and nothing else about them changes.
+    func testAnAccountNamedInItsSignInServersPathFillsOnlyThatSegment() throws {
+        let oauth = MCPOAuthConfiguration(issuer: URL(string: "https://login.example.com/%7Btenant%7D/v2.0")!,
+                                          authorizationEndpoint: URL(string: "https://login.example.com/%7Btenant%7D/oauth2/v2.0/authorize")!,
+                                          tokenEndpoint: URL(string: "https://login.example.com/%7Btenant%7D/oauth2/v2.0/token")!, clients: [],
+                                          scopes: ["Directory.Read.All"], authorizationParameters: ["prompt": "login"], usesResourceIndicator: false,
+                                          unlistedScopes: ["offline_access"])
+        let fields = [ToolField(key: "tenant", title: "Tenant", placeholder: "contoso.onmicrosoft.com", kind: .identifier),
+                      ToolField(key: "clientID", title: "Client ID", placeholder: "client", kind: .identifier)]
+        let configuration = ToolConnectionConfiguration(endpointTemplate: "https://graph.example.com/v1.0", fields: fields, oauth: oauth,
+                                                        oauthClientField: "clientID", oauthPathField: "tenant",
+                                                        oauthPathExcludes: ["common", "Organizations", "consumers"], adapter: "directory")
+        XCTAssertNil(configuration.oauthHostField)
+        for tenant in ["contoso.onmicrosoft.com", "4f1c2e3d-0000-4000-8000-000000000001"] {
+            let moved = try XCTUnwrap(configuration.oauth(for: ["tenant": tenant, "clientID": "client"]))
+            XCTAssertEqual(moved.issuer.absoluteString, "https://login.example.com/\(tenant)/v2.0")
+            XCTAssertEqual(moved.authorizationEndpoint.absoluteString, "https://login.example.com/\(tenant)/oauth2/v2.0/authorize")
+            XCTAssertEqual(moved.tokenEndpoint.absoluteString, "https://login.example.com/\(tenant)/oauth2/v2.0/token")
+            XCTAssertNil(moved.revocationEndpoint)
+            XCTAssertEqual(moved.scopes, oauth.scopes)
+            XCTAssertEqual(moved.unlistedScopes, ["offline_access"])
+            XCTAssertEqual(moved.authorizationParameters, oauth.authorizationParameters)
+            XCTAssertFalse(moved.usesResourceIndicator)
+        }
+        for bad in ["../evil", "..", ".", "...", "a/b", "a%2Fb", "a%2fb", "%2E%2E", "a?b=1", "a#b", "user@evil.com", "evil.com@", "a b", " ", "",
+                    "a\\b", "a;b", "a:b", "a\nb", "contoso%00", "{tenant}", String(repeating: "a", count: 129)] {
+            XCTAssertNil(configuration.oauth(for: ["tenant": bad, "clientID": "client"]), bad)
+            // An identifier field takes "...", but no sign-in can name it, so neither can the account.
+            XCTAssertThrowsError(try configuration.account(["tenant": bad, "clientID": "client"]), bad)
+            XCTAssertNil(oauth.at(segment: "{tenant}", value: bad), bad)
+        }
+        // Addresses that stand for any account are refused at setup and never resolved, whatever their case.
+        for generic in ["common", "COMMON", "organizations", "Consumers"] {
+            XCTAssertNil(configuration.oauth(for: ["tenant": generic, "clientID": "client"]), generic)
+            XCTAssertThrowsError(try configuration.account(["tenant": generic, "clientID": "client"]), generic)
+        }
+        XCTAssertNoThrow(try configuration.account(["tenant": "contoso.onmicrosoft.com", "clientID": "client"]))
+        XCTAssertNil(oauth.at(segment: "{tenant}", value: "contoso\n"), "only a value exactly as the field keeps it")
+        // A value with spaces around it is kept trimmed by the field, as the account saves it.
+        XCTAssertEqual(configuration.oauth(for: ["tenant": " contoso.onmicrosoft.com ", "clientID": "client"])?.tokenEndpoint.host, "login.example.com")
+        XCTAssertNil(configuration.oauth(for: nil), "without the account's settings there is no tenant to name")
+        XCTAssertNil(configuration.oauth(for: ["clientID": "client"]))
+
+        // Only https on its default port moves, and only an address naming the placeholder once, as a whole segment.
+        let plain = MCPOAuthConfiguration(issuer: URL(string: "http://login.example.com/%7Btenant%7D")!,
+                                          authorizationEndpoint: URL(string: "http://login.example.com/%7Btenant%7D/a")!,
+                                          tokenEndpoint: URL(string: "http://login.example.com/%7Btenant%7D/t")!, clients: [], scopes: [])
+        XCTAssertNil(plain.at(segment: "{tenant}", value: "contoso"))
+        let ported = MCPOAuthConfiguration(issuer: URL(string: "https://login.example.com:8443/%7Btenant%7D")!,
+                                           authorizationEndpoint: URL(string: "https://login.example.com/%7Btenant%7D/a")!,
+                                           tokenEndpoint: URL(string: "https://login.example.com/%7Btenant%7D/t")!, clients: [], scopes: [])
+        XCTAssertNil(ported.at(segment: "{tenant}", value: "contoso"))
+        let twice = MCPOAuthConfiguration(issuer: URL(string: "https://login.example.com/%7Btenant%7D")!,
+                                          authorizationEndpoint: URL(string: "https://login.example.com/%7Btenant%7D/%7Btenant%7D/a")!,
+                                          tokenEndpoint: URL(string: "https://login.example.com/%7Btenant%7D/t")!, clients: [], scopes: [])
+        XCTAssertNil(twice.at(segment: "{tenant}", value: "contoso"))
+        let partial = MCPOAuthConfiguration(issuer: URL(string: "https://login.example.com/%7Btenant%7D")!,
+                                            authorizationEndpoint: URL(string: "https://login.example.com/x%7Btenant%7D/a")!,
+                                            tokenEndpoint: URL(string: "https://login.example.com/%7Btenant%7D/t")!, clients: [], scopes: [])
+        XCTAssertNil(partial.at(segment: "{tenant}", value: "contoso"), "a placeholder inside a segment is not one")
+        let missing = MCPOAuthConfiguration(issuer: URL(string: "https://login.example.com/%7Btenant%7D")!,
+                                            authorizationEndpoint: URL(string: "https://login.example.com/%7Btenant%7D/a")!,
+                                            tokenEndpoint: URL(string: "https://login.example.com/common/t")!, clients: [], scopes: [])
+        XCTAssertNil(missing.at(segment: "{tenant}", value: "contoso"), "every address names the account")
+        // The host of an entry that names its account in the path never changes, whatever the account holds.
+        XCTAssertEqual(Set(["contoso", "a.b-c_d"].compactMap { oauth.at(segment: "{tenant}", value: $0)?.tokenEndpoint.host }), ["login.example.com"])
+    }
+
     func testAClientCredentialsPresetBuildsEachAccountsTokenAddress() throws {
         let domain = ToolField(key: "domain", title: "Domain", placeholder: "acme.okta.com", kind: .host)
         let tool = ToolDefinition(id: "service-app", name: "Service App", summary: "As a service.", defaultInstructions: "Work.",

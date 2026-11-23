@@ -429,13 +429,21 @@ public actor ToolConnectionService {
                                   clientID: configuration?.oauthClientField.flatMap { connection.settings?[$0] },
                                   bundleIdentifier: bundleIdentifier)
     }
-    /// Whether the connection's catalogue entry signs in at each account's own server, such as an Okta org's, by the
-    /// entry it names even when its details no longer fit that entry.
+    /// Refuses a connection whose catalogue entry signs in at each account's own server when its details no longer
+    /// resolve that server, such as a tenant changed under it to one that names no one account: it is then neither
+    /// signed in, nor used, nor refreshed, and nothing is sent, so no saved sign-in or discovery stands in for it.
+    private nonisolated static func requireOwnServer(_ connection: ToolConnection) throws {
+        guard signsInAtItsOwnServer(connection), oauthConfiguration(for: connection) == nil else { return }
+        throw ToolConnectionError.message("This connection's details no longer fit its tool, so it is not signed in or used: correct them in its settings and connect again.")
+    }
+    /// Whether the connection's catalogue entry signs in at each account's own server, such as an Okta org's or a
+    /// Microsoft tenant's, by the entry it names even when its details no longer fit that entry.
     private nonisolated static func signsInAtItsOwnServer(_ connection: ToolConnection) -> Bool {
-        if connectionConfiguration(for: connection)?.oauthHostField != nil { return true }
+        let own = { (configuration: ToolConnectionConfiguration?) in configuration?.oauthHostField != nil || configuration?.oauthPathField != nil }
+        if own(connectionConfiguration(for: connection)) { return true }
         guard let id = connection.catalogueID,
               case .connection(let named)? = ToolCatalog.entries.first(where: { $0.id == id })?.configuration else { return false }
-        return named.oauthHostField != nil
+        return own(named)
     }
     private nonisolated static func authorizationServer(for endpoint: URL) -> URL? {
         guard case .connection(let configuration)? = ToolCatalog.definition(forMCPEndpoint: endpoint)?.configuration else { return nil }
@@ -457,6 +465,7 @@ public actor ToolConnectionService {
                        progress: @Sendable (String) async -> Void = { _ in },
                        browser: @Sendable (URL) async throws -> URL) async throws -> SignIn {
         guard Organisation.allows(Organisation.action(for: connection)) else { throw ToolConnectionServiceError.notAllowed }
+        try Self.requireOwnServer(connection)
         guard Self.signsInThroughBrowser(connection) else {
             throw ToolConnectionError.message("This connection does not sign in through the browser. Enter its details in its settings.")
         }
@@ -634,6 +643,7 @@ public actor ToolConnectionService {
         }
         guard var stored = try credentials.load(connection.id), stored.endpoint == connection.endpoint,
               stored.accessToken != nil else { throw ToolConnectionServiceError.signInRequired }
+        try Self.requireOwnServer(connection)
         let oauthConfiguration = Self.oauthConfiguration(for: connection, bundleIdentifier: bundleIdentifier)
         try oauth.validateConfiguration(stored, configuration: oauthConfiguration)
         if (stored.expiresAt ?? .distantPast) < Date().addingTimeInterval(60) {
@@ -660,6 +670,7 @@ public actor ToolConnectionService {
     /// something new, rather than for a bot's call. Fails as a call would when the connection needs signing in again.
     public func access(for connection: ToolConnection) async throws -> ToolConnectionAccess {
         let epoch = epochs[connection.id, default: 0], deadline = Date().addingTimeInterval(30)
+        try Self.requireOwnServer(connection)
         let credentials = connection.keepsSecret || Self.signsInThroughBrowser(connection)
         let authorization = credentials ? try await authorization(for: connection, epoch: epoch, deadline: deadline) : nil
         try checkActive(connection.id, epoch: epoch, deadline: deadline)
@@ -690,6 +701,7 @@ public actor ToolConnectionService {
         guard let adapter = adapters[name] else {
             throw ToolConnectionError.message("\(ProductIdentity.current.name) cannot serve this connection.")
         }
+        try Self.requireOwnServer(connection)
         let credentials = connection.keepsSecret || Self.signsInThroughBrowser(connection)
         let authorization = credentials ? try await authorization(for: connection, epoch: epoch, deadline: deadline) : nil
         try checkActive(connection.id, epoch: epoch, deadline: deadline)
