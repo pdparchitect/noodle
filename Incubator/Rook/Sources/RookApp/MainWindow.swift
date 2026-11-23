@@ -9,6 +9,7 @@ import NoodleSettingsUI
 
 /// The sidebar of Missions, groups and agents beside the conversation that is selected.
 struct MainWindow: View {
+    @AppStorage(WindowSurface.tintKey) private var tinted = true
     let model: RookModel
     @Bindable var window: WindowState
     let setup: HarnessSetupController
@@ -61,7 +62,7 @@ struct MainWindow: View {
                 MissionGraphView(model: model, mission: mission) { window.showsGraph = false }
                     .frame(width: size.width, height: size.height)
                     // Frosted whatever the window's surface, with Rook's crimson wash, as a sheet's own material has nothing to blur.
-                    .presentationBackground { ZStack { FrostedWindowBackground(); Color.windowWash } }
+                    .presentationBackground { ZStack { FrostedWindowBackground(); if tinted { Color.windowWash } } }
                     .noodleSheetSizing()
             }
         }

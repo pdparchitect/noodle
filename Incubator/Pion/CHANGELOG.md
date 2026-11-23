@@ -20,7 +20,7 @@
 - The send button is Noodle's: an outline arrow while there is nothing to send, and a white arrow on the accent colour once there is.
 - In Settings › Tools, the line between two connections ends where their status ends, instead of running to the edge.
 - Agent and group marks are drawn in two shades of Pion's blue accent in place of white on grey: a deep disc with a light piece on a dark window, a pale disc with the accent's piece on a light one, so the sidebar carries the app's colour, each piece stays easy to tell apart and the marks do not read as buttons.
-- The window carries a faint wash of Pion's blue accent over both the Frosted and Solid backgrounds, in place of plain grey.
+- The window carries a faint wash of Pion's blue accent over both the Frosted and Solid backgrounds, in place of plain grey; View › Background › Tint turns it off for a plain window.
 - The app icon's ivory pawn is shaded gently, lit from crown to base, on its flat blue tile.
 - Okta is now Okta Audit; connections made before keep working with their token. Its results say what they covered: every listing reads page after page, following Okta's next link only on the org's own domain, and says when it stopped early or matched more than it kept; `user-apps` lists every app assigned, hidden ones and those through groups included; `sign-in-events` is bounded to the 90 days Okta keeps, searches by the user or thing acted on too, and says when more matched; and a rate-limited call says when Okta's limit resets.
 - AWS Security is now AWS Audit; connections made before keep working.

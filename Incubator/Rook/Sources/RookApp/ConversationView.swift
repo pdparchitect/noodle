@@ -58,6 +58,7 @@ struct ConversationWindow: View {
 /// One conversation as a document: a header, the messages in a reading column, and the composer.
 /// A Mission also has its case record in a panel beside it.
 struct ConversationView: View {
+    @AppStorage(WindowSurface.tintKey) private var tinted = true
     let model: RookModel
     @Bindable var window: WindowState
     let conversation: BotConversation
@@ -113,7 +114,7 @@ struct ConversationView: View {
                 MissionGraphView(model: model, mission: mission) { window.showsGraph = false }
                     .frame(width: size.width, height: size.height)
                     // Frosted whatever the window's surface, with Rook's crimson wash, as a sheet's own material has nothing to blur.
-                    .presentationBackground { ZStack { FrostedWindowBackground(); Color.windowWash } }
+                    .presentationBackground { ZStack { FrostedWindowBackground(); if tinted { Color.windowWash } } }
                     .noodleSheetSizing()
             }
         }

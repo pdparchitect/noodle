@@ -365,6 +365,8 @@ struct PionCommands: Commands {
 enum WindowSurface: String {
     case frosted, solid
     static let key = "PionWindowSurface"
+    /// View › Background › Tint: whether the window carries the faint wash of the accent, on unless turned off.
+    static let tintKey = "PionWindowTint"
 }
 
 /// The window's background for the chosen surface: Solid is a normal window's own background, Frosted the system's
@@ -372,13 +374,14 @@ enum WindowSurface: String {
 /// made every step of a resize several times slower.
 struct WindowSurfaceBackground: ViewModifier {
     @AppStorage(WindowSurface.key) private var surface = WindowSurface.frosted
+    @AppStorage(WindowSurface.tintKey) private var tinted = true
 
     func body(content: Content) -> some View {
         content.background {
             ZStack {
                 if surface == .frosted { FrostedWindowBackground() }
                 // A faint wash of the accent over either surface, so the window reads as Pion's blue team.
-                Color.windowWash
+                if tinted { Color.windowWash }
             }
             .ignoresSafeArea()
         }
@@ -414,6 +417,7 @@ struct ViewOptions: View {
     @AppStorage(SidebarOptions.showsClosedKey) private var showsClosed = false
     @AppStorage(BackdropEffect.key) private var effect = BackdropEffect.standard.rawValue
     @AppStorage(WindowSurface.key) private var surface = WindowSurface.frosted
+    @AppStorage(WindowSurface.tintKey) private var tinted = true
 
     var body: some View {
         // Everything about the window's background in one submenu: the surface, then the effect over it.
@@ -424,6 +428,8 @@ struct ViewOptions: View {
             }
             .pickerStyle(.inline)
             .labelsHidden()
+            // The accent's wash, apart from the surface, for those who prefer the window plain.
+            Section { Toggle("Tint", isOn: $tinted) }
             // Checkmark items rather than an inline picker, which draws a separator of its own.
             Section {
                 ForEach(BackdropEffect.offered) { offered in
