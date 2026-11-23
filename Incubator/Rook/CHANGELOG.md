@@ -4,7 +4,7 @@
 
 ### Added
 
-- Computers: Rook runs Linux computers itself and reaches servers over SSH. Make them in Settings › Computers and add them to a Mission from its inspector; its agents use them, run commands and move files, only while the Mission is open. One computer can serve several Missions.
+- Computers: Rook runs Linux computers itself and reaches servers over SSH. Make them with New Computer in the main window, where they are listed under Computers as agents are, and add them to a Mission from its inspector; its agents use them, run commands and move files, only while the Mission is open. One computer can serve several Missions.
 
 ### Changed
 

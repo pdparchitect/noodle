@@ -2,6 +2,7 @@ import ComputerBridge
 import ComputerCore
 import ComputerEngine
 import Foundation
+import HubLink
 import NoodleComputerTools
 import NoodleCore
 import NoodleRuntimeSettings
@@ -9,8 +10,8 @@ import NoodleSettingsUI
 import RookCore
 import SwiftUI
 
-/// The computers Rook's Missions use: Noodle Computer's engine, run inside Rook. The champion makes them in
-/// Settings › Computers and assigns them to Missions; an agent reaches one through Noodle's computer tool only
+/// The computers Rook's Missions use: Noodle Computer's engine, run inside Rook. The champion makes them in the
+/// main window, as agents are made, and assigns them to Missions; an agent reaches one through Noodle's computer tool only
 /// while it shares an open Mission with it, which `MissionComputers` works out and the broker enforces.
 @MainActor @Observable final class RookComputers {
     let store: ComputerStore
@@ -76,86 +77,170 @@ extension EnvironmentValues {
     @Entry var rookComputers: RookComputers?
 }
 
-// MARK: Settings › Computers
+// MARK: In the main window
 
-struct ComputersSettingsView: View {
+/// What New Computer offers, in the sidebar's + menu and a Mission's inspector: each template, then SSH.
+struct NewComputerMenuItems: View {
+    let choose: (NewComputerSheet.Kind) -> Void
+
+    var body: some View {
+        ForEach(ContainerRegistry.bundled.templates, id: \.id) { template in
+            Button(template.name) { choose(.template(template)) }
+        }
+        Button("SSH") { choose(.ssh) }
+    }
+}
+
+/// The sidebar's Computers, below the agents and groups, as agents are listed.
+struct ComputersSidebarSection: View {
     let computers: RookComputers
+    let model: RookModel
+    let icons: Bool
+    let select: (UUID) -> Void
     @ObservedObject private var store: ComputerStore
-    @State private var creating: NewComputerSheet.Kind?
     @State private var deleting: ComputerSession?
 
-    init(computers: RookComputers) {
+    init(computers: RookComputers, model: RookModel, icons: Bool, select: @escaping (UUID) -> Void) {
         self.computers = computers
+        self.model = model
+        self.icons = icons
+        self.select = select
         store = computers.store
     }
 
     var body: some View {
-        Form {
-            Section {
-                if computers.computers.isEmpty {
-                    Text("No computers").foregroundStyle(.secondary)
+        let sessions = computers.computers
+        if !sessions.isEmpty {
+            Group {
+                if icons {
+                    SidebarGridHeading(title: "Computers")
+                    ConversationIconGrid { items(sessions) }.padding(.vertical, 4)
                 } else {
-                    SettingsRowList(computers.computers) { session in ComputerRow(computers: computers, session: session) { deleting = session } }
-                }
-            } footer: {
-                HStack {
-                    Spacer()
-                    Menu("New Computer") {
-                        ForEach(ContainerRegistry.bundled.templates, id: \.id) { template in
-                            Button(template.name) { creating = .template(template) }
-                        }
-                        Divider()
-                        Button("SSH") { creating = .ssh }
-                    }
-                    .fixedSize()
+                    Section("Computers") { items(sessions) }
                 }
             }
-            if let error = store.error {
-                Text(error).foregroundStyle(.red).textSelection(.enabled)
+            .alert("Delete \(deleting?.computer.name ?? "")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+                Button("Delete", role: .destructive) { if let deleting { computers.delete(deleting) }; deleting = nil }
+                Button("Cancel", role: .cancel) { deleting = nil }
+            } message: {
+                Text("Its files are deleted, and it is taken out of every Mission it is in.")
             }
         }
-        .formStyle(.grouped)
-        .sheet(item: $creating) { kind in NewComputerSheet(computers: computers, kind: kind) }
-        .alert("Delete \(deleting?.computer.name ?? "")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
-            Button("Delete", role: .destructive) { if let deleting { computers.delete(deleting) }; deleting = nil }
-            Button("Cancel", role: .cancel) { deleting = nil }
-        } message: {
-            Text("Its files are deleted, and it is taken out of every Mission it is in.")
+    }
+
+    private func items(_ sessions: [ComputerSession]) -> some View {
+        ForEach(sessions) { session in
+            ComputerSidebarItem(session: session, icons: icons, selected: model.selection == session.id) { select(session.id) }
+                .tag(session.id)
+                .contextMenu { ComputerActions(computers: computers, session: session) { deleting = session } }
         }
     }
 }
 
-private struct ComputerRow: View {
+private struct ComputerSidebarItem: View {
+    @ObservedObject var session: ComputerSession
+    let icons: Bool
+    let selected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        if icons {
+            Button(action: select) {
+                SidebarItemTile(title: session.computer.name, detail: session.phase.label, tone: AnyShapeStyle(.secondary),
+                                emphasized: false, selected: selected) { size in ComputerMark(session: session, size: size) }
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(selected ? .isSelected : [])
+            .help(session.computer.name)
+        } else {
+            SidebarItemRow(title: session.computer.name, detail: session.phase.label, timestamp: "") { size in
+                ComputerMark(session: session, size: size)
+            }
+            .sidebarItemInsets()
+        }
+    }
+}
+
+private struct ComputerMark: View {
+    @ObservedObject var session: ComputerSession
+    let size: CGFloat
+
+    var body: some View {
+        Image(systemName: session.computer.kind.symbol)
+            .font(.system(size: size * 0.55))
+            .foregroundStyle(session.phase == .running ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+            .frame(width: size, height: size)
+            .background(Circle().fill(.quaternary))
+    }
+}
+
+/// Start or Stop, then Delete last.
+private struct ComputerActions: View {
     let computers: RookComputers
     @ObservedObject var session: ComputerSession
     let delete: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: session.computer.kind.symbol).frame(width: 24).foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(session.computer.name)
-                Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        if session.phase == .running {
+            Button("Stop") { computers.stop(session) }
+        } else if session.phase.canStart {
+            Button("Start") { computers.start(session) }
+        }
+        Divider()
+        Button("Delete", role: .destructive, action: delete)
+    }
+}
+
+/// A computer selected in the sidebar: what it is, whether it runs, and the Missions that use it.
+struct ComputerDetailView: View {
+    let computers: RookComputers
+    let model: RookModel
+    @ObservedObject var session: ComputerSession
+    @State private var deleting = false
+
+    var body: some View {
+        let missions = model.missions.filter { $0.computers.contains(session.id) }
+        VStack(spacing: 18) {
+            ComputerMark(session: session, size: 64)
+            VStack(spacing: 4) {
+                Text(session.computer.name).font(.title2.weight(.semibold))
+                Text(kind).foregroundStyle(.secondary)
+                Text(session.phase.label).font(.callout).foregroundStyle(.secondary)
+                if case .failed(let message) = session.phase {
+                    Text(message).font(.callout).foregroundStyle(.red).textSelection(.enabled).multilineTextAlignment(.center)
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            if session.phase == .running {
-                Button("Stop") { computers.stop(session) }.buttonStyle(.accentLink)
-            } else if session.phase.canStart {
-                Button("Start") { computers.start(session) }.buttonStyle(.accentLink)
+            HStack {
+                if session.phase == .running {
+                    Button("Stop") { computers.stop(session) }
+                } else if session.phase.canStart {
+                    Button("Start") { computers.start(session) }
+                }
+                Button("Delete", role: .destructive) { deleting = true }
             }
-            Menu {
-                Button("Delete", role: .destructive, action: delete)
-            } label: { Image(systemName: "ellipsis") }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                .accessibilityLabel("\(session.computer.name) actions")
+            VStack(spacing: 6) {
+                Text("Missions").font(.subheadline.weight(.semibold))
+                if missions.isEmpty {
+                    Text("None").foregroundStyle(.secondary)
+                }
+                ForEach(missions) { mission in
+                    Button("\(mission.reference) \(mission.title)") { model.selection = mission.id }.buttonStyle(.accentLink)
+                }
+            }
+        }
+        .padding(40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .alert("Delete \(session.computer.name)?", isPresented: $deleting) {
+            Button("Delete", role: .destructive) { computers.delete(session); model.selection = nil }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Its files are deleted, and it is taken out of every Mission it is in.")
         }
     }
 
-    private var detail: String {
-        var parts = [session.phase.label]
-        if let ssh = session.computer.ssh { parts.append(ssh.address) }
-        if case .failed(let message) = session.phase { parts.append(message) }
-        return parts.joined(separator: " · ")
+    private var kind: String {
+        if let ssh = session.computer.ssh { return "SSH · \(ssh.address)" }
+        return session.computer.template?.name ?? "Linux"
     }
 }
 
@@ -173,6 +258,8 @@ struct NewComputerSheet: View {
 
     let computers: RookComputers
     let kind: Kind
+    /// Hears the new computer's ID, as when a Mission's inspector adds what it makes.
+    var created: (UUID) -> Void = { _ in }
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store: ComputerStore
     @State private var name = ""
@@ -184,9 +271,10 @@ struct NewComputerSheet: View {
     @State private var failure: String?
     @State private var working = false
 
-    init(computers: RookComputers, kind: Kind) {
+    init(computers: RookComputers, kind: Kind, created: @escaping (UUID) -> Void = { _ in }) {
         self.computers = computers
         self.kind = kind
+        self.created = created
         store = computers.store
     }
 
@@ -286,7 +374,7 @@ struct NewComputerSheet: View {
         Task {
             let problem = await computers.create(draft, secret: secret)
             working = false
-            if let problem { failure = problem } else { dismiss() }
+            if let problem { failure = problem } else { created(draft.id); dismiss() }
         }
     }
 }
@@ -299,6 +387,7 @@ struct MissionComputersSection: View {
     let mission: Mission
     let computers: RookComputers
     @ObservedObject private var store: ComputerStore
+    @State private var creating: NewComputerSheet.Kind?
 
     init(model: RookModel, mission: Mission, computers: RookComputers) {
         self.model = model
@@ -317,7 +406,8 @@ struct MissionComputersSection: View {
                 if !mission.isClosed {
                     Menu {
                         ForEach(others) { session in Button(session.computer.name) { model.setComputer(session.id, named: session.computer.name, assigned: true, in: mission) } }
-                        if others.isEmpty { Text("No other computers") }
+                        if !others.isEmpty { Divider() }
+                        Menu("New Computer") { NewComputerMenuItems { creating = $0 } }
                     } label: { Image(systemName: "plus") }
                         .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                         .help("Add a computer to this Mission")
@@ -331,6 +421,12 @@ struct MissionComputersSection: View {
                 MissionComputerRow(session: session, removable: !mission.isClosed) {
                     model.setComputer(session.id, named: session.computer.name, assigned: false, in: mission)
                 }
+            }
+        }
+        .sheet(item: $creating) { kind in
+            NewComputerSheet(computers: computers, kind: kind) { id in
+                guard let session = computers.session(id), let current = model.mission(mission.id) else { return }
+                model.setComputer(id, named: session.computer.name, assigned: true, in: current)
             }
         }
     }

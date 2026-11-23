@@ -15,6 +15,7 @@ struct MainWindow: View {
     let setup: HarnessSetupController
     @State private var graphContainerSize = CGSize(width: 1000, height: 760)
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.rookComputers) private var computers
 
     var body: some View {
         @Bindable var model = model
@@ -39,6 +40,8 @@ struct MainWindow: View {
             if let conversation = model.conversation(model.selection) {
                 // Kept while the selection changes, as Noodle's is: only the transcript is replaced.
                 ConversationView(model: model, window: window, conversation: conversation, presentsGraphSheet: false)
+            } else if let computers, let id = model.selection, let session = computers.session(id) {
+                ComputerDetailView(computers: computers, model: model, session: session)
             } else if model.agents.isEmpty {
                 ContentUnavailableView {
                     Label("No Agents", systemImage: "person.2")
@@ -110,7 +113,9 @@ struct Sidebar: View {
     @AppStorage(ConversationOrder.key) private var order = ConversationOrder.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
     @State private var showsAllMentions = false
+    @State private var creatingComputer: NewComputerSheet.Kind?
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.rookComputers) private var computers
 
     var body: some View {
         let line = ConversationRowDetail(rawValue: rowDetail) ?? .standard
@@ -169,9 +174,15 @@ struct Sidebar: View {
                     Button("New Mission") { window.sheet = .newMission }.disabled(model.agents.isEmpty)
                     Button("New Group") { window.sheet = .newGroup }.disabled(model.agents.isEmpty)
                     Button("New Agent") { window.sheet = .newAgent }
+                    if computers != nil {
+                        Menu("New Computer") { NewComputerMenuItems { creatingComputer = $0 } }
+                    }
                 } label: { Label("New", systemImage: "plus") }
-                    .help("New Mission, Group or Agent")
+                    .help("New Mission, Group, Agent or Computer")
             }
+        }
+        .sheet(item: $creatingComputer) { kind in
+            if let computers { NewComputerSheet(computers: computers, kind: kind) { model.selection = $0 } }
         }
     }
 
@@ -203,6 +214,9 @@ struct Sidebar: View {
         }
         conversations(sections.agents, header: "Agents", line: line, icons: icons)
         conversations(sections.groups, header: "Groups", line: line, icons: icons)
+        if let computers {
+            ComputersSidebarSection(computers: computers, model: model, icons: icons) { select($0) }
+        }
         if showsTools {
             SidebarTools(controller: model.connectionsController, inList: !icons)
         }
