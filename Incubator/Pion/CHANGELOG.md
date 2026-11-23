@@ -36,6 +36,7 @@
 
 ### Fixed
 
+- A tool's Setup Steps no longer run off the screen: the popover grows to most of the screen's height and scrolls past it with Copy and Open in Window kept in view, and the window they open in can be resized, the steps reflowing to its width.
 - AWS Audit's `access-key` no longer says a key "belongs to an unknown user, never used" when AWS's answer could not be read, always finds a key's own account first, and sends a temporary key's use to CloudTrail.
 - When AWS throttles requests, Pion waits and tries again, as AWS's own tools do, instead of failing the call.
 - The credential report keeps user names with commas in their own column.

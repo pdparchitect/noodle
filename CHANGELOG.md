@@ -17,6 +17,10 @@ All notable changes to Noodle are documented here, following
 - The send button's arrow is white on the accent colour, so it reads the same in light and dark mode.
 - In Settings › Tools, the line between two connections ends where their status ends, instead of running to the edge.
 
+### Fixed
+
+- A tool's Setup Steps no longer run off the screen: the popover grows to most of the screen's height and scrolls past it with Copy and Open in Window kept in view, and the window they open in can be resized, the steps reflowing to its width.
+
 ## [0.93.0] - 2026-11-22
 
 ### Added
