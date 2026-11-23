@@ -9,7 +9,9 @@ who has access to what, which keys exist, what is public and what changed. It
 wakes the agents it is assigned to when the audit logs or Security Command
 Center show the way into Google Cloud being opened, or what follows being
 hidden. It only reads: it cannot change a resource, a policy or a finding, and
-agents recommend what to change to you.
+agents recommend what to change to you. To let agents act, add
+**Google Cloud Containment**, a separate tool with a sign-in of its own; see
+[Containing an incident](#containing-an-incident).
 
 It signs in with OAuth as a person, through a client your organisation makes for
 Pion, and acts with that person's own access. It never signs in as a service
@@ -341,21 +343,204 @@ says the same, so an agent can tell you without running the check:
 
 ## Containing an incident
 
-This tool only reads. Agents recommend what to change, with the evidence, and
-you or someone with the access makes the change in Google Cloud. Google's
-[guide to compromised credentials](https://docs.cloud.google.com/security/compromised-credentials)
-covers the steps, among them:
+**Google Cloud Containment** acts on the same organisation, folder or project
+to contain an incident: it disables a service account or one of its keys,
+removes one member from an IAM role, enforces public access prevention on a
+bucket, and snapshots, stops or isolates a VM. It is a separate tool with a
+sign-in of its own, so Google Cloud Audit's sign-in never holds more than its
+read scopes. Like Audit, it signs in with OAuth as a person, never as a service
+account.
 
-- **A service account key:** disable it, then delete it.
-- **A service account's tokens:** they cannot be revoked. Disable the account
-  and wait at least an hour for tokens already minted to expire, and remove
-  Service Account Token Creator from anyone who should not hold it.
-- **Access granted:** remove the binding, and check `asset-history` and
-  `audit-logs` for what else the same principal changed.
-- **A person's stolen gcloud sign-in:** Google says to remove Google Cloud CLI,
-  and Google Auth Library for application default credentials, from the
-  person's connected apps. An agent with
-  [Google Workspace Containment](google-workspace.md#google-workspace-containment)
-  can list the apps a user granted and revoke one by its client ID, once you
-  approve it; otherwise do it in the Admin console. Signing the person out
-  alone does not end an app's access.
+### How Google limits what it can do
+
+It asks for `cloud-platform`, which is all of Google Cloud: IAM's key and
+account actions and Resource Manager's policy changes take no narrower one.
+Only this tool asks for it, at its own sign-in. It also asks for
+`userinfo.email`, to ask Google which account signed in. So the role of
+the account that signs in is the only real limit: sign in with an account kept
+for containment that holds the Pion Containment custom role below and nothing
+else, never an Owner, Editor or Security Admin.
+
+You name the account that signs in in **Account that signs in**, and
+`remove-iam-member` refuses to remove it, or its whole domain, unless an agent
+is told to. Before it changes a policy, it asks Google which account the
+sign-in belongs to, and refuses when that is not the account named, or when
+Google does not say, so an address left over from an earlier sign-in never
+protects the wrong account. **check-access** says which account signed in.
+Access the account holds through a group is not checked, so do not remove a
+group it belongs to.
+
+### Setting it up with least access
+
+1. **Enable four more APIs** in the project that holds your Google Cloud Audit
+   client: the
+   [IAM API](https://console.cloud.google.com/apis/library/iam.googleapis.com),
+   [Cloud Resource Manager API](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com),
+   [Compute Engine API](https://console.cloud.google.com/apis/library/compute.googleapis.com)
+   and [Cloud Storage API](https://console.cloud.google.com/apis/library/storage-api.googleapis.com).
+2. **Add the scopes** `https://www.googleapis.com/auth/cloud-platform` and
+   `https://www.googleapis.com/auth/userinfo.email` under
+   [Data Access](https://console.cloud.google.com/auth/scopes). The same iOS
+   client serves both tools.
+3. **Make a custom role**, Pion Containment, with only these permissions. Save
+   them as `pion-containment.yaml`:
+
+   ```yaml
+   title: Pion Containment
+   description: Only what Pion's containment actions take.
+   stage: GA
+   includedPermissions:
+   - resourcemanager.projects.get
+   - resourcemanager.folders.get
+   - resourcemanager.projects.getIamPolicy
+   - resourcemanager.projects.setIamPolicy
+   - resourcemanager.folders.getIamPolicy
+   - resourcemanager.folders.setIamPolicy
+   - resourcemanager.organizations.getIamPolicy
+   - resourcemanager.organizations.setIamPolicy
+   - iam.serviceAccounts.get
+   - iam.serviceAccounts.disable
+   - iam.serviceAccounts.enable
+   - iam.serviceAccountKeys.get
+   - iam.serviceAccountKeys.disable
+   - iam.serviceAccountKeys.enable
+   - storage.buckets.get
+   - storage.buckets.update
+   - compute.instances.get
+   - compute.instances.stop
+   - compute.instances.setTags
+   - compute.disks.createSnapshot
+   - compute.snapshots.create
+   - compute.snapshots.setLabels
+   - compute.firewalls.get
+   - compute.firewalls.create
+   - compute.firewalls.delete
+   - compute.networks.updatePolicy
+   - compute.zoneOperations.get
+   - compute.regionOperations.get
+   - compute.globalOperations.get
+   ```
+
+   Then make it on the organisation with
+   `gcloud iam roles create pionContainment --organization=ORGANIZATION-ID --file=pion-containment.yaml`,
+   or for a project's account on the project with `--project=PROJECT-ID`,
+   leaving out the folder and organisation permissions, which a project's role
+   cannot hold. Leave out any whose action you do not want agents to have:
+
+   | Permissions | Needed for |
+   | --- | --- |
+   | `resourcemanager.projects.get`, `resourcemanager.folders.get` | Every action: checking that what it acts on lies inside the scope. |
+   | `iam.serviceAccountKeys.*` and `iam.serviceAccounts.get` | `disable-sa-key`, `enable-sa-key`. |
+   | `iam.serviceAccounts.*` | `disable-service-account`, `enable-service-account`. |
+   | `resourcemanager.*.getIamPolicy`, `resourcemanager.*.setIamPolicy` | `remove-iam-member`. **setIamPolicy lets whoever holds it change any binding, granting as well as removing.** Pion only removes, but leave these out if agents should not remove access. |
+   | `storage.buckets.get`, `storage.buckets.update` | `enforce-public-access-prevention`, `revert-public-access-prevention`. |
+   | `compute.instances.get`, `compute.disks.createSnapshot`, `compute.snapshots.*` | `snapshot-disks`, and `stop-instance` with `snapshotFirst`. |
+   | `compute.instances.stop` | `stop-instance`. |
+   | `compute.instances.setTags`, `compute.firewalls.*`, `compute.networks.updatePolicy` | `isolate-instance`, `unisolate-instance`. Google requires `compute.networks.updatePolicy` to add or delete a firewall rule. |
+   | `compute.*Operations.get` | `operation-status`. |
+
+4. **Grant the role** to the account kept for containment, on the
+   organisation, folder or project to act on. If a VM's network is a Shared
+   VPC, the isolation's firewall rules go in the network's host project, which
+   must be inside the scope and where the role is granted too.
+5. **Set Scope and its ID** as for Google Cloud Audit, and **Account that signs
+   in** to that account's email. Choose **Add & Connect**, sign in as that
+   account, and ask an agent to run **check-access**, giving it a project to
+   check the Compute Engine and Cloud Storage APIs there.
+
+**check-access** changes nothing. It asks Google which of the role's
+permissions the account holds on the scope, and on a project when given one,
+and says for each action exactly what to add. It warns when the account can do
+far more than containment, such as delete projects, make keys or read
+objects, and reminds you what `setIamPolicy` allows. It says whether the IAM,
+Compute Engine and Cloud Storage APIs are enabled. What it reports is what
+Google says the account holds, not a trial: an action can still be refused by
+a deny policy, an organisation policy or VPC Service Controls.
+
+### What agents can do
+
+Each takes the resource's full name, such as
+`projects/kestrel-prod/serviceAccounts/ci@kestrel-prod.iam.gserviceaccount.com/keys/KEY-ID`,
+`projects/kestrel-prod/zones/europe-west1-b/instances/web-1` or a bucket's
+name, as Google Cloud Audit lists them.
+
+| Action | Held for your approval | What it does, and how to undo it |
+| --- | --- | --- |
+| `disable-sa-key` | Yes | Turns off one user-managed key, saying when it was made; whatever authenticates with it fails. Tokens already minted with it are not revoked and last until they expire, usually within an hour. Google-managed keys cannot be turned off. Undo: `enable-sa-key`. |
+| `enable-sa-key` | Yes | Turns a disabled key back on, so whoever holds it, an attacker included if it leaked, can authenticate again. Undo: `disable-sa-key`. |
+| `disable-service-account` | Yes | Stops the account authenticating at all: every key of it, and every VM, function or job running as it, loses its access, which can break those workloads. Its keys, roles and resources are kept. Undo: `enable-service-account`. |
+| `enable-service-account` | Yes | Lets a disabled account authenticate again, with its enabled keys. Undo: `disable-service-account`. |
+| `remove-iam-member` | Yes | Reads the IAM policy of a project, folder or organisation and removes one member from one role binding, sending back every other member, binding and condition exactly as read; a binding left empty is dropped, and audit configuration is not touched. When the member holds the role in several bindings, the agent must name one by its condition, or `none` for the one without. It refuses the account that signs in, its domain, and the last owner of a project, or the last owner or Organization Administrator of an organisation, unless told to. Access the member holds through a group, another role or a folder or organisation above stays. Undo: grant the member the role again with the `gcloud` command the result gives, and the same condition, which the result keeps; Pion does not grant access. |
+| `enforce-public-access-prevention` | Yes | Enforces a bucket's public access prevention, only over the bucket as read, and returns the setting before and the bucket's metageneration after Pion's change. Grants to `allUsers` and `allAuthenticatedUsers` stay in its policy and ACLs but stop working, which breaks a site served from it. A bucket that already enforced it is left alone, with nothing to undo. Undo: `revert-public-access-prevention` with that setting and metageneration. |
+| `revert-public-access-prevention` | Yes | Sets the setting back to `inherited`, conditional on the bucket, prior setting and metageneration given, which must be copied from `enforce-public-access-prevention`'s result. Google makes the change only while the bucket is still at that metageneration, so a change made since, such as someone enforcing prevention on purpose, is not undone; then it reverts nothing and says so. That guards against later changes, not against values that did not come from Pion's change: nothing on the bucket records who enforced it, so check the values match the enforcement's result before you approve. It refuses a prior setting of `enforced` or one not recorded. Those grants then work again unless an organisation policy enforces prevention. Undo: `enforce-public-access-prevention`. |
+| `snapshot-disks` | No | Snapshots each persistent disk of a VM, as evidence, each labelled `pion-evidence` with the VM's ID and named `pion-` with a digest and the time. Local SSDs cannot be snapshotted. The snapshots stay until you delete them. |
+| `stop-instance` | Yes | Stops a VM, snapshotting its disks first when asked, and never stops it if a snapshot cannot be started. What is only in its memory is lost and an ephemeral external IP is released; its disks stay. A VM with a local SSD is refused, as stopping may discard its data. A VM in a managed instance group may be started again by its group. Undo: start it again; it boots afresh. |
+| `isolate-instance` | Yes | Adds deny-all inbound and outbound VPC firewall rules at priority 0, the highest, for IPv4 and, where the VM has it, IPv6, on each of its networks, logged, then adds a network tag to the VM. It waits for Compute Engine to confirm each rule done before adding the tag, and the tag after, and says isolated only then; while any change is still running after about twenty seconds it says pending, with the operations to read, and a change Google fails later is said with what was added before it. The tag is `pion-isolate-` and a digest of the VM's unique ID, so no other VM carries it, and the rules target only it; each rule is named after the tag and its network, and its description names the VM. It changes nothing when a rule of that name exists that Pion did not make for this VM on that network, or one of Pion's that someone turned off. Undo: `unisolate-instance`. |
+| `unisolate-instance` | Yes | Removes Pion's tag from the VM, which ends the isolation, then deletes Pion's rules for it, from the rules `isolate-instance` reported when given them, otherwise those of the VM's networks now. It checks each rule is exactly one Pion made for this VM, by its name, description, network, tag, priority, range and deny-all, before changing anything; one of Pion's someone turned off is still removed. Undo: `isolate-instance`. |
+| `operation-status` | No | Reads how a Compute Engine operation is going, pending, running, done, or done with errors, by the path an action returned. |
+
+### How each change is kept safe
+
+- **Inside the scope, of the right kind.** Every name is checked for its form
+  before anything is sent, and every project, folder, bucket and network is
+  placed inside the scope through Resource Manager, parent by parent, before
+  anything changes; a service account is acted on only when Google places it
+  in the project its name gives. Anything that cannot be placed is refused.
+- **Conditional where Google allows it.** An IAM policy is written with the
+  etag it was read with, so if anyone changed it meanwhile Google refuses and
+  the result says the policy changed since it was read and nothing was
+  changed. A bucket is changed only at the metageneration read, or for an undo the
+  metageneration given, and a VM's
+  tags only at the fingerprint read; a rule is made only if no rule has its
+  name. Compute Engine takes no condition on deleting a firewall rule, so
+  `unisolate-instance` reads each rule just before deleting it and deletes it
+  only while it is still exactly Pion's; a change in that moment would not
+  stop the deletion.
+- **Partial changes said.** When a later step fails, the result lists exactly
+  what was done before it and how to undo it, such as rules added when the
+  VM's tag could not be. A change Google gave no clear answer to is said as
+  possibly done, to read again, never as not done.
+- **Only Google's own hosts.** It reaches only `iam.googleapis.com`,
+  `cloudresourcemanager.googleapis.com`, `compute.googleapis.com`,
+  `storage.googleapis.com` and, to ask which account signed in,
+  `openidconnect.googleapis.com`. `operation-status` reads only Compute Engine's own
+  places for operations, on its own host, whatever link it is given, and says
+  unknown when Google's answer does not say. Text Google gives that anyone may
+  have written, such as an error or a policy's condition, is marked
+  `[from Google: "…"]`.
+
+### Limits you should know
+
+- **Isolation is VPC firewall rules.** Connections already open may continue
+  until they close. The VM can still reach its metadata server, which no
+  firewall rule blocks. An allow rule in a
+  [hierarchical firewall policy](https://docs.cloud.google.com/firewall/docs/firewall-policies-overview)
+  on the organisation or a folder, or in a network firewall policy evaluated
+  before VPC rules, still lets traffic through, so check those. It cuts off
+  the VM's own calls to Google APIs too. A VM with more network tags than
+  Google allows is refused.
+- **Tokens outlive their key.** Disabling a key or an account does not revoke
+  access tokens already minted. Google's guidance is to disable the account
+  and wait for them to expire, at least an hour.
+- **Long operations.** Compute Engine works in the background: each action
+  returns its operations, which agents read with `operation-status` until each
+  is done.
+- **Not covered:** IAM deny policies, which are left out on purpose: making one
+  needs Deny Admin granted on the organisation, and one mistaken rule can deny
+  everyone, the people who would remove it included, which no approval makes
+  safe enough. Also not covered: granting access, deleting keys, accounts or
+  resources, organisation policies, VPC Service Controls, capturing a VM's
+  memory and GKE workloads.
+
+### A person's stolen gcloud sign-in
+
+Google says to remove Google Cloud CLI, and Google Auth Library for
+application default credentials, from the person's connected apps. An agent
+with [Google Workspace Containment](google-workspace.md#google-workspace-containment)
+can list the apps a user granted and revoke one by its client ID, once you
+approve it; otherwise do it in the Admin console. Signing the person out alone
+does not end an app's access. Google's
+[guide to compromised credentials](https://docs.cloud.google.com/security/compromised-credentials)
+covers the rest, among them disabling a service account key and then deleting
+it in the console, and checking `asset-history` and `audit-logs` for what else
+a principal changed.

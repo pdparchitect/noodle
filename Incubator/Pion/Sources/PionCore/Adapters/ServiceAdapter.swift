@@ -622,6 +622,7 @@ public enum PionAdapters {
                                                                   "abuseipdb": AbuseIPDB.adapter, "urlscan": URLScan.adapter, "greynoise": GreyNoise.adapter, "crowdsec-cti": CrowdSec.adapter, "nvd": NVD.adapter, "crtsh": CrtSh.adapter, "dns": DNS.adapter,
                                                                   "otx": OTX.adapter, "haveibeenpwned": HaveIBeenPwned.adapter, "aws": AWS.adapter, "aws-containment": AWS.containmentAdapter,
                                                                   "google-cloud": GoogleCloud.adapter, "azure": Azure.adapter, "azure-containment": Azure.containmentAdapter,
+                                                                  "google-cloud-containment": GoogleCloud.containmentAdapter,
                                                                   "google-workspace": GoogleWorkspace.adapter,
                                                                   "google-workspace-containment": GoogleWorkspace.containmentAdapter,
                                                                   "proofpoint": Proofpoint.adapter, "sumologic": SumoLogic.adapter,

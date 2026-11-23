@@ -894,11 +894,13 @@ final class GoogleTests: XCTestCase {
         "https://www.googleapis.com/auth/logging.read": "on Google's scope list; live on the champion's tenant",
         "https://www.googleapis.com/auth/cloudasset": "not on Google's scope list, which gives only cloud-platform for Cloud Asset; taken by the champion's live sign-in",
         "https://www.googleapis.com/auth/securitycenter": "not on Google's scope list, which gives only cloud-platform for Security Command Center; taken by the champion's live sign-in",
+        "https://www.googleapis.com/auth/cloud-platform": "on Google's scope list for IAM, Resource Manager, Compute Engine and Cloud Storage; Google Cloud Containment's alone",
+        "https://www.googleapis.com/auth/userinfo.email": "on Google's scope list for Google's OpenID Connect user info; Google Cloud Containment checks who signed in with it",
     ]
 
     func testEveryGoogleScopeAskedForHasBeenChecked() throws {
         var tools = 0
-        defer { XCTAssertEqual(tools, 3, "Google Workspace Audit, Google Workspace Containment and Google Cloud") }
+        defer { XCTAssertEqual(tools, 4, "Google Workspace Audit, Google Workspace Containment, Google Cloud Audit and Google Cloud Containment") }
         for preset in PionCatalogue.entries where preset.adapter?.hasPrefix("google-") == true {
             guard case .connection(let configuration) = preset.configuration, let oauth = configuration.oauth else { continue }
             tools += 1
