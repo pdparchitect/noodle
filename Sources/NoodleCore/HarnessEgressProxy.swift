@@ -14,7 +14,8 @@ public final class HarnessEgressProxy: @unchecked Sendable {
     private let queue = DispatchQueue(label: "Noodle.harness-egress")
     private var tunnels: [ObjectIdentifier: Tunnel] = [:]
 
-    /// `allowed` holds lowercase `host:port` entries. `report` hears every CONNECT address and whether it was allowed.
+    /// `allowed` holds lowercase `host:port` entries, where a star may stand for part of one name label, as in
+    /// `*.openai.azure.com:443`. `report` hears every CONNECT address and whether it was allowed.
     public init(allowed: Set<String>, report: @escaping @Sendable (String, Bool) -> Void) throws {
         self.allowed = allowed
         self.report = report
@@ -79,7 +80,7 @@ public final class HarnessEgressProxy: @unchecked Sendable {
         guard line.count == 3, line[0] == "CONNECT", let address = Self.address(String(line[1])) else {
             return refuse(client)
         }
-        guard allowed.contains(address.text) else {
+        guard Self.permits(address.text, allowed: allowed) else {
             report(address.text, false)
             return refuse(client)
         }
@@ -110,11 +111,29 @@ public final class HarnessEgressProxy: @unchecked Sendable {
     }
 
     /// `host:port` with a port, lowercased; bracketed IPv6 literals are never on a list, so they are not parsed.
-    static func address(_ text: String) -> (host: String, port: UInt16, text: String)? {
+    static func address(_ text: String, pattern: Bool = false) -> (host: String, port: UInt16, text: String)? {
         guard let colon = text.lastIndex(of: ":"), let port = UInt16(text[text.index(after: colon)...]), port > 0 else { return nil }
         let host = text[..<colon].lowercased()
-        guard !host.isEmpty, host.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" }) else { return nil }
+        guard !host.split(separator: ".", omittingEmptySubsequences: false).contains(where: \.isEmpty),
+              host.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" || (pattern && $0 == "*") }) else { return nil }
         return (host, port, "\(host):\(port)")
+    }
+
+    /// Whether an address is on the list, exactly or by a pattern with the same number of labels.
+    public static func permits(_ text: String, allowed: Set<String>) -> Bool {
+        guard let address = address(text) else { return false }
+        if allowed.contains(address.text) { return true }
+        let labels = address.host.split(separator: ".")
+        return allowed.contains { entry in
+            guard entry.contains("*"), let pattern = Self.address(entry, pattern: true), pattern.port == address.port else { return false }
+            let patterns = pattern.host.split(separator: ".")
+            return patterns.count == labels.count && zip(patterns, labels).allSatisfy { pattern, label in
+                guard let star = pattern.firstIndex(of: "*") else { return pattern == label }
+                let prefix = pattern[..<star], suffix = pattern[pattern.index(after: star)...]
+                return !suffix.contains("*") && label.count > prefix.count + suffix.count
+                    && label.hasPrefix(prefix) && label.hasSuffix(suffix)
+            }
+        }
     }
 
     private final class Failure: @unchecked Sendable { var error: NWError? }

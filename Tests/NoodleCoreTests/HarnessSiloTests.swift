@@ -136,6 +136,21 @@ final class HarnessSiloTests: XCTestCase {
         XCTAssertTrue(HarnessProvider.claudeCode.siloAllowlist(appsEnabled: true).contains("mcp-proxy.anthropic.com:443"))
     }
 
+    /// A star stands for part of one name label, never a dot, so a pattern cannot widen to a whole domain.
+    func testWildcardsMatchWithinOneLabel() {
+        let allowed: Set<String> = ["api.openai.com:443", "*.openai.azure.com:443", "bedrock-runtime.*.amazonaws.com:443",
+                                    "*-aiplatform.googleapis.com:443"]
+        for address in ["api.openai.com:443", "mine.openai.azure.com:443", "bedrock-runtime.us-east-1.amazonaws.com:443",
+                        "us-central1-aiplatform.googleapis.com:443"] {
+            XCTAssertTrue(HarnessEgressProxy.permits(address, allowed: allowed), address)
+        }
+        for address in ["api.openai.com:80", "openai.azure.com:443", "a.b.openai.azure.com:443", "evil.com/.openai.azure.com:443",
+                        "bedrock-runtime.us-east-1.s3.amazonaws.com:443", "s3.us-east-1.amazonaws.com:443",
+                        "storage.googleapis.com:443", "x.openai.com:443"] {
+            XCTAssertFalse(HarnessEgressProxy.permits(address, allowed: allowed), address)
+        }
+    }
+
     func testProxyEnvironmentKeepsLoopbackDirect() {
         let environment = HarnessEgressProxy.environment(port: 41_000)
         for key in ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"] {

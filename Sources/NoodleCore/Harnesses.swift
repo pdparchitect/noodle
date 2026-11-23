@@ -27,10 +27,12 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
         }
     }
 
-    /// The only addresses a siloed harness may open, through the Agent Host's proxy: its model service and the
-    /// sign-in renewal it does itself. Telemetry, updaters and anything a tool asks for are refused. Claude Code,
-    /// Codex, Muse Code and Antigravity were measured running a turn; Grok Build, FX and OpenCode are from their
-    /// documented services. Apple Intelligence reaches nothing; a remote model adds its provider in the host.
+    /// The only addresses a siloed harness may open, through the Agent Host's proxy: its model services and the
+    /// sign-in renewal it does itself. Telemetry, updaters, search and anything a tool asks for are refused. Claude
+    /// Code, Codex, Muse Code and Antigravity were measured running a turn; Grok Build, FX and OpenCode are the
+    /// services their executables name. OpenCode reaches every model provider it ships with, whichever its login
+    /// uses. A star stands for part of one name label. Apple Intelligence reaches nothing; a remote model adds its
+    /// provider in the host.
     public func siloAllowlist(appsEnabled: Bool) -> Set<String> {
         let hosts: [String]
         switch self {
@@ -39,9 +41,25 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
         case .muse: hosts = ["api.meta.ai"]
         case .antigravity: hosts = ["cloudcode-pa.googleapis.com", "daily-cloudcode-pa.googleapis.com",
                                     "oauth2.googleapis.com", "www.googleapis.com"]
-        case .grokBuild: hosts = ["cli-chat-proxy.grok.com", "api.x.ai", "auth.x.ai"]
-        case .fx: hosts = ["ai-gateway.vercel.sh", "api.vercel.com", "vercel.com"]
-        case .openCode: hosts = ["opencode.ai", "models.dev"]
+        case .grokBuild: hosts = ["cli-chat-proxy.grok.com", "api.x.ai", "auth.x.ai", "accounts.x.ai"]
+        case .fx: hosts = ["ai-gateway.vercel.sh", "api.vercel.com", "vercel.com", "api.typesafe.ai"]
+        case .openCode: hosts = [
+            "opencode.ai", "models.opencode.ai", "models.dev", "opencode.models.dev",
+            "api.anthropic.com", "api.openai.com", "auth.openai.com", "chatgpt.com", "api.x.ai", "auth.x.ai", "api.meta.ai",
+            "ai-gateway.vercel.sh", "openrouter.ai", "zenmux.ai", "api.cerebras.ai", "api.cohere.ai", "api.cohere.com",
+            "api.deepinfra.com", "api.deepseek.com", "api.fireworks.ai", "api.groq.com", "api.kilo.ai", "api.llmgateway.io",
+            "api.minimax.io", "api.mistral.ai", "api.moonshot.ai", "api.perplexity.ai", "api.poe.com", "api.together.xyz",
+            "api.v0.dev", "api.venice.ai", "api.z.ai", "inference.baseten.co", "inference.do-ai.run",
+            "integrate.api.nvidia.com", "gateway.ai.cloudflare.com", "api.cloudflare.com",
+            // GitHub Copilot and GitLab Duo sign in through their forges.
+            "api.githubcopilot.com", "api.github.com", "github.com", "gitlab.com", "cloud.gitlab.com",
+            // Google Vertex AI and Gemini, with the token exchanges their credentials use.
+            "generativelanguage.googleapis.com", "aiplatform.googleapis.com", "*-aiplatform.googleapis.com",
+            "oauth2.googleapis.com", "sts.googleapis.com", "iamcredentials.googleapis.com",
+            "cloudresourcemanager.googleapis.com",
+            "*.openai.azure.com", "*.cognitiveservices.azure.com", "cognitiveservices.azure.com", "ai.azure.com",
+            "bedrock-runtime.*.amazonaws.com", "bedrock-mantle.*.api.aws", "sts.amazonaws.com",
+            "*.snowflakecomputing.com"]
         case .apple: hosts = []
         }
         return Set(hosts.map { $0 + ":443" })
