@@ -177,7 +177,7 @@ struct Sidebar: View {
                     Button("New Agent") { window.sheet = .newAgent }
                     if computers != nil {
                         Divider()
-                        Button("New Computer") { creatingComputer = .linux }
+                        Button("New Linux Container") { creatingComputer = .linux }
                         Button("New SSH Computer") { creatingComputer = .ssh }
                     }
                 } label: { Label("New", systemImage: "plus") }

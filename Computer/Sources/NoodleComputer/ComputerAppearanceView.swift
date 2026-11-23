@@ -18,14 +18,28 @@ struct ComputerIcon: View {
     let appearance: ComputerAppearance
     let symbol: String
     let size: CGFloat
-    var body: some View { IconBadge(appearance: appearance.icon, symbol: symbol, size: size) }
+    @Environment(\.offersComputerAppearance) private var offered
+    var body: some View {
+        if offered {
+            IconBadge(appearance: appearance.icon, symbol: symbol, size: size)
+        } else {
+            // The app's own standard icon: the computer's symbol on its accent colour.
+            Image(systemName: symbol).font(.system(size: size * 0.42, weight: .medium)).foregroundStyle(.white)
+                .frame(width: size, height: size).background(Color.accentColor, in: Circle())
+        }
+    }
 }
 
 struct ComputerIconButton: View {
     @Binding var appearance: ComputerAppearance
     let symbol: String
     @State private var editing = false
+    @Environment(\.offersComputerAppearance) private var offered
     var body: some View {
+        if offered { button } else { ComputerIcon(appearance: appearance, symbol: symbol, size: 64) }
+    }
+
+    private var button: some View {
         Button { editing = true } label: {
             ZStack(alignment: .bottomTrailing) {
                 ComputerIcon(appearance: appearance, symbol: symbol, size: 64)
@@ -81,11 +95,23 @@ struct ComputerWindowWallpaper: View {
     }
 }
 
+extension EnvironmentValues {
+    /// Whether a computer's icon, background and terminal look can be changed. An app that draws its own window
+    /// around a computer, as Rook does, turns it off, and every computer wears its standard icon in the app's
+    /// accent colour; Noodle Computer keeps it.
+    @Entry var offersComputerAppearance = true
+}
+
 struct ComputerAppearanceRow: View {
     @Binding var appearance: ComputerAppearance
     var directory: URL?
     @State private var editing = false
+    @Environment(\.offersComputerAppearance) private var offered
     var body: some View {
+        if offered { row }
+    }
+
+    private var row: some View {
         Button { editing = true } label: {
             HStack {
                 Label("Background & Terminal", systemImage: "photo")

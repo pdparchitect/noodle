@@ -28,6 +28,8 @@ struct RookApp: App {
                 .environment(delegate.calls)
                 .environment(delegate.settings)
                 .environment(\.rookComputers, delegate.computers)
+                // Rook's window is its own; a computer's background and terminal look are Noodle Computer's.
+                .environment(\.offersComputerAppearance, false)
                 .frame(minWidth: 980, minHeight: 640)
                 // Rook's background effect over the window's own background, frosted or solid.
                 .background { Backdrop().ignoresSafeArea() }
@@ -55,6 +57,8 @@ struct RookApp: App {
                 .environment(delegate.calls)
                 .environment(delegate.settings)
                 .environment(\.rookComputers, delegate.computers)
+                // Rook's window is its own; a computer's background and terminal look are Noodle Computer's.
+                .environment(\.offersComputerAppearance, false)
                 .frame(minWidth: 720, minHeight: 540)
                 .background { Backdrop().ignoresSafeArea() }
                 .modifier(WindowSurfaceBackground())
@@ -178,6 +182,7 @@ struct RookApp: App {
             let view = NSHostingView(rootView: ConversationWindow(model: self.model, selection: .constant(id))
                 .environment(self.calls).environment(self.settings).environment(\.floatingPanelCommands, commands)
                 .environment(\.rookComputers, self.computers)
+                .environment(\.offersComputerAppearance, false)
                 .background { FloatingWindowBackdrop().ignoresSafeArea() })
             // The panel owns its size; the conversation must not resize it to fit.
             view.sizingOptions = []

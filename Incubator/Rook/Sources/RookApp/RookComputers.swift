@@ -223,13 +223,18 @@ struct MissionComputersRow: View {
     }
 }
 
+/// Choosing a Mission's computers, laid out as its agents are chosen: the chosen ones in a grid, each with a
+/// button to remove it, and Add Computers to pick from the rest or make a new one.
 private struct MissionComputersSheet: View {
     let computers: RookComputers
     @Binding var selection: [UUID]
     @Binding var names: [UUID: String]
     @ObservedObject private var store: ComputerStore
     @State private var draft: [UUID]
+    @State private var adding = false
+    @State private var search = ""
     @State private var creating: NewComputerKind?
+    @State private var pendingRemoval: ComputerSession?
     @Environment(\.dismiss) private var dismiss
 
     init(computers: RookComputers, selection: Binding<[UUID]>, names: Binding<[UUID: String]>) {
@@ -238,6 +243,11 @@ private struct MissionComputersSheet: View {
         _names = names
         store = computers.store
         _draft = State(initialValue: selection.wrappedValue)
+    }
+
+    private var chosen: [ComputerSession] { draft.compactMap(computers.session) }
+    private var available: [ComputerSession] {
+        computers.computers.filter { !draft.contains($0.id) && (search.isEmpty || $0.computer.name.localizedCaseInsensitiveContains(search)) }
     }
 
     var body: some View {
@@ -257,39 +267,118 @@ private struct MissionComputersSheet: View {
             .padding(20)
             Divider()
             VStack(alignment: .leading, spacing: 12) {
-                if computers.computers.isEmpty {
-                    Text("No computers").foregroundStyle(.secondary)
-                } else {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(computers.computers) { session in
-                            Toggle(isOn: Binding(get: { draft.contains(session.id) }, set: { on in
-                                if on { if !draft.contains(session.id) { draft.append(session.id) } } else { draft.removeAll { $0 == session.id } }
-                            })) {
-                                HStack(spacing: 10) {
-                                    ComputerMark(session: session, size: 24)
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(session.computer.name)
-                                        Text(session.computer.displayType).font(.caption).foregroundStyle(.secondary)
-                                    }
-                                }
+                HStack {
+                    Text("Computers").font(.caption.weight(.semibold))
+                    Spacer()
+                    Button { search = ""; adding = true } label: { Label("Add Computers", systemImage: "plus") }
+                        .popover(isPresented: $adding, arrowEdge: .bottom) { chooser }
+                }
+                ScrollView {
+                    if chosen.isEmpty {
+                        Button { search = ""; adding = true } label: {
+                            VStack(spacing: 10) {
+                                Image(systemName: "desktopcomputer").font(.largeTitle)
+                                Text("Add computers to this mission")
                             }
-                            .toggleStyle(.checkbox)
-                            .padding(.vertical, 6)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 32)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .help("Add Computers")
+                    } else {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 12)], spacing: 16) {
+                            ForEach(chosen) { session in
+                                ChosenComputerCell(session: session) { pendingRemoval = session }
+                                    .frame(maxWidth: .infinity, alignment: .top)
+                            }
+                        }
+                        .padding(12)
                     }
                 }
-                HStack(spacing: 16) {
-                    Button("New Computer") { creating = .linux }.buttonStyle(.accentLink)
-                    Button("New SSH Computer") { creating = .ssh }.buttonStyle(.accentLink)
-                }
+                .frame(minHeight: 140, maxHeight: 280)
+                .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
             }
             .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(width: 440)
+        .frame(width: 540)
         .noodleSheetSizing()
+        .confirmationDialog("Remove \(pendingRemoval?.computer.name ?? "computer") from mission?",
+                            isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
+                            titleVisibility: .visible, presenting: pendingRemoval) { session in
+            Button("Remove from Mission", role: .destructive) { draft.removeAll { $0 == session.id } }
+            Button("Cancel", role: .cancel) {}
+        }
         .sheet(item: $creating) { kind in
             NewComputerSheet(computers: computers, kind: kind) { id in if !draft.contains(id) { draft.append(id) } }
+        }
+    }
+
+    /// As the agents' chooser: search, then each computer not chosen yet; making a new one comes last.
+    private var chooser: some View {
+        VStack(spacing: 12) {
+            TextField("Search computers", text: $search).textFieldStyle(.roundedBorder)
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    ForEach(available) { session in
+                        Button { draft.append(session.id) } label: {
+                            HStack(spacing: 12) {
+                                ComputerMark(session: session, size: 32)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(session.computer.name).foregroundStyle(Color.primary)
+                                    Text(session.computer.displayType).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "plus.circle.fill").foregroundStyle(Color.accentColor)
+                            }
+                            .padding(8)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Add \(session.computer.name) to mission")
+                    }
+                    if available.isEmpty {
+                        Text(computers.computers.isEmpty ? "No computers yet" : search.isEmpty ? "All computers added" : "No matching computers")
+                            .foregroundStyle(.secondary).padding()
+                    }
+                }
+            }
+            Divider()
+            HStack {
+                Button("New Linux Container") { adding = false; creating = .linux }.buttonStyle(.accentLink)
+                Spacer()
+                Button("New SSH Computer") { adding = false; creating = .ssh }.buttonStyle(.accentLink)
+            }
+        }
+        .padding(16)
+        .frame(width: 300, height: 320)
+    }
+}
+
+/// A chosen computer in the grid: its icon with a button to remove it, and its name, as a chosen agent is shown.
+private struct ChosenComputerCell: View {
+    @ObservedObject var session: ComputerSession
+    let remove: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ComputerMark(session: session, size: 48)
+                .overlay(alignment: .topTrailing) {
+                    Button(action: remove) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 17))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, Color(nsColor: .darkGray))
+                            .padding(4)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .offset(x: 10, y: -8)
+                    .help("Remove \(session.computer.name) from mission")
+                    .accessibilityLabel("Remove \(session.computer.name) from mission")
+                }
+            Text(session.computer.name).font(.caption).lineLimit(2).multilineTextAlignment(.center)
         }
     }
 }
