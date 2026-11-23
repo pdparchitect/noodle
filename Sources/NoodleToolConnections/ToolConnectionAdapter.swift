@@ -2,6 +2,9 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
+#if canImport(FoundationXML)
+import FoundationXML
+#endif
 import NoodleCore
 
 /// Answers for the connections an app serves itself rather than through an MCP server: the app's own code
