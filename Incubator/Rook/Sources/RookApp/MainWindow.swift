@@ -60,7 +60,8 @@ struct MainWindow: View {
                 let size = MissionGraphView.sheetSize(in: graphContainerSize)
                 MissionGraphView(model: model, mission: mission) { window.showsGraph = false }
                     .frame(width: size.width, height: size.height)
-                    .presentationBackground(.ultraThinMaterial)
+                    // Frosted whatever the window's surface, with Rook's crimson wash, as a sheet's own material has nothing to blur.
+                    .presentationBackground { ZStack { FrostedWindowBackground(); Color.windowWash } }
                     .noodleSheetSizing()
             }
         }

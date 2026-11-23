@@ -111,13 +111,13 @@ struct ConversationView: View {
             model.attachDropped(providers, to: conversation.id, context: .paste)
         }
         .environment(\.conversationAnnotations, conversationAnnotations)
-        .environment(\.forwardAttachment) { forwarding = $0 }
+        .environment(\.forwardAttachment) { forwarding = $0.attachment }
         .sheet(item: $forwarding) { attachment in
             ForwardAttachmentSheet(attachment: attachment,
                                    targets: { model.forwardTargets(from: attachment.conversationID, search: $0)
                                        .map { ForwardTarget(id: $0.id, title: model.title(of: $0)) } },
                                    picture: { id in AnyView(model.conversation(id).map { ConversationPicture(model: model, conversation: $0, size: 28) }) },
-                                   send: { try model.forward(attachment, to: $0, comment: $1) })
+                                   action: .send { id, comment in try model.forward(attachment, to: id, comment: comment) })
                 .noodleSheetSizing()
         }
         .background(AttachmentPreviewHost(controller: attachmentPreview))
@@ -531,7 +531,7 @@ struct MessageRow: View {
                 AttachmentDrag.presentSavePanel(for: attachment, fileURL: model.fileURL(attachment)) { model.problem = $0 }
             } : nil,
             showTranscript: attachment.voice == nil ? nil : { transcriptAttachmentID = attachment.id },
-            forward: attachment.isForwardable ? { forwardAttachment?(attachment) } : nil)
+            forward: attachment.isForwardable ? { forwardAttachment?(AttachmentForwardRequest(attachment: attachment)) } : nil)
     }
 
     private var authorAgent: AgentRecord? {

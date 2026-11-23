@@ -395,7 +395,7 @@ extension Color {
 }
 
 /// The desktop behind the window, blurred, as macOS draws translucent window backgrounds.
-private struct FrostedWindowBackground: NSViewRepresentable {
+struct FrostedWindowBackground: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.material = .underWindowBackground

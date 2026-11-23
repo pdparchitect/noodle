@@ -2,8 +2,8 @@
   <!-- Backgrounds selected by AppSymbol.svg data-icon-background. -->
   <defs>
     <g id="rook">
-      <!-- Flat, as Noodle's tiles are, in Rook's accent red. -->
-      <path id="icon-background-rook-tile" fill="#b84756" d="M286,36 H968 A250,250 0 0 1 1218,286 V968 A250,250 0 0 1 968,1218 H286 A250,250 0 0 1 36,968 V286 A250,250 0 0 1 286,36 Z"/>
+      <!-- Flat, as Noodle's tiles are, in Rook's accent crimson. -->
+      <path id="icon-background-rook-tile" fill="#c61e36" d="M286,36 H968 A250,250 0 0 1 1218,286 V968 A250,250 0 0 1 968,1218 H286 A250,250 0 0 1 36,968 V286 A250,250 0 0 1 286,36 Z"/>
     </g>
   </defs>
 </svg>

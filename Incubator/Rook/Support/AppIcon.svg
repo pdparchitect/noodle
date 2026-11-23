@@ -1,15 +1,28 @@
 <?xml version="1.0"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" role="img" aria-labelledby="title">
     <!--Generated from AppSymbol.svg and AppIconTemplate.svg; edit those sources.-->
-    <title id="title">Rook icon</title>
-    <path fill="#b84756" d="M286,36 H968 A250,250 0 0 1 1218,286 V968 A250,250 0 0 1 968,1218 H286 A250,250 0 0 1 36,968 V286 A250,250 0 0 1 286,36 Z"/>
-    <g fill="#f2efe4" fill-rule="evenodd">
-        <path d="M452,280 H528 V450 H452 Z"/>
-        <path d="M589,280 H665 V450 H589 Z"/>
-        <path d="M726,280 H802 V450 H726 Z"/>
-        <path d="M452,360 H802 V450 H452 Z"/>
-        <path d="M470,450 H784 L744,720 Q742,800 772,862 H482 Q512,800 510,720 Z"/>
-        <path d="M452,846 H802 A24,24 0 0 1 826,870 V888 A24,24 0 0 1 802,912 H452 A24,24 0 0 1 428,888 V870 A24,24 0 0 1 452,846 Z"/>
-        <path d="M430,904 H824 L860,992 A18,18 0 0 1 842,1010 H412 A18,18 0 0 1 394,992 Z"/>
+    <g id="rook">
+        <!-- Flat, as Noodle's tiles are, in Rook's accent crimson. -->
+        <path id="icon-background-rook-tile" fill="#c61e36" d="M286,36 H968 A250,250 0 0 1 1218,286 V968 A250,250 0 0 1 968,1218 H286 A250,250 0 0 1 36,968 V286 A250,250 0 0 1 286,36 Z"></path>
+    </g>
+    <title id="title">Rook app icon</title>
+    <!-- Drawn as Pion's pawn is: flat parts parted by seams, on the pawn's own body curve and base, and the same as
+       the rook in the app's agent marks. -->
+    <defs>
+        <!-- Ivory, a shade deeper toward the base, as if lit from above. -->
+        <linearGradient id="symbol-shade" gradientUnits="userSpaceOnUse" x1="0" y1="230" x2="0" y2="1020">
+            <stop offset="0" stop-color="#fbf9f2"></stop>
+            <stop offset="1" stop-color="#e2dccb"></stop>
+        </linearGradient>
+    </defs>
+    <g id="symbol" fill="url(#symbol-shade)" fill-rule="evenodd">
+        <!-- Battlements: three merlons over one band. -->
+        <path d="M450,300 H540 V370 H582 V300 H672 V370 H714 V300 H804 V520 H450 Z"></path>
+        <!-- Collar. -->
+        <path d="M472,540 H782 A22,22 0 0 1 804,562 V578 A22,22 0 0 1 782,600 H472 A22,22 0 0 1 450,578 V562 A22,22 0 0 1 472,540 Z"></path>
+        <!-- Body, flaring to the base as the pawn's does. -->
+        <path d="M507,620 H747 C749,728 742,790 812,872 H442 C512,790 505,728 507,620 Z"></path>
+        <!-- The pawn's base. -->
+        <path d="M412,896 H842 A46,46 0 0 1 888,942 V972 A46,46 0 0 1 842,1018 H412 A46,46 0 0 1 366,972 V942 A46,46 0 0 1 412,896 Z"></path>
     </g>
 </svg>

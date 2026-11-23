@@ -1,6 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" data-icon-background="pion" role="img" aria-labelledby="title">
   <title id="title">Pion symbol</title>
-  <g id="symbol" fill="#f2efe4" fill-rule="evenodd">
+  <defs>
+    <!-- Ivory, a shade deeper toward the base, as if lit from above. -->
+    <linearGradient id="symbol-shade" gradientUnits="userSpaceOnUse" x1="0" y1="230" x2="0" y2="1020">
+      <stop offset="0" stop-color="#fbf9f2"/>
+      <stop offset="1" stop-color="#e2dccb"/>
+    </linearGradient>
+  </defs>
+  <g id="symbol" fill="url(#symbol-shade)" fill-rule="evenodd">
     <path d="M627,236 A128,128 0 1 1 626.9,236 Z"/>
     <path d="M497,506 H757 A28,28 0 0 1 785,534 V546 A28,28 0 0 1 757,574 H497 A28,28 0 0 1 469,546 V534 A28,28 0 0 1 497,506 Z"/>
     <path d="M553,592 H701 C703,700 742,790 812,872 H442 C512,790 551,700 553,592 Z"/>
