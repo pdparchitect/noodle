@@ -16,9 +16,12 @@ All notable changes to Noodle are documented here, following
 - Links in dark mode use the accent colour itself, so they match the rest of the accent-coloured text.
 - The send button's arrow is white on the accent colour, so it reads the same in light and dark mode.
 - In Settings › Tools, the line between two connections ends where their status ends, instead of running to the edge.
+- A video or shader background plays in its own colours, no longer dimmed: over it the window is dark, messages from bots and files sit on dark glass with white text, your messages are solid accent, and times read in white. Pictures and presets look as before.
 
 ### Fixed
 
+- A conversation background turns the whole window dark at once in light mode too: the messages no longer keep light colours until you select the conversation again, using a second shader no longer turns the window light, and switching the Mac to light mode no longer turns a window with a shader, video or picture background light.
+- A `.metal` shader sent in a conversation shows a still of what it draws instead of a blank file card.
 - A tool's Setup Steps no longer run off the screen: the popover grows to most of the screen's height and scrolls past it with Copy and Open in Window kept in view, and the window they open in can be resized, the steps reflowing to its width.
 
 ## [0.93.0] - 2026-11-22

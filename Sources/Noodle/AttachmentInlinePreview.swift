@@ -70,6 +70,19 @@ extension ConversationAttachment {
     }
 }
 
+/// Over a moving background a card with a title sits on dark glass, as bubbles do, so the title reads.
+private struct CardGlass: ViewModifier {
+    @Environment(\.transcriptOverMotion) private var overMotion
+
+    func body(content: Content) -> some View {
+        if overMotion {
+            content.padding(8).background { TranscriptGlass(shape: RoundedRectangle(cornerRadius: 19, style: .continuous)) }
+        } else {
+            content
+        }
+    }
+}
+
 struct AttachmentInlinePreview: View {
     let attachment: ConversationAttachment
     let fileURL: URL
@@ -137,16 +150,16 @@ struct AttachmentInlinePreview: View {
             } else if let url = attachment.url, NoodletLink.id(in: url) != nil {
                 NoodletAttachmentCard(url: url, shouldLoad: shouldLoad)
             } else if let card = attachment.card {
-                linkCardPreview(card)
+                linkCardPreview(card).modifier(CardGlass())
             } else if let webLink {
                 // A shared web page looks like one unfurled from a message, not like its bookmark file.
                 LinkPreviewCard(url: webLink, shouldLoad: shouldLoad)
             } else if let patch {
-                patchPreview(patch)
+                patchPreview(patch).modifier(CardGlass())
             } else if displaysAsImage {
                 imagePreview
             } else {
-                documentPreview
+                documentPreview.modifier(CardGlass())
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
@@ -397,6 +410,13 @@ struct AttachmentInlinePreview: View {
             return
         }
 
+        if let still = await AttachmentThumbnailCache.shaderStill(for: fileURL) {
+            guard !Task.isCancelled else { return }
+            AttachmentThumbnailCache.shared.setObject(still, forKey: key)
+            withAnimation(.easeOut(duration: 0.15)) { thumbnail = still }
+            return
+        }
+
         let request = QLThumbnailGenerator.Request(
             fileAt: fileURL,
             size: CGSize(width: 520, height: 300),
@@ -539,6 +559,16 @@ enum AttachmentThumbnailCache {
         }
         try? FileManager.default.removeItem(at: partial)
         return NSImage(cgImage: image, size: .zero)
+    }
+
+    /// A Metal shader file drawn as a still, as it would show behind a conversation. Nil for any other file
+    /// and for a shader that does not compile, which keeps the file's card.
+    nonisolated static func shaderStill(for url: URL) async -> NSImage? {
+        guard ShaderSourceFile.isShader(url) else { return nil }
+        let size = CGSize(width: 520, height: 300)
+        guard let image = try? await ShaderPipeline.still(of: url, width: Int(size.width) * 2, height: Int(size.height) * 2, scale: 2)
+        else { return nil }
+        return NSImage(cgImage: image, size: size)
     }
 
     /// The picture a browser tab or computer card carries.

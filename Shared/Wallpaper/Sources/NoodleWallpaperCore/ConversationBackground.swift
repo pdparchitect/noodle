@@ -111,6 +111,8 @@ public struct ConversationBackground: Codable, Equatable, Sendable {
         self.mediaKind = mediaKind
     }
     public var isDefault: Bool { preset == nil && imageFilename == nil }
+    /// A video or shader, which plays behind the conversation, as opposed to a still picture or a preset.
+    public var isMoving: Bool { imageFilename != nil && (mediaKind == .video || mediaKind == .shader) }
 
     private enum CodingKeys: String, CodingKey { case preset, imageFilename, mediaKind }
 

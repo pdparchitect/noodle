@@ -36,6 +36,32 @@ enum TranscriptMetrics {
 
 extension EnvironmentValues {
     @Entry var isNarrowTranscript = false
+    /// A video or shader plays behind the transcript. It is not dimmed, so bubbles and cards are dark glass over
+    /// it, outgoing bubbles solid accent, and captions white with a shadow.
+    @Entry var transcriptOverMotion = false
+}
+
+/// The dark glass bubbles and cards take over a moving background.
+struct TranscriptGlass<S: Shape>: View {
+    let shape: S
+    var body: some View {
+        shape.fill(.ultraThinMaterial).overlay { shape.fill(Color.black.opacity(0.4)) }
+    }
+}
+
+/// A caption in the transcript, such as a time or a delivery state: in the given style, or over a moving
+/// background white with a soft shadow, as the background's colours vary beneath it.
+struct TranscriptCaptionStyle: ViewModifier {
+    let style: HierarchicalShapeStyle
+    @Environment(\.transcriptOverMotion) private var overMotion
+
+    func body(content: Content) -> some View {
+        if overMotion {
+            content.foregroundStyle(Color.white.opacity(0.85)).shadow(color: .black.opacity(0.35), radius: 2, y: 0.5)
+        } else {
+            content.foregroundStyle(style)
+        }
+    }
 }
 
 /// The native transcript scroll container, also exercised by the resize fixture.

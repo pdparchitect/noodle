@@ -33,7 +33,7 @@ struct MessageDeliveryLabel: View {
     var body: some View {
         Text(Self.title(delivery))
             .font(.system(size: 9.5))
-            .foregroundStyle(.tertiary)
+            .modifier(TranscriptCaptionStyle(style: .tertiary))
             .padding(.trailing, 5)
     }
 
