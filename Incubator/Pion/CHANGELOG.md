@@ -17,6 +17,8 @@
 
 ### Changed
 
+- The send button is Noodle's: an outline arrow while there is nothing to send, and a white arrow on the accent colour once there is.
+- In Settings › Tools, the line between two connections ends where their status ends, instead of running to the edge.
 - Okta is now Okta Audit; connections made before keep working with their token. Its results say what they covered: every listing reads page after page, following Okta's next link only on the org's own domain, and says when it stopped early or matched more than it kept; `user-apps` lists every app assigned, hidden ones and those through groups included; `sign-in-events` is bounded to the 90 days Okta keeps, searches by the user or thing acted on too, and says when more matched; and a rate-limited call says when Okta's limit resets.
 - AWS Security is now AWS Audit; connections made before keep working.
 - AWS Audit's results say what they covered: each names the account and region it read, CloudTrail lookups read every page and also us-east-1, where IAM and console sign-ins are logged, and every lookup says when more matched than it read or kept. CloudTrail events say who acted, root, an IAM user or the role behind an assumed role, from which account and whether MFA was used; GuardDuty and Security Hub findings name their own account and region, leave out archived, suppressed and resolved ones, and GuardDuty's critical band can be asked for alone; open security groups include IPv6; Access Analyzer reads the organisation's or account's external access analyzer; Logs Insights says how many records matched; the credential report says when it was made.

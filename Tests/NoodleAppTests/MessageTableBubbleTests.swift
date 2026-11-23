@@ -122,13 +122,17 @@ import HubLink
         let rendered = MessageMarkdownCache.render("Read [the advisory](https://example.com/advisory) first.")
         let link = rendered.runs.first { $0.link != nil }
         XCTAssertEqual(link?.foregroundColor, MessageMarkdownCache.linkColor)
-        // Lightened only in dark appearance, where a deep accent would not read as text.
-        let accent = NSColor.controlAccentColor.usingColorSpace(.sRGB)!
-        var light = NSColor.clear, dark = NSColor.clear
-        NSAppearance(named: .aqua)!.performAsCurrentDrawingAppearance { light = NSColor(MessageMarkdownCache.linkColor).usingColorSpace(.sRGB)! }
-        NSAppearance(named: .darkAqua)!.performAsCurrentDrawingAppearance { dark = NSColor(MessageMarkdownCache.linkColor).usingColorSpace(.sRGB)! }
-        XCTAssertEqual(light.blueComponent, accent.blueComponent, accuracy: 0.01)
-        XCTAssertGreaterThan(dark.redComponent + dark.greenComponent, light.redComponent + light.greenComponent)
+        // The accent itself in both appearances, as other accent-coloured text has; not lightened in dark appearance.
+        for name in [NSAppearance.Name.aqua, .darkAqua] {
+            var link = NSColor.clear, accent = NSColor.clear
+            NSAppearance(named: name)!.performAsCurrentDrawingAppearance {
+                link = NSColor(MessageMarkdownCache.linkColor).usingColorSpace(.sRGB)!
+                accent = NSColor.controlAccentColor.usingColorSpace(.sRGB)!
+            }
+            XCTAssertEqual(link.redComponent, accent.redComponent, accuracy: 0.01, name.rawValue)
+            XCTAssertEqual(link.greenComponent, accent.greenComponent, accuracy: 0.01, name.rawValue)
+            XCTAssertEqual(link.blueComponent, accent.blueComponent, accuracy: 0.01, name.rawValue)
+        }
         let prose = rendered.runs.first { $0.link == nil }
         XCTAssertNil(prose?.foregroundColor)
     }

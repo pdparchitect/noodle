@@ -59,11 +59,13 @@ extension WorkspaceRepository {
         catch { try? FileManager.default.removeItem(at: url); throw error }
     }
 
-    @discardableResult public func setBackground(from attachment: ConversationAttachment) throws -> ConversationBackground {
+    /// A picture sent in a conversation, as the background of that conversation or of another one.
+    @discardableResult public func setBackground(from attachment: ConversationAttachment,
+                                                 in conversationID: UUID? = nil) throws -> ConversationBackground {
         let url = attachmentFileURL(attachment)
         let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize
         guard let size, size <= 50 * 1024 * 1024 else { throw ConversationBackgroundError.invalidImage }
-        return try setBackground(conversationID: attachment.conversationID, imageData: Data(contentsOf: url))
+        return try setBackground(conversationID: conversationID ?? attachment.conversationID, imageData: Data(contentsOf: url))
     }
 
     /// A picture background is kept as a JPEG; where pictures cannot be redrawn, only presets are.

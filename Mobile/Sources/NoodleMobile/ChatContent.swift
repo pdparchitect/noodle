@@ -43,6 +43,8 @@ struct AttachmentView: View {
     @State private var liveCard: LinkCardInfo?
     /// The file read as a patch, once it is on the phone and reads as one.
     @State private var patch: Patch?
+    /// Asking where the picture or shader becomes the background.
+    @State private var confirmingBackground = false
     /// Why the shader chosen as the background couldn't be, in the compiler's words.
     @State private var shaderProblem: String?
     @Environment(\.watchLive) private var watchLive
@@ -52,6 +54,7 @@ struct AttachmentView: View {
     @Environment(\.forwardAttachment) private var forwardAttachment
 
     private var isImage: Bool { attachment.mediaType.hasPrefix("image/") }
+    private var isShader: Bool { ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.filename)) }
 
     var body: some View {
         if attachment.isLive {
@@ -104,27 +107,44 @@ struct AttachmentView: View {
                     forwardAttachment(AttachmentForwardRequest(chats: chats, thread: thread, attachment: attachment))
                 }
             }
-            // As on the Mac: a picture in the conversation can become its backdrop.
-            if isImage, attachment.annotation == nil {
-                Button("Use as Background", systemImage: "photo.on.rectangle") {
-                    Task { try? await chats.setBackground(photo: Data(contentsOf: chats.file(for: attachment, in: thread)), for: thread) }
+            // As on the Mac: a picture in the conversation can become its backdrop, or a Metal shader play behind it.
+            if isShader || (isImage && attachment.annotation == nil) {
+                Button("Use as Background", systemImage: isShader ? "sparkles.rectangle.stack" : "photo.on.rectangle") {
+                    confirmingBackground = true
                 }
             }
-            // A Metal shader plays behind the conversation; one that doesn't compile says why.
-            if ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.filename)) {
-                Button("Use as Background", systemImage: "sparkles.rectangle.stack") {
-                    Task {
-                        do { try await chats.setBackground(shader: chats.file(for: attachment, in: thread), for: thread) }
-                        catch { shaderProblem = error.localizedDescription }
-                    }
+        }
+        .confirmationDialog("Use as Background?", isPresented: $confirmingBackground, titleVisibility: .visible) {
+            Button("Use Here", action: useAsBackgroundHere)
+            if let forwardAttachment {
+                let chats = chats, thread = thread, attachment = attachment
+                Button("Choose Conversations…") {
+                    forwardAttachment(AttachmentForwardRequest(chats: chats, thread: thread, attachment: attachment,
+                                                               purpose: .useAsBackground))
                 }
             }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Replace the background for \(thread.name) with this \(isShader ? "shader" : "image")?")
         }
         .task(id: attachment.id) { await load() }
         .alert("Can’t Use as Background", isPresented: Binding { shaderProblem != nil } set: { if !$0 { shaderProblem = nil } }) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(shaderProblem ?? "")
+        }
+    }
+
+    /// Use Here: this conversation's background, for every device. A shader that doesn't compile says why.
+    private func useAsBackgroundHere() {
+        let chats = chats, thread = thread, attachment = attachment, isShader = isShader
+        Task {
+            do {
+                if isShader { try await chats.setBackground(shader: chats.file(for: attachment, in: thread), for: thread) }
+                else { try await chats.setBackground(photo: Data(contentsOf: chats.file(for: attachment, in: thread)), for: thread) }
+            } catch where isShader {
+                shaderProblem = error.localizedDescription
+            } catch {}
         }
     }
 

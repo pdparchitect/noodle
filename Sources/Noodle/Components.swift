@@ -506,6 +506,9 @@ struct MessageBubble: View {
             useAsBackground: attachment.map { item in
                 { Task { await store.useAttachmentAsBackground(item) } }
             },
+            useAsBackgroundElsewhere: attachment.flatMap { item -> (() -> Void)? in
+                forwardAttachment.map { open in { open(AttachmentForwardRequest(attachment: item, purpose: .useAsBackground)) } }
+            },
             backgroundIsShader: attachment.map { ShaderSourceFile.isShader(URL(fileURLWithPath: $0.originalFilename)) } ?? false,
             backgroundTargetName: conversation?.displayName ?? "this conversation",
             iconTargetName: iconAgent?.displayName,
@@ -525,7 +528,7 @@ struct MessageBubble: View {
             saveTable: table.map { table in { store.saveTable(table) } },
             forward: attachment.flatMap { item -> (() -> Void)? in
                 guard item.isForwardable, let forwardAttachment else { return nil }
-                return { forwardAttachment(item) }
+                return { forwardAttachment(AttachmentForwardRequest(attachment: item)) }
             }
         )
     }

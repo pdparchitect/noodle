@@ -19,7 +19,7 @@ public struct ToolConnectionsSettingsView: View {
                 VStack(spacing: 0) {
                     if let builtIn {
                         builtIn
-                        if !store.connectionsController.registry.connections.isEmpty { Divider().padding(.leading, 58) }
+                        if !store.connectionsController.registry.connections.isEmpty { Divider().padding(.leading, 58).padding(.trailing, 14) }
                     }
                     if store.connectionsController.registry.connections.isEmpty && builtIn == nil {
                         Label("No connections", systemImage: "puzzlepiece.extension")
@@ -80,7 +80,7 @@ public struct ToolConnectionsSettingsView: View {
                                 }.padding(.top, 3)
                             }
                         }.padding(14)
-                        if connection.id != store.connectionsController.registry.connections.last?.id { Divider().padding(.leading, 58) }
+                        if connection.id != store.connectionsController.registry.connections.last?.id { Divider().padding(.leading, 58).padding(.trailing, 14) }
                     }
                 }
                 .onGeometryChange(for: CGFloat.self) { geometry in

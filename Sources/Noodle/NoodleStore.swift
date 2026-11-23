@@ -2740,22 +2740,29 @@ final class NoodleStore {
         shareBackground(conversation.id)
     }
 
-    func useAttachmentAsBackground(_ attachment: ConversationAttachment) async {
+    /// Use as Background: a picture or shader sent in a conversation becomes the background of each conversation
+    /// given, as if chosen in its background editor, else of its own. One that fails says why, and the rest still change.
+    func useAttachmentAsBackground(_ attachment: ConversationAttachment, in conversationIDs: [UUID]? = nil) async {
         guard let file = await downloadedFile(attachment) else { return }
         let repository = repository
-        do {
-            let saved = try await Task.detached {
-                // A shader is checked and compiled as one chosen in the background editor is.
-                guard ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.originalFilename)) else {
-                    return try repository.setBackground(from: attachment)
-                }
-                return try repository.setBackground(conversationID: attachment.conversationID,
-                                                    file: try await PreparedBackgroundFile.prepare(file))
-            }.value
-            // Keep the action bound to its source chat even if selection changes during decoding.
-            backgrounds[attachment.conversationID] = saved
-            shareBackground(attachment.conversationID)
-        } catch { errorMessage = error.localizedDescription }
+        let targets = conversationIDs ?? [attachment.conversationID]
+        // A shader is checked and compiled once, as one chosen in the background editor is.
+        var shader: PreparedBackgroundFile?
+        if ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.originalFilename)) {
+            do { shader = try await Task.detached { try await PreparedBackgroundFile.prepare(file) }.value }
+            catch { errorMessage = error.localizedDescription; return }
+        }
+        for conversationID in targets {
+            do {
+                let saved = try await Task.detached { [shader] in
+                    if let shader { return try repository.setBackground(conversationID: conversationID, file: shader) }
+                    return try repository.setBackground(from: attachment, in: conversationID)
+                }.value
+                // Keep the action bound to the conversations it was for even if selection changes during decoding.
+                backgrounds[conversationID] = saved
+                shareBackground(conversationID)
+            } catch { errorMessage = error.localizedDescription }
+        }
     }
 
     func useAttachmentAsIcon(_ attachment: ConversationAttachment) async {

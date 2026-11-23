@@ -2,8 +2,8 @@ import HubLink
 import SwiftUI
 
 extension EnvironmentValues {
-    /// Opens Forward… for a file, presented by the conversation rather than the file pressed, which the
-    /// conversation may unload.
+    /// Opens Forward… for a file, or Use as Background's Choose Conversations…, presented by the conversation rather
+    /// than the file pressed, which the conversation may unload.
     @Entry var forwardAttachment: (@MainActor (AttachmentForwardRequest) -> Void)?
     /// Every Hub this phone joined, whose bots and groups a file can be forwarded to.
     @Entry var joinedHubs: [HubChats] = []
@@ -31,22 +31,27 @@ enum AttachmentForwarding {
     }
 }
 
-/// A file to forward, and the conversation it is in.
+/// A file to forward, or to use as the background of the conversations chosen, and the conversation it is in.
 struct AttachmentForwardRequest: Identifiable {
+    enum Purpose { case forward, useAsBackground }
+
     let id = UUID()
     let chats: HubChats
     let thread: HubThread
     let attachment: LinkAttachment
+    var purpose = Purpose.forward
 }
 
 /// Picks the bot or group a file goes to, with an optional comment, and sends it there, as the share sheet does.
+/// Use as Background's Choose Conversations… picks several the same way and sets the file as each one's background.
 struct ForwardSheet: View {
     let request: AttachmentForwardRequest
     let hubs: [HubChats]
     @Environment(\.dismiss) private var dismiss
     @State private var search = ""
     @State private var comment = ""
-    @State private var chosen: ChatLink?
+    /// In the order chosen.
+    @State private var chosen: [ChatLink] = []
     @State private var sending = false
     @State private var problem: String?
 
@@ -56,16 +61,18 @@ struct ForwardSheet: View {
         let id: ChatLink
     }
 
-    private var targets: [Target] {
+    private func targets(matching search: String) -> [Target] {
         AttachmentForwarding.targets(in: hubs, leaving: request.thread.conversationID, search: search).map { hub, thread in
             Target(chats: hub, thread: thread, id: ChatLink(hub: CurrentHub.name(of: hub.pairing), thread: thread.id))
         }
     }
 
+    private var choosesSeveral: Bool { request.purpose == .useAsBackground }
+
     var body: some View {
-        let targets = targets
+        let targets = self.targets(matching: search)
         // A search that hides the chosen one leaves nothing to send to, so Send never goes somewhere unseen.
-        let target = targets.first { $0.id == chosen }
+        let target = targets.first { $0.id == chosen.first }
         NavigationStack {
             List {
                 Section {
@@ -73,15 +80,17 @@ struct ForwardSheet: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    TextField("Comment", text: $comment, axis: .vertical)
-                        .lineLimit(1...4)
+                    if !choosesSeveral {
+                        TextField("Comment", text: $comment, axis: .vertical)
+                            .lineLimit(1...4)
+                    }
                 }
                 if let problem {
                     Section { Text(problem).foregroundStyle(.red) }
                 }
                 Section {
                     ForEach(targets) { target in
-                        Button { chosen = target.id } label: { row(target) }
+                        Button { choose(target) } label: { row(target) }
                             .buttonStyle(.plain)
                     }
                     if targets.isEmpty {
@@ -92,13 +101,16 @@ struct ForwardSheet: View {
             }
             .searchField(text: $search, placement: .navigationBarDrawer(displayMode: .always))
             .disabled(sending)
-            .navigationTitle("Forward")
+            .navigationTitle(choosesSeveral ? "Use as Background" : "Forward")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).disabled(sending) }
                 ToolbarItem(placement: .confirmationAction) {
                     if sending {
                         ProgressView()
+                    } else if choosesSeveral {
+                        Button("Use", action: useAsBackground)
+                            .disabled(chosen.isEmpty)
                     } else {
                         Button("Send") { if let target { send(to: target) } }
                             .disabled(target == nil)
@@ -121,12 +133,38 @@ struct ForwardSheet: View {
                 }
             }
             Spacer()
-            if chosen == target.id {
+            if chosen.contains(target.id) {
                 Image(systemName: "checkmark").foregroundStyle(.tint).fontWeight(.semibold)
             }
         }
         .contentShape(Rectangle())
-        .accessibilityAddTraits(chosen == target.id ? .isSelected : [])
+        .accessibilityAddTraits(chosen.contains(target.id) ? .isSelected : [])
+    }
+
+    /// Forward… sends to one; several chosen for a background stay chosen while searching for the next.
+    private func choose(_ target: Target) {
+        if !choosesSeveral { chosen = [target.id] }
+        else if chosen.contains(target.id) { chosen.removeAll { $0 == target.id } }
+        else { chosen.append(target.id) }
+    }
+
+    /// Closes once every one chosen has it, on whichever Hub it is; else stays open, saying why, such as a shader
+    /// that does not compile.
+    private func useAsBackground() {
+        let all = self.targets(matching: "")
+        let chosenTargets = chosen.compactMap { link in all.first { $0.id == link }.map { ($0.chats, $0.thread) } }
+        sending = true
+        problem = nil
+        let request = request
+        Task {
+            do {
+                try await request.chats.useAsBackground(request.attachment, in: request.thread, for: chosenTargets)
+                dismiss()
+            } catch {
+                problem = error.localizedDescription
+                sending = false
+            }
+        }
     }
 
     /// Closes once the message shows in the other conversation, which may first wait for the file to come

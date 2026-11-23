@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Use as Background on a picture or Metal shader now asks first: Use Here sets it in this conversation, and Choose Conversations… lets you tick several bots and groups, on any Hub you joined, and sets it in each.
+
+### What to Test
+
+- Touch and hold a picture in a conversation and choose Use as Background. Cancel leaves the background as it was; Use Here sets it in this conversation, on the Mac too.
+- Choose Use as Background again, then Choose Conversations…. Tick two other bots or groups and tap Use: both show the picture, on the Mac too, and the conversation you started in keeps its own.
+- Do the same with a `.metal` shader a bot sent. One that doesn't compile says why.
+
 ## [0.59.0] - 2026-11-22
 
 ### Added

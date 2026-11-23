@@ -1014,8 +1014,19 @@ enum AttachmentForwarding {
 
 extension ForwardAttachmentSheet {
     /// Noodle's bots and groups, with their pictures. A file only its Hub has comes down first, to go up again
-    /// with the forwarded copy.
-    init(attachment: ConversationAttachment, store: NoodleStore) {
+    /// with the forwarded copy, or to become each background, as Use Here does.
+    init(_ request: AttachmentForwardRequest, store: NoodleStore) {
+        let attachment = request.attachment
+        let send: (UUID, String) async throws -> Void = { id, comment in
+            if store.hubKeeping(attachment) != nil, await store.downloadedFile(attachment) == nil {
+                throw HubDownloadFailed()
+            }
+            try store.forward(attachment, to: id, comment: comment)
+        }
+        let action: Action = switch request.purpose {
+        case .forward: .send(send)
+        case .useAsBackground: .useAsBackground { await store.useAttachmentAsBackground(attachment, in: $0) }
+        }
         self.init(attachment: attachment,
                   targets: { search in
                       AttachmentForwarding.targets(in: store, from: attachment.conversationID, search: search)
@@ -1026,12 +1037,7 @@ extension ForwardAttachmentSheet {
                       return AnyView(ConversationAvatar(participants: conversation.map { store.shownParticipants(for: $0) } ?? [],
                                                         isGroup: conversation?.kind == .group, size: 28))
                   },
-                  send: { id, comment in
-                      if store.hubKeeping(attachment) != nil, await store.downloadedFile(attachment) == nil {
-                          throw HubDownloadFailed()
-                      }
-                      try store.forward(attachment, to: id, comment: comment)
-                  })
+                  action: action)
     }
 }
 

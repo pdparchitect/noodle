@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The send button is Noodle's: an outline arrow while there is nothing to send, and a white arrow on the accent colour once there is.
+- In Settings › Tools, the line between two connections ends where their status ends, instead of running to the edge.
+
 ## [0.3.0] - 2026-11-22
 
 ### Added

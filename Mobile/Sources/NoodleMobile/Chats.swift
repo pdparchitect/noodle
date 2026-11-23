@@ -356,6 +356,20 @@ final class ChatsCacheFile: @unchecked Sendable {
         keep(kept, for: conversation.conversationID)
     }
 
+    /// Use as Background: a picture or Metal shader sent in a conversation becomes the background of each one given,
+    /// on any joined Hub, as if set in each one's Background settings. A shader is checked and compiled once; the
+    /// first that cannot be set stops the rest and says why.
+    func useAsBackground(_ attachment: LinkAttachment, in thread: HubThread, for targets: [(HubChats, HubThread)]) async throws {
+        let file = try await self.file(for: attachment, in: thread)
+        if ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.filename)) {
+            let shader = try await PreparedBackgroundFile.prepare(file)
+            for (chats, target) in targets { try await chats.setBackground(file: shader, for: target) }
+        } else {
+            let photo = try Data(contentsOf: file)
+            for (chats, target) in targets { try await chats.setBackground(photo: photo, for: target) }
+        }
+    }
+
     private func thread(of conversationID: UUID) -> HubThread? {
         // One not listed yet is looked for in, and observed with, the whole list, so it shows once it is.
         guard let id = threadIDs[conversationID] else { return threads.first { $0.conversationID == conversationID } }
