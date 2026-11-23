@@ -333,8 +333,8 @@ private struct ToolSetupStepsList: View {
     var inWindow = false
     @State private var stepsHeight: CGFloat?
 
-    /// The tallest the popover's steps grow before they scroll: most of the screen it is on.
-    static var popoverStepsMaxHeight: CGFloat { ((NSScreen.main?.visibleFrame.height ?? 800) * 0.7).rounded() }
+    /// The tallest the popover's steps grow before they scroll: most of the screen Settings is on.
+    static var popoverStepsMaxHeight: CGFloat { ((ToolSetupStepsWindow.settingsScreen?.visibleFrame.height ?? 800) * 0.7).rounded() }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -387,6 +387,9 @@ private struct ToolSetupStepsText: View {
 enum ToolSetupStepsWindow {
     private static var open: [String: NSPanel] = [:]
 
+    /// The screen holding the window the Setup Steps button is in, which is key while it is clicked.
+    static var settingsScreen: NSScreen? { NSApp.keyWindow?.screen ?? NSApp.mainWindow?.screen ?? NSScreen.main }
+
     static func show(title: String, steps: [String]) {
         if let panel = open[title] { panel.orderFrontRegardless(); return }
         let panel = NSPanel(contentRect: .zero, styleMask: [.titled, .closable, .resizable, .utilityWindow], backing: .buffered,
@@ -401,10 +404,12 @@ enum ToolSetupStepsWindow {
         // Open at the steps' own height, with room for the buttons, but no taller than most of the screen.
         let width: CGFloat = 440
         let measure = NSHostingView(rootView: ToolSetupStepsText(steps: steps).frame(width: width))
-        let screen = (panel.screen ?? NSScreen.main)?.visibleFrame.height ?? 800
-        panel.setContentSize(NSSize(width: width, height: min(measure.fittingSize.height + 64, (screen * 0.8).rounded())))
+        let screen = settingsScreen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
+        panel.setContentSize(NSSize(width: width, height: min(measure.fittingSize.height + 64, (screen.height * 0.8).rounded())))
         panel.contentMinSize = NSSize(width: 320, height: 160)
-        panel.center()
+        // Centred on the screen Settings is on, not the main one.
+        let size = panel.frame.size
+        panel.setFrameOrigin(NSPoint(x: (screen.midX - size.width / 2).rounded(), y: (screen.midY - size.height / 2).rounded()))
         open[title] = panel
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: panel, queue: .main) { _ in
             MainActor.assumeIsolated { open[title] = nil }
