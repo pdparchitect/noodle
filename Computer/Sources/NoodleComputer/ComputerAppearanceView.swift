@@ -19,13 +19,14 @@ struct ComputerIcon: View {
     let symbol: String
     let size: CGFloat
     @Environment(\.offersComputerAppearance) private var offered
+    @Environment(\.computerIconColours) private var colours
     var body: some View {
         if offered {
             IconBadge(appearance: appearance.icon, symbol: symbol, size: size)
         } else {
-            // The app's own standard icon: the computer's symbol on its accent colour.
-            Image(systemName: symbol).font(.system(size: size * 0.42, weight: .medium)).foregroundStyle(.white)
-                .frame(width: size, height: size).background(Color.accentColor, in: Circle())
+            // The app's own standard icon: the computer's symbol on a disc, in the app's colours.
+            Image(systemName: symbol).font(.system(size: size * 0.4, weight: .medium)).foregroundStyle(colours.symbol)
+                .frame(width: size, height: size).background(colours.disc, in: Circle())
         }
     }
 }
@@ -100,6 +101,8 @@ extension EnvironmentValues {
     /// around a computer, as Rook does, turns it off, and every computer wears its standard icon in the app's
     /// accent colour; Noodle Computer keeps it.
     @Entry var offersComputerAppearance = true
+    /// The standard icon's disc and symbol where no appearance is offered, so computers match the app's own marks.
+    @Entry var computerIconColours: (disc: Color, symbol: Color) = (Color.accentColor, .white)
 }
 
 struct ComputerAppearanceRow: View {

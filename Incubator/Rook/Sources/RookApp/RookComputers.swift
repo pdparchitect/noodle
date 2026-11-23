@@ -285,7 +285,8 @@ private struct MissionComputersSheet: View {
                 owner: "mission", newKinds: [NewComputerKind.linux.title, NewComputerKind.ssh.title],
                 onNewKind: { title in creating = title == NewComputerKind.ssh.title ? .ssh : .linux },
                 avatar: { item, size in
-                    AnyView(ComputerIcon(appearance: .init(), symbol: item.symbol, size: size).environment(\.offersComputerAppearance, false))
+                    AnyView(ComputerIcon(appearance: .init(), symbol: item.symbol, size: size)
+                        .environment(\.offersComputerAppearance, false).environment(\.computerIconColours, (Color.markDisc, Color.markInk)))
                 })
                 .padding(20)
         }
