@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-23
+
 ### Added
 
 - Agents can list every tool in Pion's catalogue with `messenger --list-tool-catalogue`, each by name and summary with whether it is available, configured, assigned to other agents or assigned to them, naming only the agents with it that they share a conversation with, so they can ask one for help or suggest which tool to turn on for an investigation. It never says whose a connection is, how it is set up or how many there are, never names agents they share no conversation with, and grants nothing.

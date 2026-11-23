@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.60.0] - 2026-11-23
+
 ### Changed
 
 - Use as Background on a picture or Metal shader now asks first: Use Here sets it in this conversation, and Choose Conversations… lets you tick several bots and groups, on any Hub you joined, and sets it in each.

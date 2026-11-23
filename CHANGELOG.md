@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.94.0] - 2026-11-23
+
 ### Added
 
 - Bots can list every tool in Settings › Tools › Add Tools with `messenger --list-tool-catalogue`, each by name and summary with whether it is available, configured, assigned to other bots or assigned to them, naming only the bots with it that they share a conversation with, so they can ask one for help or suggest which tool to turn on. It never says whose a connection is, how it is set up or how many there are, never names bots they share no conversation with, and grants nothing.
