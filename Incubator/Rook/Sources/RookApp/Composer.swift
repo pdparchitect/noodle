@@ -117,14 +117,10 @@ struct Composer: View {
                     .buttonStyle(ComposerIconButtonStyle())
                     .help(KeyboardBindings.shared.help("Record Voice Message", for: .recordVoice))
                     .disabled(isOff)
-                    Button { model.sendDraft(to: conversation.id) } label: {
-                        Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold)).frame(width: 30, height: 30)
-                            .foregroundStyle(canSend ? Color(nsColor: .textBackgroundColor) : Color.secondary)
-                            .background(canSend ? Color.primary : Color.secondary.opacity(0.2), in: Circle())
+                    // Noodle's: an outline arrow until there is something to send, then a white arrow on the accent.
+                    ComposerSendButton(canSend: canSend, width: 30, height: 30, help: "Send (Return)") {
+                        model.sendDraft(to: conversation.id)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!canSend)
-                    .help("Send (Return)")
                 }
             }
             .padding(10)

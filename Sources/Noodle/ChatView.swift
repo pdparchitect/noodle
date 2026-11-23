@@ -433,26 +433,10 @@ private struct ComposerDraftInput: View {
                 .help(KeyboardBindings.shared.help("Record Voice Message", for: .recordVoice))
                 .accessibilityLabel("Record voice message")
             }
-            if cannotSend {
-                Image(systemName: "arrow.up.circle")
-                    .font(.system(size: 22))
-                    .foregroundStyle(.tertiary)
-                    .frame(width: sendControlWidth, height: controlHeight)
-                    .padding(.trailing, 7)
-            } else {
-                Button(action: { store.sendDraft(to: conversation.id) }) {
-                    // A white arrow on the accent, rather than one cut out of it, reads the same in light and dark.
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 23))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, Color.accentColor)
-                        .frame(width: sendControlWidth, height: controlHeight)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .padding(.trailing, 7)
-                .help("Send Message")
+            ComposerSendButton(canSend: !cannotSend, width: sendControlWidth, height: controlHeight, help: "Send Message") {
+                store.sendDraft(to: conversation.id)
             }
+            .padding(.trailing, 7)
             }
         }
     }

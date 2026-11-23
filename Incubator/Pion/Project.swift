@@ -128,6 +128,7 @@ let project = Project(
                 "../../Sources/Noodle/ConversationListKeyboardNavigation.swift",
                 "../../Sources/Noodle/ComposerAttachmentMenu.swift",
                 "../../Sources/Noodle/ComposerNameCompletion.swift",
+                "../../Sources/Noodle/ComposerSendButton.swift",
                 "../../Sources/Noodle/KeyboardBindings.swift",
                 "../../Sources/Noodle/FirstBotSetup.swift",
                 "../../Sources/Noodle/KeybindingsSettingsView.swift",
