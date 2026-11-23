@@ -80,7 +80,8 @@ public struct ToolConnectionAccess: Sendable {
         var attempt = 1, waited = 0.0
         while true {
             let (data, response) = try await send(request)
-            guard attempt < Self.attempts, let pause = Self.pause(after: response, data, method: request.httpMethod, attempt: attempt),
+            guard attempt < Self.attempts, let pause = Self.pause(after: response, data, method: request.httpMethod, attempt: attempt,
+                                                                  signedForAWS: authorization?.signsForAWS == true),
                   waited + pause <= Self.patience else { return (data, response) }
             attempt += 1
             waited += pause
@@ -93,9 +94,13 @@ public struct ToolConnectionAccess: Sendable {
 
     /// How long to wait before sending a request again, or nil when it should not be: only when the service was rate
     /// limiting, or could not answer a read. A write it could not answer may still have been done, so it never goes twice.
-    static func pause(after response: HTTPURLResponse, _ data: Data, method: String?, attempt: Int) -> Double? {
+    /// A request signed for AWS is also tried again when AWS throttled it, which it says with a 400 or 503 naming a
+    /// throttling error rather than a 429; AWS did nothing with such a request, so even a write goes again, as AWS's own
+    /// SDKs send it. Only AWS's requests are read that way, so no other service's 400 is ever sent twice.
+    static func pause(after response: HTTPURLResponse, _ data: Data, method: String?, attempt: Int, signedForAWS: Bool = false) -> Double? {
         let read = ["GET", "HEAD"].contains(method?.uppercased() ?? "GET")
-        guard response.statusCode == 429 || (response.statusCode == 503 && read) || isQuotaRefusal(response.statusCode, data) else { return nil }
+        guard response.statusCode == 429 || (response.statusCode == 503 && read) || isQuotaRefusal(response.statusCode, data)
+                || (signedForAWS && isAWSThrottle(response.statusCode, data)) else { return nil }
         if let asked = response.value(forHTTPHeaderField: "Retry-After").flatMap(retryAfter) { return asked }
         return Double(1 << (attempt - 1)) * Double.random(in: 0.5...1)
     }
@@ -119,6 +124,32 @@ public struct ToolConnectionAccess: Sendable {
         let reasons = ((error["errors"] as? [[String: Any]]) ?? []).compactMap { $0["reason"] as? String }
             + ((error["details"] as? [[String: Any]]) ?? []).compactMap { $0["reason"] as? String }
         return reasons.contains { ["rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded", "RATE_LIMIT_EXCEEDED"].contains($0) }
+    }
+
+    /// The error codes AWS throttles with, as its SDKs list them, less those that may mean the request is still being
+    /// done, such as a transaction in progress: each says AWS did nothing with the request, so even a write may go
+    /// again.
+    static let awsThrottles: Set<String> = ["Throttling", "ThrottlingException", "ThrottledException", "RequestThrottledException",
+                                            "TooManyRequestsException", "ProvisionedThroughputExceededException", "RequestLimitExceeded",
+                                            "RequestThrottled", "SlowDown", "EC2ThrottledException"]
+
+    /// Where AWS puts the code of an error in XML, the whole path from the answer's root: its Query APIs' ErrorResponse,
+    /// EC2's Response, and S3's bare Error. A Code anywhere else, such as in a listing's items, is not an error's.
+    static let awsErrorCodePaths: Set<[String]> = [["ErrorResponse", "Error", "Code"], ["Response", "Errors", "Error", "Code"], ["Error", "Code"]]
+
+    /// Whether AWS turned a request away because too many came: a 400, 429 or 503 whose error, in AWS's own envelope,
+    /// is a throttling one. JSON APIs name it in the answer's own __type or code, XML APIs in the Code of the error the
+    /// answer is; a code found anywhere else is never taken for one.
+    public static func isAWSThrottle(_ status: Int, _ data: Data) -> Bool {
+        guard [400, 429, 503].contains(status) else { return false }
+        let code: String?
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            code = (object["__type"] ?? object["code"] ?? object["Code"]) as? String
+        } else {
+            code = AWSErrorCode.read(data)
+        }
+        guard let name = code?.split(separator: "#").last.map(String.init)?.split(separator: ":").first.map(String.init) else { return false }
+        return awsThrottles.contains(name)
     }
 
     /// One try, in turn with the connection's other requests when its service takes only so many at once.
@@ -235,6 +266,13 @@ enum ConnectionAuthorization: Sendable {
     /// A Google access token, good for every googleapis.com service its scopes allow.
     case google(String)
 
+    /// Whether each request is signed for AWS with one account's keys, so AWS's own way of saying it throttled a request
+    /// is read.
+    var signsForAWS: Bool {
+        if case .aws = self { return true }
+        return false
+    }
+
     /// Whether it reaches every service below its connection's host, as an AWS key or a Google token does.
     var coversSubdomains: Bool {
         switch self {
@@ -262,5 +300,38 @@ enum ConnectionAuthorization: Sendable {
         case .awsOrganisation:
             break
         }
+    }
+}
+
+/// The Code of the error an AWS XML answer is, read only at the places AWS's error envelopes put it.
+private final class AWSErrorCode: NSObject, XMLParserDelegate {
+    private var path: [String] = []
+    private var text = ""
+    private var code: String?
+
+    static func read(_ data: Data) -> String? {
+        let reader = AWSErrorCode()
+        let parser = XMLParser(data: data)
+        // An answer never reaches out for entities it names.
+        parser.shouldResolveExternalEntities = false
+        parser.delegate = reader
+        guard parser.parse() else { return nil }
+        return reader.code
+    }
+
+    func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes: [String: String]) {
+        path.append(name)
+        text = ""
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) { text += string }
+
+    func parser(_ parser: XMLParser, didEndElement name: String, namespaceURI: String?, qualifiedName: String?) {
+        if code == nil, ToolConnectionAccess.awsErrorCodePaths.contains(path) {
+            let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty { code = value }
+        }
+        path.removeLast()
+        text = ""
     }
 }
