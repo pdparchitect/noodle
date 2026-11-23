@@ -427,8 +427,20 @@ public struct ServiceClient: Sendable {
         return node
     }
 
+    /// The answer in XML to a request whose parameters go URL-encoded in its body, as AWS's Query APIs take a change:
+    /// a POST, which the transport never sends twice when the service could not answer it.
+    public func xml(_ path: [String], form: [String: String]) async throws -> XMLNode {
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
+        let body = form.sorted { $0.key < $1.key }.map { name, value in
+            "\(name.addingPercentEncoding(withAllowedCharacters: allowed) ?? name)=\(value.addingPercentEncoding(withAllowedCharacters: allowed) ?? "")"
+        }.joined(separator: "&")
+        guard let node = XMLNode.parse(try await data(path, method: "POST", body: Data(body.utf8), contentType: "application/x-www-form-urlencoded; charset=utf-8",
+                                                      headers: ["Accept": "text/xml"])) else { throw ServiceError.unreadable }
+        return node
+    }
+
     /// What a service said when it refused, from the fields services put it in, on one short line. AWS's names its
-    /// code too, such as AccessDenied, in JSON's __type or Code or in an XML Error.
+    /// code too, such as AccessDenied, in JSON's __type or Code or in an XML Error, which S3 gives as the whole answer.
     static func reason(_ data: Data) -> String? {
         let code: String?, said: String?
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -437,7 +449,7 @@ public struct ServiceClient: Sendable {
                 ?? (object["error"] as? [String: Any])?["message"] as? String
             // AWS's JSON APIs name the error in __type, sometimes after its namespace and a #.
             code = (object["__type"] as? String ?? object["Code"] as? String).map { String($0.split(separator: "#").last ?? "") }
-        } else if let node = XMLNode.parse(data), let error = node.child("Error") ?? node.child("Errors")?.child("Error") {
+        } else if let node = XMLNode.parse(data), let error = node.name == "Error" ? node : node.child("Error") ?? node.child("Errors")?.child("Error") {
             said = error.value("Message")
             code = error.value("Code")
         } else { return nil }
@@ -494,6 +506,8 @@ public struct ServiceClient: Sendable {
         if returning.contains(response.statusCode) { return (data, response) }
         // Google says a quota ran out with a 403, which is no missing permission.
         if ToolConnectionAccess.isQuotaRefusal(response.statusCode, data) { throw ServiceError.rateLimited(Self.reason(data)) }
+        // AWS says it throttled a request with a 400 or 503 naming the error, which the transport has already tried again.
+        if explainsRefusals, ToolConnectionAccess.isAWSThrottle(response.statusCode, data) { throw ServiceError.rateLimited(Self.reason(data)) }
         if explainsRefusals, response.statusCode == 401 || response.statusCode == 403, let reason = Self.reason(data) {
             throw ServiceError.refused(reason)
         }
@@ -606,7 +620,7 @@ public enum PionAdapters {
                                                                   "splunk": Splunk.adapter, "elastic": Elastic.adapter, "sentinel": Sentinel.adapter,
                                                                   "cloudflare": Cloudflare.adapter, "wiz": Wiz.adapter, "github": GitHub.adapter,
                                                                   "abuseipdb": AbuseIPDB.adapter, "urlscan": URLScan.adapter, "greynoise": GreyNoise.adapter, "crowdsec-cti": CrowdSec.adapter, "nvd": NVD.adapter, "crtsh": CrtSh.adapter, "dns": DNS.adapter,
-                                                                  "otx": OTX.adapter, "haveibeenpwned": HaveIBeenPwned.adapter, "aws": AWS.adapter,
+                                                                  "otx": OTX.adapter, "haveibeenpwned": HaveIBeenPwned.adapter, "aws": AWS.adapter, "aws-containment": AWS.containmentAdapter,
                                                                   "google-cloud": GoogleCloud.adapter, "azure": Azure.adapter, "azure-containment": Azure.containmentAdapter,
                                                                   "google-workspace": GoogleWorkspace.adapter,
                                                                   "google-workspace-containment": GoogleWorkspace.containmentAdapter,

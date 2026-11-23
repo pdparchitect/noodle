@@ -845,6 +845,60 @@ final class ToolConnectionServiceTests: XCTestCase {
         XCTAssertNil(AWSSignature.scope(of: "amazonaws.com.evil.example", defaultRegion: "us-east-1"))
     }
 
+    /// More of AWS's published Signature Version 4 examples: the test suite's sorted query and POST, and S3's own, which
+    /// sign the payload's hash in x-amz-content-sha256 and encode each path segment only once.
+    func testSigV4MatchesAWSsPublishedExamplesForS3AndQueries() throws {
+        let suite = ConnectionAWSKey(accessKeyID: "AKIDEXAMPLE", secretAccessKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", sessionToken: nil)
+        let suiteDate = ISO8601DateFormatter().date(from: "2015-08-30T12:36:00Z")!
+        func signature(_ request: URLRequest) -> String? {
+            request.value(forHTTPHeaderField: "Authorization")?.components(separatedBy: "Signature=").last
+        }
+        var query = URLRequest(url: URL(string: "https://example.amazonaws.com/?Param2=value2&Param1=value1")!)
+        query.httpMethod = "GET"
+        AWSSignature.sign(&query, key: suite, region: "us-east-1", service: "service", date: suiteDate)
+        XCTAssertEqual(signature(query), "b97d918cfa904a5beff61c982a1b6f458b799221646efd99d3219ec94cdf2500", "get-vanilla-query-order-key-case")
+        var post = URLRequest(url: URL(string: "https://example.amazonaws.com/")!)
+        post.httpMethod = "POST"
+        AWSSignature.sign(&post, key: suite, region: "us-east-1", service: "service", date: suiteDate)
+        XCTAssertEqual(signature(post), "5da7c1a2acd57cee7505fc6676e4e544621c30862966e37dddb68e92efbe5d6b", "post-vanilla")
+        XCTAssertNil(post.value(forHTTPHeaderField: "x-amz-content-sha256"), "only S3 takes the payload's hash as a header")
+
+        let s3 = ConnectionAWSKey(accessKeyID: "AKIAIOSFODNN7EXAMPLE", secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", sessionToken: nil)
+        let s3Date = ISO8601DateFormatter().date(from: "2013-05-24T00:00:00Z")!
+        let empty = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        var object = URLRequest(url: URL(string: "https://examplebucket.s3.amazonaws.com/test.txt")!)
+        object.httpMethod = "GET"
+        object.setValue("bytes=0-9", forHTTPHeaderField: "Range")
+        AWSSignature.sign(&object, key: s3, region: "us-east-1", service: "s3", date: s3Date)
+        XCTAssertEqual(object.value(forHTTPHeaderField: "x-amz-content-sha256"), empty)
+        XCTAssertEqual(object.value(forHTTPHeaderField: "Authorization"),
+            "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;range;x-amz-content-sha256;x-amz-date, Signature=f0e8bdb87c964420e857bd35b5d6ed310bd44f0170aba48dd91039c6036bdb41")
+        // A $ in a key is encoded once, as %24, never twice.
+        var put = URLRequest(url: URL(string: "https://examplebucket.s3.amazonaws.com/test$file.text")!)
+        put.httpMethod = "PUT"
+        put.httpBody = Data("Welcome to Amazon S3.".utf8)
+        put.setValue("Fri, 24 May 2013 00:00:00 GMT", forHTTPHeaderField: "Date")
+        put.setValue("REDUCED_REDUNDANCY", forHTTPHeaderField: "x-amz-storage-class")
+        AWSSignature.sign(&put, key: s3, region: "us-east-1", service: "s3", date: s3Date)
+        XCTAssertEqual(put.value(forHTTPHeaderField: "x-amz-content-sha256"), "44ce7dd67c959e0d3524ffac1771dfbba87d2b6b4b4e99e42034a8b803f8b072")
+        XCTAssertEqual(signature(put), "98ad721746da40c64f1a55b78f14c238d841ea1380cd77a1b5971af0ece108bd")
+        // A subresource with no value, as S3's configuration calls take one.
+        var lifecycle = URLRequest(url: URL(string: "https://examplebucket.s3.amazonaws.com/?lifecycle=")!)
+        lifecycle.httpMethod = "GET"
+        AWSSignature.sign(&lifecycle, key: s3, region: "us-east-1", service: "s3", date: s3Date)
+        XCTAssertEqual(signature(lifecycle), "fea454ca298b7da1c68078a5d1bdbfbbe0d65c699e0f91ac7a200a0136783543")
+
+        // S3 Control's account host signs as s3; a bucket's own host, or any other shape, is not signed at all.
+        let control = AWSSignature.scope(of: "111111111111.s3-control.eu-west-1.amazonaws.com", defaultRegion: "us-east-1")
+        XCTAssertEqual(control?.service, "s3")
+        XCTAssertEqual(control?.region, "eu-west-1")
+        XCTAssertEqual(AWSSignature.scope(of: "s3.eu-west-1.amazonaws.com", defaultRegion: "us-east-1")?.service, "s3")
+        for host in ["payroll.s3.eu-west-1.amazonaws.com", "evil.s3-control.eu-west-1.amazonaws.com", "a.b.c.d.amazonaws.com",
+                     "cloudtrail..amazonaws.com", "cloud_trail.eu-west-1.amazonaws.com"] {
+            XCTAssertNil(AWSSignature.scope(of: host, defaultRegion: "us-east-1"), host)
+        }
+    }
+
     /// An organisation's start URL as people paste it from their browser, and the region its start page names.
     func testAnIdentityCenterStartURLIsKeptPlainAndItsRegionFoundOnItsPage() throws {
         XCTAssertEqual(try ToolConnection.validatedAWSStartURL(" https://Websecurify.awsapps.com/start/#/ ").absoluteString,

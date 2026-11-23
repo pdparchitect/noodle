@@ -32,7 +32,9 @@ final class FakeService: ServiceAccess, @unchecked Sendable {
         if delay > 0 { try await Task.sleep(nanoseconds: UInt64(Double.random(in: 0...delay) * 1_000_000_000)) }
         lock.withLock { requests.append(request) }
         let key = request.url!.path + (request.url!.query.map { "?" + $0 } ?? "")
+        // AWS's Query APIs name the action in the query, or for a change sent as a form, in the body.
         let action = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "Action" }?.value
+            ?? (request.value(forHTTPHeaderField: "Content-Type")?.hasPrefix("application/x-www-form-urlencoded") == true ? formItems(request)["Action"] : nil)
         // An answer for the request's target or action first, as AWS names its calls, then an exact one, then one for
         // the path whatever the query.
         let candidates = [request.value(forHTTPHeaderField: "X-Amz-Target"), action.map { "action:" + $0 }, key, request.url!.path]

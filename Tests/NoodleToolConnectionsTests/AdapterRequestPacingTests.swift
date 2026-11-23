@@ -131,6 +131,85 @@ final class AdapterRequestPacingTests: XCTestCase {
         XCTAssertEqual(throttledWrite, 200)
     }
 
+    /// AWS throttles with a 400 or 503 naming a throttling error, in JSON or XML, rather than a 429: a request signed for
+    /// AWS goes again, a read or a write, as AWS did nothing with it; any other 400, and any other service's, does not.
+    func testAWSThrottlingIsTriedAgainOnlyForRequestsSignedForAWS() async throws {
+        let key = ConnectionAWSKey(accessKeyID: "AKIDEXAMPLE", secretAccessKey: "secret", sessionToken: "token")
+        let aws = ToolConnectionAccess(endpoint: URL(string: "https://amazonaws.com")!, authorization: .aws(key, defaultRegion: "us-east-1"),
+                                       pause: { [pauses] in pauses.record($0) }) {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [PacedService.self]
+            return configuration
+        }
+        func call(_ method: String) async throws -> Int {
+            var request = URLRequest(url: URL(string: "https://cloudtrail.eu-west-1.amazonaws.com/")!)
+            request.httpMethod = method
+            return try await aws.data(for: request).1.statusCode
+        }
+        let json = #"{"__type":"com.amazonaws.cloudtrail.v20131101#ThrottlingException","message":"Rate exceeded"}"#
+        let xml = "<ErrorResponse><Error><Type>Sender</Type><Code>Throttling</Code><Message>Rate exceeded</Message></Error></ErrorResponse>"
+        let ec2 = "<Response><Errors><Error><Code>RequestLimitExceeded</Code><Message>Request limit exceeded.</Message></Error></Errors></Response>"
+        let tooMany = #"{"__type":"TooManyRequestsException","message":"slow down"}"#
+        PacedService.reset([.init(status: 400, body: json), .init(status: 400, body: xml), .init(status: 503, body: ec2),
+                            .init(status: 400, body: tooMany), .init(status: 200)])
+        let throttled = try await call("POST")
+        XCTAssertEqual(throttled, 400, "four attempts at most")
+        XCTAssertEqual(PacedService.asked, 4)
+        PacedService.reset([.init(status: 400, body: json), .init(status: 200)])
+        let recovered = try await call("POST")
+        XCTAssertEqual(recovered, 200)
+        XCTAssertEqual(PacedService.asked, 2)
+
+        // A 400 for anything else is AWS's answer, never sent twice.
+        PacedService.reset([.init(status: 400, body: #"{"__type":"InvalidParameterException","message":"bad"}"#), .init(status: 200)])
+        let invalid = try await call("POST")
+        XCTAssertEqual(invalid, 400)
+        XCTAssertEqual(PacedService.asked, 1)
+        PacedService.reset([.init(status: 400, body: #"{"__type":"LimitExceededException","message":"quota of detectors"}"#), .init(status: 200)])
+        let quota = try await call("POST")
+        XCTAssertEqual(quota, 400, "a quota that waiting does not lift is not throttling")
+        XCTAssertEqual(PacedService.asked, 1)
+
+        // The same throttling answer from any other service is that service's own 400.
+        PacedService.reset([.init(status: 400, body: json), .init(status: 200)])
+        let elsewhere = try await send("POST")
+        XCTAssertEqual(elsewhere, 400)
+        XCTAssertEqual(PacedService.asked, 1, "another service's 400 was sent again")
+        XCTAssertFalse(ToolConnectionAccess.isAWSThrottle(403, Data(json.utf8)))
+        XCTAssertFalse(ToolConnectionAccess.isAWSThrottle(400, Data("not json <Code>Throttling".utf8)))
+    }
+
+    /// Only the code of the error the answer is counts: a Code element anywhere else, such as in a listing's items or
+    /// nested inside the error, is never taken for throttling, so a write is not sent twice on its account.
+    func testAWSThrottlingIsReadOnlyFromAWSsErrorEnvelopes() async throws {
+        let key = ConnectionAWSKey(accessKeyID: "AKIDEXAMPLE", secretAccessKey: "secret", sessionToken: nil)
+        let aws = ToolConnectionAccess(endpoint: URL(string: "https://amazonaws.com")!, authorization: .aws(key, defaultRegion: "us-east-1"),
+                                       pause: { [pauses] in pauses.record($0) }) {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [PacedService.self]
+            return configuration
+        }
+        let envelopes = ["<ErrorResponse><Error><Type>Sender</Type><Code>Throttling</Code></Error><RequestId>1</RequestId></ErrorResponse>",
+                         "<Response><Errors><Error><Code>RequestLimitExceeded</Code><Message>slow</Message></Error></Errors><RequestID>1</RequestID></Response>",
+                         "<?xml version=\"1.0\"?><Error><Code>SlowDown</Code><Message>Reduce your request rate.</Message></Error>",
+                         #"{"__type":"ThrottlingException"}"#, #"{"code":"TooManyRequestsException"}"#]
+        for body in envelopes { XCTAssertTrue(ToolConnectionAccess.isAWSThrottle(400, Data(body.utf8)), body) }
+        let elsewhere = ["<CreateTagsResponse><tagSet><item><Code>Throttling</Code></item></tagSet></CreateTagsResponse>",
+                         "<ErrorResponse><Error><Detail><Code>Throttling</Code></Detail><Code>ValidationError</Code></Error></ErrorResponse>",
+                         "<Response><Error><Code>Throttling</Code></Error></Response>",
+                         "<ErrorResponse><Error><Code>TransactionInProgressException</Code></Error></ErrorResponse>",
+                         #"{"error":{"__type":"ThrottlingException"}}"#, #"{"Items":[{"Code":"Throttling"}]}"#]
+        for body in elsewhere { XCTAssertFalse(ToolConnectionAccess.isAWSThrottle(400, Data(body.utf8)), body) }
+        for body in elsewhere.prefix(2) {
+            PacedService.reset([.init(status: 400, body: body), .init(status: 200)])
+            var request = URLRequest(url: URL(string: "https://ec2.eu-west-1.amazonaws.com/")!)
+            request.httpMethod = "POST"
+            let status = try await aws.data(for: request).1.statusCode
+            XCTAssertEqual(status, 400, body)
+            XCTAssertEqual(PacedService.asked, 1, "a write was sent again for a Code outside the error envelope: \(body)")
+        }
+    }
+
     func testTryingAgainStopsAfterFourAttemptsOrWhenTheServiceAsksForTooLongAWait() async throws {
         PacedService.reset(Array(repeating: .init(status: 429), count: 10))
         let persistent = try await send()
