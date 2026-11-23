@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-23
+
 ### Added
 
 - Agents can ask for the tool catalogue with `messenger --list-tool-catalogue`, as in Noodle and Pion; Rook offers no tools yet, so the list is empty.
