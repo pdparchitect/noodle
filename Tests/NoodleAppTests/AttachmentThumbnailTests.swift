@@ -41,7 +41,9 @@ import XCTest
         let rendered = await AttachmentThumbnailCache.shaderStill(for: shader)
         let still = try XCTUnwrap(rendered)
         XCTAssertEqual(still.size, CGSize(width: 520, height: 300))
-        XCTAssertEqual(still.representations.first?.pixelsWide, 1040, "drawn for a Retina display")
+        // Drawn at a Retina size whatever this screen's scale, as the cache keeps its other thumbnails. The
+        // representation reports pixels for this screen, so count the picture's own.
+        XCTAssertEqual(still.cgImage(forProposedRect: nil, context: nil, hints: nil)?.width, 1040, "drawn for a Retina display")
 
         let broken = root.appendingPathComponent("Broken.metal")
         try "[[ stitchable ]] half4 broken(float2 position) { return nope; }".write(to: broken, atomically: true, encoding: .utf8)
