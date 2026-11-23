@@ -614,7 +614,7 @@ public struct OperationAdapter: ToolConnectionAdapter {
 
 /// The adapters Pion serves its own connections with, by the name its catalogue entries give them.
 public enum PionAdapters {
-    public static let all: [String: any ToolConnectionAdapter] = ["virustotal": VirusTotal.adapter, "okta": Okta.adapter, "shodan": Shodan.adapter,
+    public static let all: [String: any ToolConnectionAdapter] = ["virustotal": VirusTotal.adapter, "okta": Okta.adapter, "okta-containment": Okta.containmentAdapter, "shodan": Shodan.adapter,
                                                                   "entra": Entra.adapter, "defender": Defender.adapter,
                                                                   "crowdstrike": CrowdStrike.adapter, "sentinelone": SentinelOne.adapter,
                                                                   "splunk": Splunk.adapter, "elastic": Elastic.adapter, "sentinel": Sentinel.adapter,

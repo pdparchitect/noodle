@@ -123,7 +123,7 @@ to the agents that should use it.
 | --- | --- |
 | **Reputation and intel** | VirusTotal, Shodan, Censys, GreyNoise, CrowdSec CTI, AbuseIPDB, AlienVault OTX, urlscan.io, Have I Been Pwned, Cloudflare Radar |
 | **Attack surface** | crt.sh, DNS, NVD, cve.now, Tenable |
-| **Identity** | Okta, Microsoft Entra ID, Google Workspace Audit, Google Workspace Containment |
+| **Identity** | Okta Audit, Okta Containment, Microsoft Entra ID, Google Workspace Audit, Google Workspace Containment |
 | **Endpoint and email** | CrowdStrike Falcon, Microsoft Defender XDR, SentinelOne, Proofpoint TAP |
 | **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |
 | **Cloud and code** | AWS Audit, AWS Containment, Google Cloud Audit, Microsoft Azure Audit, Microsoft Azure Containment, Cloudflare Security, Wiz, GitHub |
@@ -134,7 +134,9 @@ the audit role only reads, and the containment role holds only the actions it ta
 Audit and both Google Workspace tools sign in with your Google account; GitHub signs in with a
 code, through an OAuth app your organisation registers. Microsoft Azure Audit and Microsoft Azure Containment each use an app
 registration's client ID and secret, one subscription per account: the audit app only reads, and
-the containment app holds a custom role with only the actions it takes.
+the containment app holds a custom role with only the actions it takes. Okta Audit and Okta Containment
+each take an API token made by an admin of their own: the audit admin only reads, and the containment
+admin holds a custom role with only the permissions its actions take.
 
 Some services have a guide in [docs/tools](docs/tools) explaining the access each tool asks for,
 the least access to set it up with, and its caveats.
