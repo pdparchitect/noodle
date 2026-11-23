@@ -42,7 +42,7 @@ public enum AppleExecutableTrust {
 public enum AppleAgentSandbox {
     public static func profile(application: URL, workspace: URL? = nil, repository: URL? = nil,
                                modelsDirectory: URL? = nil, localModel: Bool = false, remoteClient: URL? = nil,
-                               folders: [AgentFolder] = []) -> String {
+                               folders: [AgentFolder] = [], egressPort: UInt16? = nil) -> String {
         var reads = ["/System", "/usr", "/bin", "/sbin", "/dev", "/Library/Apple",
                      "/Library/Preferences", "/private/etc", "/private/var/db/timezone", application.path]
         if let workspace { reads.append(AgentStorageLayout(workspace: workspace).package.path) }
@@ -94,9 +94,11 @@ public enum AppleAgentSandbox {
         \(metalDelegation)
         \(remoteClient.map { client in
             // A remote model's harness reaches its provider. The commands it
-            // runs share this sandbox but not the network.
-            """
-            (allow network-outbound (process-path \(quote(canonical(client.path)))))
+            // runs share this sandbox but not the network. Siloed, it reaches only the Agent Host's proxy.
+            let reach = egressPort.map { "(require-all (process-path \(quote(canonical(client.path)))) (remote ip \"localhost:\($0)\"))" }
+                ?? "(process-path \(quote(canonical(client.path))))"
+            return """
+            (allow network-outbound \(reach))
             (allow mach-lookup
               (global-name "com.apple.trustd")
               (global-name "com.apple.trustd.agent"))

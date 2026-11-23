@@ -291,6 +291,8 @@ let project = Project(
                 "NoodleSigningTeam": "$(DEVELOPMENT_TEAM)",
                 "NoodleApplicationIdentifier": "$(ROOK_APP_BUNDLE_ID)",
                 "NoodleAgentHostService": "$(ROOK_APP_BUNDLE_ID).agent-host",
+                // Every agent is siloed: restricted, and reaching only its harness's own services.
+                "NoodleHarnessSilo": true,
             ]),
             sources: ["../../Sources/NoodleAgentHost/**"],
             dependencies: [.package(product: "NoodleCore"), .package(product: "NoodleAgentBridge")],

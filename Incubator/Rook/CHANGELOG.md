@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Agents are siloed: they always run restricted, and reach the network only for their harness's own model service and sign-in, so a web page, a package download or any other address a tool asks for is refused.
+
 ## [0.4.0] - 2026-11-23
 
 ### Added

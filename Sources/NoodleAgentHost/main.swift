@@ -56,6 +56,12 @@ private enum HostPaths {
         }
     }
 
+    /// Set in the host's own Info.plist by an app whose bots are all siloed: restricted, and reaching the network only
+    /// through this host's proxy, to the addresses their harness lists. The app cannot ask for less.
+    static var silo: Bool { Bundle.main.object(forInfoDictionaryKey: "NoodleHarnessSilo") as? Bool == true }
+
+    static let egressLog = Logger(subsystem: RuntimeDiagnostics.subsystem, category: "egress")
+
     static var container: URL {
         HarnessStorage.systemHome.appendingPathComponent("Library/Containers/\(AgentHostIdentity.application)", isDirectory: true)
     }
@@ -130,7 +136,7 @@ if CommandLine.arguments == [CommandLine.arguments[0], "--check-process-group"] 
 
 // The child creates a dedicated process group before starting the harness. Disabling
 // extended access terminates this group, including ordinary tool descendants.
-if CommandLine.arguments.count == 12, CommandLine.arguments[1] == "--harness-child" {
+if CommandLine.arguments.count == 13, CommandLine.arguments[1] == "--harness-child" {
     do {
         guard let provider = HarnessProvider(rawValue: CommandLine.arguments[2]) else {
             throw HostError("Unsupported harness.")
@@ -147,6 +153,9 @@ if CommandLine.arguments.count == 12, CommandLine.arguments[1] == "--harness-chi
         guard !appsEnabled || provider.supportsAccountApps else { throw HostError("This harness does not support account apps.") }
         guard restricted || CommandLine.arguments[9] == "autonomous",
               !restricted || provider.supportsRestrictedAccess else { throw HostError("Unsupported runtime access mode.") }
+        // The parent's proxy port, present exactly when this host silos its bots.
+        let egressPort = UInt16(CommandLine.arguments[12])
+        guard (egressPort != nil) == HostPaths.silo, egressPort == nil || restricted else { throw HostError("Unsupported network access.") }
         // Only a UUID may override the saved login. Both parent and child resolve it
         // inside Noodle's storage and verify its harness; the caller cannot supply a path.
         let profiles = HostPaths.profiles
@@ -233,17 +242,21 @@ if CommandLine.arguments.count == 12, CommandLine.arguments[1] == "--harness-chi
                 let modelDirectory = try localModel ? AppleLocalModelStore(directory: HostPaths.appleModels).folder(id: model!) : nil
                 profile = AppleAgentSandbox.profile(application: HostPaths.application, workspace: workspace, repository: repository,
                     modelsDirectory: modelDirectory, localModel: localModel,
-                    remoteClient: model.flatMap(RemoteModelID.init) == nil ? nil : executable, folders: folders)
+                    remoteClient: model.flatMap(RemoteModelID.init) == nil ? nil : executable, folders: folders,
+                    egressPort: egressPort)
             case .codex:
                 let certificates = try RestrictedCodexCertificates.prepare(workspace: workspace)
                 setenv("CODEX_CA_CERTIFICATE", certificates.path, 1)
                 profile = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
                     codexHome: codexHome, executableDirectory: executable.deletingLastPathComponent().deletingLastPathComponent(),
-                    application: HostPaths.application, temporary: temporary, folders: folders)
+                    application: HostPaths.application, temporary: temporary, folders: folders, egressPort: egressPort)
             case .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity:
                 profile = try RestrictedAgentSandbox.profile(provider: provider, workspace: workspace, repository: repository,
                     home: HostPaths.home, executable: executable, application: HostPaths.application, temporary: temporary,
-                    folders: folders)
+                    folders: folders, egressPort: egressPort)
+            }
+            if let egressPort {
+                for (key, value) in HarnessEgressProxy.environment(port: egressPort) { setenv(key, value, 1) }
             }
             setenv("TMPDIR", temporary.path, 1)
             setenv("TMPPREFIX", temporary.appendingPathComponent("zsh").path, 1)
@@ -283,6 +296,7 @@ private final class HostSession: NSObject, AgentHostService {
     private var process: Process?
     private var activity: HostActivity.Hold?
     private var audit: HarnessProcessAudit?
+    private var egress: HarnessEgressProxy?
     private var accountProcess: Process?
     private var codexAccount: Task<Void, Never>?
     private var input: ProcessInputWriter?
@@ -384,7 +398,9 @@ private final class HostSession: NSObject, AgentHostService {
 
     private func startRuntime(harnessIdentifier: String, agentID: String, executablePath: String,
                               sessionID: String?, resumeSession: Bool, modelIdentifier: String?, effortIdentifier: String?,
-                              restricted: Bool, appsEnabled: Bool = false, profileOverride: UUID? = nil, reply: @escaping (Int32, String?) -> Void) {
+                              restricted requested: Bool, appsEnabled: Bool = false, profileOverride: UUID? = nil, reply: @escaping (Int32, String?) -> Void) {
+        // A siloing host runs every bot restricted, whatever the app asked for.
+        let restricted = requested || HostPaths.silo
         queue.async { [self] in
             guard self.process == nil, !self.stopping else { reply(0, "Runtime already started or stopping."); return }
             do {
@@ -403,6 +419,10 @@ private final class HostSession: NSObject, AgentHostService {
                     HarnessLoginLog.logger.notice("start-refused bot=\(agentID, privacy: .public) harness=\(provider.rawValue, privacy: .public)")
                     throw RestrictedHarnessStorage.refused(provider)
                 }
+                let egress = try HostPaths.silo ? Self.siloProxy(provider: provider, model: modelIdentifier,
+                                                                    appsEnabled: appsEnabled, bot: agentID) : nil
+                var started = false
+                defer { if !started { egress?.stop() } }
                 let child = Process()
                 child.executableURL = Bundle.main.executableURL
                 // Preserve the approved installation path for the child's independent
@@ -412,7 +432,7 @@ private final class HostSession: NSObject, AgentHostService {
                     "--harness-child", provider.rawValue, executablePath, agentID,
                     sessionID ?? "", resumeSession ? "1" : "0",
                     modelIdentifier ?? "", effortIdentifier ?? "", restricted ? "restricted" : "autonomous",
-                    appsEnabled ? "1" : "0", profileOverride?.uuidString ?? ""
+                    appsEnabled ? "1" : "0", profileOverride?.uuidString ?? "", egress.map { "\($0.port)" } ?? ""
                 ]
                 child.currentDirectoryURL = workspace
                 // Do not inherit DYLD, shell startup hooks, or arbitrary app environment.
@@ -441,6 +461,8 @@ private final class HostSession: NSObject, AgentHostService {
                     self?.stop { _ in }
                 }
                 try child.run()
+                started = true
+                self.egress = egress
                 SharedLogins.shared.add(self, provider: provider, workspace: workspace, loginHome: loginHome,
                                         secret: HostPaths.loginSecret(profile), writeSecret: HostPaths.loginWriter(profile),
                                         restricted: restricted, executable: executable, environment: HostPaths.accountEnvironment)
@@ -454,6 +476,19 @@ private final class HostSession: NSObject, AgentHostService {
                 self.input = ProcessInputWriter(handle: stdinPipe.fileHandleForWriting)
                 reply(child.processIdentifier, nil)
             } catch { reply(0, error.localizedDescription) }
+        }
+    }
+
+    /// The proxy a siloed bot reaches the network through: its harness's own list, and for Apple Intelligence
+    /// on a remote model, that provider's fixed address. Every request is logged, refused ones included.
+    private static func siloProxy(provider: HarnessProvider, model: String?, appsEnabled: Bool, bot: String) throws -> HarnessEgressProxy {
+        var allowed = provider.siloAllowlist(appsEnabled: appsEnabled)
+        if provider == .apple, let remote = model.flatMap(RemoteModelID.init),
+           let url = RemoteProviders.provider(id: remote.providerID)?.baseURL, url.scheme == "https", let host = url.host {
+            allowed.insert("\(host.lowercased()):\(url.port ?? 443)")
+        }
+        return try HarnessEgressProxy(allowed: allowed) { address, permitted in
+            HostPaths.egressLog.notice("\(permitted ? "allowed" : "refused", privacy: .public) bot=\(bot, privacy: .public) harness=\(provider.rawValue, privacy: .public) address=\(address, privacy: .public)")
         }
     }
 
@@ -490,6 +525,8 @@ private final class HostSession: NSObject, AgentHostService {
                     self.outputs.forEach { $0.readabilityHandler = nil }
                     self.outputs = []
                     if stopped {
+                        self.egress?.stop()
+                        self.egress = nil
                         self.audit?.finish()
                         self.groupID = nil; self.process = nil; self.activity = nil; self.audit = nil
                     }

@@ -27,6 +27,26 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
         }
     }
 
+    /// The only addresses a siloed harness may open, through the Agent Host's proxy: its model service and the
+    /// sign-in renewal it does itself. Telemetry, updaters and anything a tool asks for are refused. Claude Code,
+    /// Codex, Muse Code and Antigravity were measured running a turn; Grok Build, FX and OpenCode are from their
+    /// documented services. Apple Intelligence reaches nothing; a remote model adds its provider in the host.
+    public func siloAllowlist(appsEnabled: Bool) -> Set<String> {
+        let hosts: [String]
+        switch self {
+        case .claudeCode: hosts = ["api.anthropic.com"] + (appsEnabled ? ["mcp-proxy.anthropic.com"] : [])
+        case .codex: hosts = ["chatgpt.com", "api.openai.com", "auth.openai.com"]
+        case .muse: hosts = ["api.meta.ai"]
+        case .antigravity: hosts = ["cloudcode-pa.googleapis.com", "daily-cloudcode-pa.googleapis.com",
+                                    "oauth2.googleapis.com", "www.googleapis.com"]
+        case .grokBuild: hosts = ["cli-chat-proxy.grok.com", "api.x.ai", "auth.x.ai"]
+        case .fx: hosts = ["ai-gateway.vercel.sh", "api.vercel.com", "vercel.com"]
+        case .openCode: hosts = ["opencode.ai", "models.dev"]
+        case .apple: hosts = []
+        }
+        return Set(hosts.map { $0 + ":443" })
+    }
+
     /// Harnesses whose whole login lives in one relocatable configuration home.
     public var supportsProfiles: Bool { self == .codex || self == .grokBuild || self == .muse || self == .antigravity || self == .claudeCode || self == .fx || self == .openCode }
 

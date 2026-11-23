@@ -31,7 +31,7 @@ public enum RestrictedAgentSandbox {
 
     public static func profile(provider: HarnessProvider, workspace: URL, repository: URL, home: URL,
                                executable: URL, application: URL, temporary: URL,
-                               folders: [AgentFolder] = []) throws -> String {
+                               folders: [AgentFolder] = [], egressPort: UInt16? = nil) throws -> String {
         let privateHome = RestrictedHarnessStorage.home(workspace: workspace)
         let account = try accountDirectory(provider: provider, home: privateHome)
         var readFiles = [String]()
@@ -45,7 +45,7 @@ public enum RestrictedAgentSandbox {
         if provider == .muse { readFiles += ["/Library", "/Library/Application Support"] }
         let base = profile(workspace: workspace,
             executablePaths: [executable.path], application: application,
-            readFiles: Array(Set(readFiles)).sorted(), folders: folders)
+            readFiles: Array(Set(readFiles)).sorted(), folders: folders, egressPort: egressPort)
         guard provider == .openCode || provider == .antigravity else { return base }
         // Antigravity runs every shell command in a pseudo-terminal. The pty
         // extension limits the tree to terminals it opened itself.
@@ -60,13 +60,21 @@ public enum RestrictedAgentSandbox {
         // listen on 127.0.0.1. Only that verified executable can listen; tools cannot.
         // Seatbelt's "localhost" token also matches this machine's LAN addresses,
         // so it must not be described as an OS-enforced loopback-only boundary.
+        // Siloed, the executable still reaches its own server, which the open profile's outbound rule covered.
+        let ownServer = egressPort == nil ? "" : """
+
+        (allow network-outbound
+          (require-all
+            (process-path \(quoted(sandboxPath(executable.path))))
+            (remote ip "localhost:*")))
+        """
         return base + terminals + """
 
         (allow network-bind network-inbound
           (require-all
             (process-path \(quoted(sandboxPath(executable.path))))
             (local ip "localhost:*")))
-        """
+        """ + ownServer
 
     }
 
@@ -107,13 +115,13 @@ public enum RestrictedAgentSandbox {
 
     public static func profile(workspace: URL, repository: URL, codexHome: URL,
                                executableDirectory: URL, application: URL, temporary: URL,
-                               folders: [AgentFolder] = []) -> String {
+                               folders: [AgentFolder] = [], egressPort: UInt16? = nil) -> String {
         profile(workspace: workspace,
-                executablePaths: [executableDirectory.path], application: application, folders: folders)
+                executablePaths: [executableDirectory.path], application: application, folders: folders, egressPort: egressPort)
     }
 
     private static func profile(workspace: URL, executablePaths: [String], application: URL,
-                                readFiles: [String] = [], folders: [AgentFolder] = []) -> String {
+                                readFiles: [String] = [], folders: [AgentFolder] = [], egressPort: UInt16? = nil) -> String {
         // The developer tools /usr/bin's python3, git and make run, which hold no one's data.
         let reads = ["/System", "/usr", "/bin", "/sbin", "/dev", "/Library/Apple",
                      "/Library/Preferences", "/private/etc", "/private/var/db/timezone",
@@ -124,6 +132,10 @@ public enum RestrictedAgentSandbox {
         // Unfiltered outbound would also reach every Unix socket on the Mac:
         // ssh-agent, Docker, other apps' daemons and Noodle's own bridges.
         // Name resolution needs mDNSResponder; harness sockets stay in the workspace.
+        // Siloed, the only address is the Agent Host's proxy, which also looks names up, so
+        // mDNSResponder goes too. "localhost" also matches this Mac's LAN addresses on that port.
+        let internet = egressPort.map { "(remote ip \"localhost:\($0)\")" }
+            ?? "(remote ip)\n  (literal \"/private/var/run/mDNSResponder\")"
         return """
         (version 1)
         (deny default)
@@ -139,8 +151,7 @@ public enum RestrictedAgentSandbox {
           \(writes.map { "(subpath \(quoted(sandboxPath($0))))" }.joined(separator: "\n  ")))
         (allow file-read* file-write-data file-ioctl (literal "/dev/null") (literal "/dev/tty") (subpath "/dev/fd"))
         (allow network-outbound
-          (remote ip)
-          (literal "/private/var/run/mDNSResponder")
+          \(internet)
           (subpath \(quoted(sandboxPath(workspace.path)))))
         (allow mach-lookup
           (global-name "com.apple.system.logger")

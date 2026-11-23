@@ -513,7 +513,21 @@ public protocol RemoteTransport: Sendable {
 public struct URLSessionRemoteTransport: RemoteTransport {
     private let session: URLSession
     /// Nothing is cached on disk: responses are private, and the bot's sandbox has no cache folder.
-    public init(session: URLSession = URLSession(configuration: .ephemeral)) { self.session = session }
+    public init(session: URLSession = URLSession(configuration: configuration())) { self.session = session }
+
+    /// URLSession ignores HTTPS_PROXY, so a siloed bot's Agent Host names its proxy's port separately.
+    public static func configuration(environment: [String: String] = ProcessInfo.processInfo.environment) -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        #if canImport(Darwin)
+        if let port = environment[siloProxyPortVariable].flatMap(UInt16.init) {
+            configuration.connectionProxyDictionary = ["HTTPSEnable": 1, "HTTPSProxy": "127.0.0.1", "HTTPSPort": Int(port),
+                                                       "HTTPEnable": 1, "HTTPProxy": "127.0.0.1", "HTTPPort": Int(port)]
+        }
+        #endif
+        return configuration
+    }
+
+    public static let siloProxyPortVariable = "NOODLE_SILO_PROXY_PORT"
 
     public func send(_ request: URLRequest) async throws -> RemoteHTTPResponse {
         #if canImport(Darwin)
