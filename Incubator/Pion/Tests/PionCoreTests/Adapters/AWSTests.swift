@@ -410,7 +410,10 @@ final class AWSTests: XCTestCase {
         XCTAssertEqual(queryItems(service.requests.last)["Marker"], "page-2")
         let principals = try XCTUnwrap(access.structured?["principals"] as? [[String: Any]])
         XCTAssertEqual(principals.filter { $0["fullAdministrator"] as? Bool == true }.compactMap { $0["name"] as? String }.sorted(), ["deploy", "mallory"])
-        XCTAssertEqual(access.structured?["complete"] as? Bool, true)
+        // ReadOnlyAccess's document was not among those read, so the account is not judged in full.
+        XCTAssertEqual(access.structured?["complete"] as? Bool, false)
+        XCTAssertEqual(access.structured?["unreadPolicies"] as? [String], ["ReadOnlyAccess"])
+        XCTAssertTrue(lines.contains { $0.contains("user avery") && $0.contains("1 of its policies could not be read") }, access.text)
 
         // An account with more pages than are read says so.
         service.answers["action:GetAccountAuthorizationDetails"] = (200, "<GetAccountAuthorizationDetailsResponse><GetAccountAuthorizationDetailsResult><UserDetailList/><IsTruncated>true</IsTruncated><Marker>more</Marker></GetAccountAuthorizationDetailsResult></GetAccountAuthorizationDetailsResponse>")

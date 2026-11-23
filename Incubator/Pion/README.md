@@ -130,7 +130,8 @@ to the agents that should use it.
 
 Any MCP server works too. AWS Audit and AWS Containment each sign in through your organisation's
 IAM Identity Center, with a permission set of their own, and cover every account you are assigned:
-the audit role only reads, and the containment role holds only the actions it takes. Google Cloud
+the audit role only reads, and the containment role holds only the actions it takes; AWS Audit
+also reads Identity Center's assignments, AWS Config's history, S3 exposure, Inspector and Macie. Google Cloud
 Audit, Google Cloud Containment and both Google Workspace tools sign in with your Google account,
 each tool with a sign-in of its own, so only Google Cloud Containment holds Google Cloud's full
 scope and a custom role limits it to the actions it takes; GitHub signs in with a
