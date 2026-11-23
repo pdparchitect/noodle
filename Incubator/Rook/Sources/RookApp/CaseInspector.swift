@@ -42,13 +42,11 @@ private struct Heading: View {
 struct CaseRecordView: View {
     let model: RookModel
     let mission: Mission
-    @Environment(\.rookComputers) private var computers
 
     var body: some View {
         let record = model.caseRecord(mission.id)
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if let computers { MissionComputersSection(model: model, mission: mission, computers: computers) }
                 if let note = mission.closingNote {
                     VStack(alignment: .leading, spacing: 6) {
                         Heading(title: "Closing Note")

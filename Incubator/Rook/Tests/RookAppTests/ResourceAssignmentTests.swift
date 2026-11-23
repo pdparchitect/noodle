@@ -107,6 +107,21 @@ import XCTest
         XCTAssertTrue(model.connectionsController.selectedIDs(for: original).isEmpty)
     }
 
+    /// Computers are chosen in the Mission's sheet with its team, and each one added or taken away is audited.
+    func testMissionComputersAreChosenWithTheTeam() throws {
+        let lead = try agent()
+        let linux = UUID(), jumpBox = UUID()
+        var draft = RookModel.Draft(title: "Beacon", lead: lead.id, computers: [linux],
+                                    computerNames: [linux: "Linux", jumpBox: "Jump box"])
+        let mission = try model.open(draft)
+        XCTAssertEqual(model.store.mission(mission.id)?.computers, [linux])
+        draft.computers = [jumpBox]
+        try model.updateMission(mission, draft: draft)
+        XCTAssertEqual(model.store.mission(mission.id)?.computers, [jumpBox])
+        XCTAssertEqual(model.store.audit(mission.id).filter { $0.event == "computer" }.map(\.detail),
+                       ["Added Linux.", "Added Jump box.", "Removed Linux."])
+    }
+
     func testClosedMissionsCannotChangeResourceGrants() throws {
         let lead = try agent()
         let other = try agent("Brisk Otter")

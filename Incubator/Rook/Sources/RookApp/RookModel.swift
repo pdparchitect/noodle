@@ -166,12 +166,6 @@ import UniformTypeIdentifiers
         publishComputerAccess()
     }
 
-    /// Assigns a computer to a Mission or takes it away, as the champion.
-    func setComputer(_ computer: UUID, named name: String, assigned: Bool, in mission: Mission) {
-        do { try store.setComputer(computer, named: name, assigned: assigned, in: mission.id, by: .champion(champion)) }
-        catch { problem = error.localizedDescription }
-    }
-
     /// Tells the broker which computers each agent may use: those of the open Missions it is in.
     private func publishComputerAccess() {
         let members = Dictionary(conversations.map { ($0.id, $0.participantIDs) }) { first, _ in first }
@@ -1288,8 +1282,24 @@ import UniformTypeIdentifiers
         var lead: UUID?
         var staff: Set<UUID> = []
         var folders: [AgentFolder] = []
+        /// The computers its agents may use, in the order chosen.
+        var computers: [UUID] = []
+        /// What each computer the sheet offered is called, for the audit log.
+        var computerNames: [UUID: String] = [:]
         /// The lead is always one of them.
         var members: Set<UUID> { staff.union(lead.map { [$0] } ?? []) }
+    }
+
+    /// Adds and takes away the Mission's computers to match the draft, each one audited.
+    private func applyComputers(of draft: Draft, to mission: UUID) throws {
+        let current = store.mission(mission)?.computers ?? []
+        let name = { (id: UUID) in draft.computerNames[id] ?? "a computer" }
+        for id in draft.computers where !current.contains(id) {
+            try store.setComputer(id, named: name(id), assigned: true, in: mission, by: .champion(champion), now: now)
+        }
+        for id in current where !draft.computers.contains(id) {
+            try store.setComputer(id, named: name(id), assigned: false, in: mission, by: .champion(champion), now: now)
+        }
     }
 
     @discardableResult
@@ -1311,6 +1321,7 @@ import UniformTypeIdentifiers
             if (before.folders ?? []) != folders { events.append(("folders", "Updated shared folders (\(folders.count)).")) }
             return events
         }
+        try applyComputers(of: draft, to: current.id)
         reload()
         readTranscript(group.id)
         synchronizeResourceWorkspaces(restarting: BotConversation.botsWithChangedFolders(from: before, to: group))
@@ -1368,6 +1379,7 @@ import UniformTypeIdentifiers
                                     members: members, folders: folders, lead: draft.lead)
         let mission = try store.open(id: group.id, title: title, objective: draft.objective,
                                            champion: champion, number: number, openedBy: openedBy, now: now)
+        try applyComputers(of: draft, to: mission.id)
         reload()
         readTranscript(group.id)
         guard openedBy == nil else { return mission }

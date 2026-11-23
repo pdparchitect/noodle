@@ -41,7 +41,8 @@ struct MainWindow: View {
                 // Kept while the selection changes, as Noodle's is: only the transcript is replaced.
                 ConversationView(model: model, window: window, conversation: conversation, presentsGraphSheet: false)
             } else if let computers, let id = model.selection, let session = computers.session(id) {
-                ComputerDetailView(computers: computers, model: model, session: session)
+                // Noodle Computer's own view: the terminal, files or desktop, with Start, Stop and Edit in the toolbar.
+                ComputerDetailView(store: computers.store, session: session).id(session.id)
             } else if model.agents.isEmpty {
                 ContentUnavailableView {
                     Label("No Agents", systemImage: "person.2")
@@ -113,7 +114,7 @@ struct Sidebar: View {
     @AppStorage(ConversationOrder.key) private var order = ConversationOrder.standard.rawValue
     @AppStorage(ConversationRowDetail.key) private var rowDetail = ConversationRowDetail.standard.rawValue
     @State private var showsAllMentions = false
-    @State private var creatingComputer: NewComputerSheet.Kind?
+    @State private var creatingComputer: NewComputerKind?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.rookComputers) private var computers
 
@@ -175,7 +176,9 @@ struct Sidebar: View {
                     Button("New Group") { window.sheet = .newGroup }.disabled(model.agents.isEmpty)
                     Button("New Agent") { window.sheet = .newAgent }
                     if computers != nil {
-                        Menu("New Computer") { NewComputerMenuItems { creatingComputer = $0 } }
+                        Divider()
+                        Button("New Computer") { creatingComputer = .linux }
+                        Button("New SSH Computer") { creatingComputer = .ssh }
                     }
                 } label: { Label("New", systemImage: "plus") }
                     .help("New Mission, Group, Agent or Computer")

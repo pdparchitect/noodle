@@ -395,6 +395,7 @@ struct ConversationStart: View {
     let window: WindowState
     let conversation: BotConversation
     let mission: Mission?
+    @Environment(\.rookComputers) private var computers
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -437,6 +438,9 @@ struct ConversationStart: View {
                                            edit: { window.sheet = .editAgent(agent) },
                                            reply: window.reply(to: agent, in: conversation, model: model))
                         .padding(.trailing, 4)
+                    }
+                    if let computers, let mission {
+                        MissionComputerChips(computers: computers, mission: mission) { model.selection = $0 }
                     }
                 }
                 .foregroundStyle(.secondary)

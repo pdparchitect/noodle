@@ -4,7 +4,7 @@
 
 ### Added
 
-- Computers: Rook runs Linux computers itself and reaches servers over SSH. Make them with New Computer in the main window, where they are listed under Computers as agents are, and add them to a Mission from its inspector; its agents use them, run commands and move files, only while the Mission is open. One computer can serve several Missions.
+- Computers: Rook runs Linux computers itself and reaches servers over SSH, with Noodle Computer's own views. Make them with New Computer in the main window, where they are listed under Computers as agents are and open on their terminal, files or desktop. Choose a Mission's computers in Edit Mission, beside its team; they show at the top of its conversation, and its agents use them, run commands and move files, only while it is open. One computer can serve several Missions.
 
 ### Changed
 

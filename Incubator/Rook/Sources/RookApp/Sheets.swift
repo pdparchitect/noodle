@@ -105,6 +105,7 @@ struct NewMissionSheet: View {
     @State private var error: String?
     @FocusState private var titleFocused: Bool
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.rookComputers) private var computers
 
     init(model: RookModel, mission: Mission? = nil) { self.model = model; self.mission = mission }
 
@@ -139,6 +140,9 @@ struct NewMissionSheet: View {
                 GroupMemberPicker(model: model, selection: $draft.staff, lead: $draft.lead)
                 TeamFootnote(isNew: mission == nil, setsSeverity: true, isEmpty: draft.members.isEmpty)
                 FoldersSettingsRow(folders: $draft.folders, owner: .group)
+                if let computers {
+                    MissionComputersRow(computers: computers, selection: $draft.computers, names: $draft.computerNames)
+                }
                 if let error { Text(error).foregroundStyle(.red).font(.callout) }
             }
             .padding(20)
@@ -147,7 +151,7 @@ struct NewMissionSheet: View {
             guard !loaded else { return }
             if let mission, let group = model.conversation(mission.id) {
                 draft = RookModel.Draft(title: mission.title, objective: mission.objective,
-                    lead: group.lead, staff: Set(group.participantIDs), folders: group.folders ?? [])
+                    lead: group.lead, staff: Set(group.participantIDs), folders: group.folders ?? [], computers: mission.computers)
             }
             loaded = true
             titleFocused = true

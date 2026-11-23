@@ -100,6 +100,7 @@ let project = Project(
         .local(path: "../../Shared/Brand"),
         .local(path: "../../Computer"),
         .local(path: "../../Computer/Bridge"),
+        .local(path: "../../Computer/LocalMac"),
         .remote(url: "https://github.com/sparkle-project/Sparkle", requirement: .exact("2.9.4")),
     ],
     settings: .settings(
@@ -207,6 +208,16 @@ let project = Project(
                 "../../Sources/Noodle/ConversationTransition.swift",
                 "../../Sources/Noodle/AgentSettingsCheckpoint.swift",
                 "../../Sources/Noodle/BotFolderPicker.swift",
+                // Noodle Computer's views for making, showing and changing a computer, over the engine Rook runs.
+                "../../Computer/Sources/NoodleComputer/ComputerViews.swift",
+                "../../Computer/Sources/NoodleComputer/ComputerAppearanceView.swift",
+                "../../Computer/Sources/NoodleComputer/SSHComputerView.swift",
+                "../../Computer/Sources/NoodleComputer/ComputerFilesView.swift",
+                "../../Computer/Sources/NoodleComputer/ComputerFileIcons.swift",
+                "../../Computer/Sources/NoodleComputer/ComputerFileSearchField.swift",
+                "../../Computer/Sources/NoodleComputer/FileDropDestination.swift",
+                "../../Computer/Sources/NoodleComputer/ComputerImageUpdateButton.swift",
+                "../../Computer/Sources/NoodleComputer/LocalMacView.swift",
             ],
             resources: [
                 "Support/Assets.xcassets",
@@ -237,6 +248,7 @@ let project = Project(
                 .package(product: "ComputerCore"),
                 .package(product: "ComputerBridge"),
                 .package(product: "NoodleComputerTools"),
+                .package(product: "LocalMacCore"),
                 .target(name: "NoodleAgentHost"),
                 .target(name: "messenger"),
                 .target(name: "NoodleAppleAgent"),
