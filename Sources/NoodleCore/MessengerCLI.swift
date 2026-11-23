@@ -193,6 +193,9 @@ public enum MessengerCLI {
             case .listApprovals:
                 return .json(try repository.currentApprovals(agentID: agentID))
 
+            case .listToolCatalogue:
+                return .json(try ToolCatalogueListing.rows(repository: repository, agentID: agentID))
+
             case .listBots:
                 return .json(try repository.knownBots(for: agentID))
 
@@ -390,6 +393,8 @@ public enum MessengerCLI {
                 action = .listTasks
             case .listApprovals:
                 action = .listApprovals
+            case .listToolCatalogue:
+                action = .listToolCatalogue
             case .listBots:
                 action = .listBots
             case .addParticipant, .removeParticipant:
@@ -615,6 +620,8 @@ public enum MessengerAction: Codable, Sendable {
         case updateTask(id: UUID, state: AgentTask.State?, waitingOn: MessageAuthor?, title: String?, note: String?)
         case listTasks
         case listApprovals
+        /// The app's whole tool catalogue, each entry only as set up and given out as the bot may know; see `ToolCatalogueListing`.
+        case listToolCatalogue
         /// The bots a lead knows; see `WorkspaceRepository.knownBots`.
         case listBots
         /// A lead changing a group it leads; see `WorkspaceRepository.changeGroupMembers`.

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Agents can ask for the tool catalogue with `messenger --list-tool-catalogue`, as in Noodle and Pion; Rook offers no tools yet, so the list is empty.
+
 ### Changed
 
 - The send button is Noodle's: an outline arrow while there is nothing to send, and a white arrow on the accent colour once there is.
