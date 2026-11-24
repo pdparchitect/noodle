@@ -124,8 +124,9 @@ struct ApprovalPopover: View {
                             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 4) {
                                 ForEach(lines, id: \.name) { line in
                                     GridRow {
-                                        Text(line.name)
-                                            .font(.callout)
+                                        // Written as a key in the call, so it reads as the value's name.
+                                        Text("\(line.name):")
+                                            .font(.callout.monospaced())
                                             .foregroundStyle(.secondary)
                                         ApprovalValue(value: line.value)
                                     }
@@ -189,6 +190,9 @@ private struct ApprovalValue: View {
     let value: String
     @State private var isExpanded = false
     private static let collapsedLines = 3
+    private static var codeAscender: CGFloat {
+        NSFont.monospacedSystemFont(ofSize: NSFont.preferredFont(forTextStyle: .callout).pointSize, weight: .regular).ascender
+    }
 
     var body: some View {
         let lines = value.components(separatedBy: "\n")
@@ -201,6 +205,8 @@ private struct ApprovalValue: View {
                         .fixedSize()
                 }
                 .scrollBounceBehavior(.basedOnSize)
+                // A scroll view has no baseline, so the value's name would line up with the button below instead.
+                .alignmentGuide(.firstTextBaseline) { $0[.top] + Self.codeAscender }
                 if lines.count > Self.collapsedLines {
                     Button(isExpanded ? "Show Less" : "Show All \(lines.count) Lines") { isExpanded.toggle() }
                         .buttonStyle(.accentLink)
