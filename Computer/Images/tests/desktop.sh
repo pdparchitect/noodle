@@ -151,9 +151,27 @@ try:
     if max(middle) >= 10:
         # A terminal that never drew shows the wallpaper here. Report every window and its state, and a quarter-size
         # screenshot (a base64 PNG) of what the screen shows, beside the terminal's log.
-        windows = sp.run("xwininfo -root -tree | head -80; for w in $(xdotool search --name 'Noodle Theme Verification'); "
-                         "do xwininfo -id $w | grep -E 'Window id|Absolute|Width|Height|Map State|Depth'; done",
-                         shell=True, capture_output=True, text=True)
+        # Name every visible top-level window over the point checked: what it is and which process owns it.
+        import re
+        cx, cy = terminal['X'] + terminal['WIDTH'] // 2, terminal['Y'] + terminal['HEIGHT'] // 2
+        covering = ''
+        for line in sp.run(['xwininfo', '-root', '-children'], capture_output=True, text=True).stdout.splitlines():
+            found = re.match(r'\s+(0x[0-9a-f]+)', line)
+            if not found:
+                continue
+            info = sp.run(['xwininfo', '-id', found[1]], capture_output=True, text=True).stdout
+            box = dict(re.findall(r'(Absolute upper-left X|Absolute upper-left Y|Width|Height):\s+(-?\d+)', info))
+            if 'IsViewable' not in info or len(box) < 4:
+                continue
+            left, top = int(box['Absolute upper-left X']), int(box['Absolute upper-left Y'])
+            if left <= cx < left + int(box['Width']) and top <= cy < top + int(box['Height']):
+                covering += f"{line.strip()}\n" + sp.run(
+                    f"xprop -id {found[1]} WM_CLASS WM_NAME _NET_WM_NAME _NET_WM_PID WM_COMMAND _NET_WM_WINDOW_TYPE "
+                    f"_NET_WM_STATE; xprop -id {found[1]} -notype | grep -E 'PID|CLIENT' ; "
+                    f"for p in $(xprop -id {found[1]} _NET_WM_PID | grep -oE '[0-9]+$'); do ps -o pid,args -p $p; done",
+                    shell=True, capture_output=True, text=True).stdout + '\n'
+        windows = sp.run('ps -eo pid,ppid,args', shell=True, capture_output=True, text=True)
+        windows.stdout = f'Windows over ({cx}, {cy}), as xwininfo lists them:\n{covering}\nProcesses:\n{windows.stdout}'
         small = b''.join(b'\x00' + bytes(channel for px in range(0, 1024, 4) for channel in pixel(px, py))
                          for py in range(0, 768, 4))
         def chunk(kind, data):
