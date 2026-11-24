@@ -148,8 +148,25 @@ try:
         expected = tuple((wallpaper[panel['Y']][px] >> shift) & 255 for shift in (16, 8, 0))
         assert max(abs(a - b) for a, b in zip(pixel(px, panel['Y']), expected)) <= 8, \
             'Panel corner must reveal the wallpaper, not a square black corner'
-    # A terminal that never drew shows the wallpaper here; its log says why.
-    assert max(middle) < 10, f'Terminal background must be black, found {middle}:\n' + open(log.name).read()
+    if max(middle) >= 10:
+        # Say whether the terminal or the compositor is at fault: what the window holds itself, what the screen shows
+        # without the compositor, and the versions and window depth involved.
+        def read(drawable, px, py):
+            image = x.XGetImage(display, drawable, px, py, 1, 1, c.c_ulong(-1), 2)
+            if not image:
+                return None
+            value = x.XGetPixel(image, 0, 0)
+            x.XDestroyImage(image)
+            return tuple((value >> shift) & 255 for shift in (16, 8, 0))
+        own = read(terminal['WINDOW'], terminal['WIDTH'] // 2, terminal['HEIGHT'] // 2)
+        compositor.terminate()
+        compositor.wait(timeout=5)
+        time.sleep(1)
+        bare = read(x.XDefaultRootWindow(display), terminal['X'] + terminal['WIDTH'] // 2, terminal['Y'] + terminal['HEIGHT'] // 2)
+        details = sp.run(f"kitty --version; picom --version; xwininfo -id {terminal['WINDOW']} | grep -E 'Depth|Visual'",
+                         shell=True, capture_output=True, text=True)
+        raise AssertionError(f'Terminal background must be black, found {middle} on screen, {own} in its own window, '
+                             f'{bare} without the compositor.\n{details.stdout}{details.stderr}' + open(log.name).read())
     # Include Openbox decorations: the client rectangle alone misses the frame.
     extents = sp.check_output(['xprop', '-id', str(terminal['WINDOW']), '_NET_FRAME_EXTENTS'], text=True)
     left, right, top, bottom = map(int, extents.split('=')[1].split(','))
