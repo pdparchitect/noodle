@@ -117,6 +117,8 @@ import UniformTypeIdentifiers
         store = PionStore(root: root.appendingPathComponent("Pion", isDirectory: true))
         // The custom indicators CrowdStrike Falcon Containment made, which alone it may remove, kept across launches.
         CrowdStrike.keepIndicatorRecords(at: store.root.appendingPathComponent("falcon-indicators.json"))
+        // The blocklist entries SentinelOne Containment made, which alone it may remove, kept across launches.
+        SentinelOne.keepBlocklistRecords(at: store.root.appendingPathComponent("sentinelone-blocklist.json"))
         var environment = ProcessInfo.processInfo.environment
         if hidesInstalledHarnesses { environment["NOODLE_SIMULATE_NO_HARNESSES"] = "1" }
         let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses, environment: environment)

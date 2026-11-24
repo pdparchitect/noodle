@@ -104,7 +104,7 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 - **Groups** of agents for the work between incidents.
 - **Tasks** waiting on you, at the top of the sidebar.
 - **Woken by alerts**: new high alerts and incidents in Microsoft Defender XDR Audit, Microsoft Defender for Cloud, Microsoft Sentinel, CrowdStrike Falcon Audit,
-  SentinelOne, Microsoft Entra ID Audit, Proofpoint, Wiz, Google Cloud Audit, Google Workspace Audit and GitHub, and CVEs joining the top of the
+  SentinelOne Audit, Microsoft Entra ID Audit, Proofpoint, Wiz, Google Cloud Audit, Google Workspace Audit and GitHub, and CVEs joining the top of the
   cve.now Index, wake the agents those tools are assigned to, who read them and decide how far to look.
 - **Approvals**: agents investigate freely; a change that cuts off access or deletes something
   waits for you, at the top of the sidebar and in a notification, and runs only once you approve it.
@@ -124,7 +124,7 @@ to the agents that should use it.
 | **Reputation and intel** | VirusTotal, Shodan, Censys, GreyNoise, CrowdSec CTI, AbuseIPDB, AlienVault OTX, urlscan.io, Have I Been Pwned, Cloudflare Radar |
 | **Attack surface** | crt.sh, DNS, NVD, cve.now, Tenable |
 | **Identity** | Okta Audit, Okta Containment, Microsoft Entra ID Audit, Microsoft Entra ID Containment, Google Workspace Audit, Google Workspace Containment |
-| **Endpoint and email** | CrowdStrike Falcon Audit, CrowdStrike Falcon Containment, Microsoft Defender XDR Audit, Microsoft Defender XDR Containment, SentinelOne, Proofpoint TAP |
+| **Endpoint and email** | CrowdStrike Falcon Audit, CrowdStrike Falcon Containment, Microsoft Defender XDR Audit, Microsoft Defender XDR Containment, SentinelOne Audit, SentinelOne Containment, Proofpoint TAP |
 | **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |
 | **Cloud and code** | AWS Audit, AWS Containment, Google Cloud Audit, Google Cloud Containment, Microsoft Azure Audit, Microsoft Azure Containment, Cloudflare Security, Wiz, GitHub |
 
@@ -150,6 +150,9 @@ the Defender for Endpoint API with an admin whose Defender role covers only thos
 CrowdStrike Falcon Audit and CrowdStrike Falcon Containment each use an API client of their own, its
 client ID and secret, as Falcon has no sign-in for an admin: the audit client holds only Read scopes,
 and the containment client only the scopes its actions take, never Real Time Response's admin commands.
+SentinelOne Audit and SentinelOne Containment each use a service user of their own and its API token, on
+one console under `sentinelone.net`: the audit user holds only the Viewer role, and the containment user a
+custom role with only the actions it takes, each sent with the exact IDs approved.
 
 Some services have a guide in [docs/tools](docs/tools) explaining the access each tool asks for,
 the least access to set it up with, and its caveats.
