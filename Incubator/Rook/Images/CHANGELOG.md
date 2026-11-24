@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The terminal welcome shows “Autonomous AI red team.” beside Rook's drawing, under its name.
+
 ## [0.1.0] - 2026-11-24
 
 ### Added

@@ -9,10 +9,10 @@ import sys
 import time
 
 runtime, shell_image, desktop_image = sys.argv[1:]
-# The banner's mark and one line of its drawing; another product's images pass theirs.
+# The banner's mark, one line of its drawing and its tagline; another product's images pass theirs.
 mark = os.environ.get('WELCOME_MARK', 'N O O D L E')
 art = os.environ.get('WELCOME_ART', "     '--'    '------'")
-tagline = 'Your own agentic workspace.'
+tagline = os.environ.get('WELCOME_TAGLINE', 'Your own agentic workspace.')
 
 
 def run(image, arguments=(), *, tty=True, entrypoint='/usr/bin/env', environment=(), startup=None):

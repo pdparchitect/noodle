@@ -15,6 +15,5 @@ printf '\n%s%s\n' "$bold" '      _   _   _'
 printf '%s\n' '     | |_| |_| |'
 printf '%s\n' '      \       /'
 printf '%s\n' '       |     |        R O O K'
-printf '%s\n' '       |     |'
-printf '%s\n' '      /_______\'
-printf '\n%s%s\n\n' '                       Your own agentic workspace.' "$reset"
+printf '%s\n' '       |     |        Autonomous AI red team.'
+printf '%s%s\n\n' '      /_______\' "$reset"

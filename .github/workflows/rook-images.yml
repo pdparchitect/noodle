@@ -70,6 +70,7 @@ jobs:
         env:
           WELCOME_MARK: R O O K
           WELCOME_ART: '      /_______\'
+          WELCOME_TAGLINE: Autonomous AI red team.
         run: python3 Computer/Images/tests/welcome.py docker "$IMAGE_PREFIX-shell-image:check" "$IMAGE_PREFIX-desktop-image:check"
       - name: Verify non-root defaults and explicit sudo in both images
         run: |
