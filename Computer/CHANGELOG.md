@@ -10,6 +10,7 @@
 
 - sudo in a Shell or Desktop computer no longer warns “unable to resolve host noodle-computer”: the computer now finds its own name.
 - Upgrading to an image built on another system, such as another Linux release, no longer leaves a computer half one system and half the other, with programs missing their libraries. Home folders and /workspace come across; programs you installed need installing again.
+- Shell and Desktop computers may manage their own network, so tools that need it, such as packet captures or a network tool installed with that permission, start instead of failing with “Operation not permitted”.
 
 ## [0.33.11] - 2026-11-19
 

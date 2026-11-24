@@ -11,3 +11,16 @@ final class GuestHostnameTests: XCTestCase {
         XCTAssertTrue(lines.contains { $0.hasPrefix("::1 localhost") })
     }
 }
+
+/// Network tools Kali installs with file capabilities, such as nmap, start only when the computer may grant them: Linux
+/// refuses to run a program that asks for more, even as root. Each computer is its own virtual machine.
+final class GuestCapabilityTests: XCTestCase {
+    func testProgramsInTheComputerMayManageItsNetwork() {
+        let capabilities = ContainerComputer.workspaceCapabilities
+        for set in [capabilities.bounding, capabilities.effective, capabilities.permitted] {
+            XCTAssertTrue(set.contains(.netAdmin))
+            XCTAssertTrue(set.contains(.netRaw))
+        }
+        XCTAssertFalse(capabilities.bounding.contains(.sysAdmin), "nothing beyond the network is added")
+    }
+}

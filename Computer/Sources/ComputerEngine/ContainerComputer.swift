@@ -124,6 +124,8 @@ public actor ContainerComputer {
             config.memoryInBytes = UInt64(computer.memoryGiB) * 1_073_741_824
             config.process.arguments = ["/bin/sh", "-c", "mkdir -p /workspace; trap 'exit 0' TERM INT; while :; do sleep 1; done"]
             config.process.environmentVariables = ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/root", "TERM=dumb"]
+            // Every process started in the workspace inherits these.
+            config.process.capabilities = Self.workspaceCapabilities
             config.process.stdout = output
             config.process.stderr = output
         }
@@ -174,6 +176,17 @@ public actor ContainerComputer {
             throw ComputerError("This computer uses a container image that \(ComputerAppIdentity.name) no longer supports. Move it to the Trash and create a new computer.")
         }
     }
+
+    /// The container baseline plus managing the network. Network tools that Kali installs with file capabilities, such
+    /// as nmap, ask for it, and Linux refuses to start a program that asks for more than the computer grants, even as
+    /// root. It reaches only this computer's own network: each computer is its own virtual machine.
+    static let workspaceCapabilities: Containerization.LinuxCapabilities = {
+        var capabilities = Containerization.LinuxCapabilities.defaultOCICapabilities
+        capabilities.bounding.append(.netAdmin)
+        capabilities.effective.append(.netAdmin)
+        capabilities.permitted.append(.netAdmin)
+        return capabilities
+    }()
 
     /// The computer's /etc/hosts, written at every start: localhost, and its own name, which sudo looks up on every run.
     static func hosts(for hostname: String) -> Hosts {
