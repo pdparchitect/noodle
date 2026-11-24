@@ -288,6 +288,9 @@ struct PionCommands: Commands {
             Button("\(pionAppName) Help") {
                 NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/tree/main/Incubator/Pion")!)
             }
+            Button("License") {
+                NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/blob/main/Incubator/Pion/LICENSE.md")!)
+            }
             Divider()
             IssueReportButtons(area: "Incubator / Pion")
             Divider()

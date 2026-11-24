@@ -143,6 +143,9 @@ struct NoodleApp: App {
                 Button("\(NoodleAppIdentity.name) Help") {
                     NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle")!)
                 }
+                Button("License") {
+                    NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/blob/main/LICENSE")!)
+                }
                 Divider()
                 IssueReportButtons(area: "Noodle")
                 Divider()

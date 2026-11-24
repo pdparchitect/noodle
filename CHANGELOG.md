@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Help › License opens Noodle's licence.
+
 ### Fixed
 
 - Connecting an MCP server that registers only https sign-in addresses, such as Cloudflare's, no longer fails with HTTP 400: Noodle registers through a usenoodle.app page that hands the sign-in back to Noodle.

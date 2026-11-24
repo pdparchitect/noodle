@@ -311,6 +311,9 @@ struct RookCommands: Commands {
             Button("\(rookAppName) Help") {
                 NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/tree/main/Incubator/Rook")!)
             }
+            Button("License") {
+                NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/blob/main/Incubator/Rook/LICENSE.md")!)
+            }
             Divider()
             IssueReportButtons(area: "Incubator / Rook")
             Divider()
