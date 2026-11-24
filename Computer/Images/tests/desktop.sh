@@ -171,7 +171,20 @@ try:
                     f"for p in $(xprop -id {found[1]} _NET_WM_PID | grep -oE '[0-9]+$'); do ps -o pid,args -p $p; done",
                     shell=True, capture_output=True, text=True).stdout + '\n'
         windows = sp.run('ps -eo pid,ppid,args', shell=True, capture_output=True, text=True)
-        windows.stdout = f'Windows over ({cx}, {cy}), as xwininfo lists them:\n{covering}\nProcesses:\n{windows.stdout}'
+        # Unnamed windows say nothing of their owner: stop the session's processes one at a time, youngest picom
+        # first, and note which one takes each covering window with it.
+        stray = re.findall(r'^(0x[0-9a-f]+) ', covering, re.M)
+        owners = ''
+        for name in ['picom', 'dunst', 'dbus-launch', 'tint2', 'openbox']:
+            pids = sp.run(['pgrep', '-x', name], capture_output=True, text=True).stdout.split()
+            for pid in sorted(pids, key=int, reverse=True):
+                sp.run(['kill', pid])
+                time.sleep(1)
+                gone = [w for w in stray if sp.run(['xwininfo', '-id', w], capture_output=True).returncode != 0]
+                owners += f'stopped {name} ({pid}): gone {gone}\n'
+                stray = [w for w in stray if w not in gone]
+        windows.stdout = (f'Windows over ({cx}, {cy}), as xwininfo lists them:\n{covering}\nOwners:\n{owners}\n'
+                          f'Processes:\n{windows.stdout}')
         small = b''.join(b'\x00' + bytes(channel for px in range(0, 1024, 4) for channel in pixel(px, py))
                          for py in range(0, 768, 4))
         def chunk(kind, data):
