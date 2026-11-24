@@ -46,6 +46,8 @@ import Foundation
                 }
                 try await check(runtime, ContainerComputer.overlayCheckCommand)
                 try await check(runtime, "test -s /etc/resolv.conf; echo latest-check > /workspace/latest-check")
+                // The computer finds its own name on its own disk, as sudo does on every run.
+                try await check(runtime, "grep -qx \"127.0.1.1 $(uname -n)\" /etc/hosts")
                 if template == .desktop {
                     try await check(runtime, "for attempt in 1 2 3 4 5 6 7 8 9 10; do if pgrep -x Xorg && pgrep -x openbox; then exit 0; fi; sleep 1; done; exit 1")
                     guard session.display != nil else { throw ComputerError("Latest Desktop has no native display") }
@@ -88,6 +90,7 @@ import Foundation
             _ = try await runtime.start(computer: computer, directory: directory, cache: store.cache, kernel: store.kernel)
             print(try await runtime.execute("stat -f -c %T /; cat /proc/mounts"))
             try await check(runtime, ContainerComputer.overlayCheckCommand)
+            try await check(runtime, "grep -qx \"127.0.1.1 $(uname -n)\" /etc/hosts")
             try await check(runtime, "echo user-data > /workspace/keep; echo user-edit > /etc/overlay-user; rm /etc/overlay-deleted")
             try await runtime.stop()
             guard try hash(layers.appendingPathComponent("Base.ext4")) == baseHash else {

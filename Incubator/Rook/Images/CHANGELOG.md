@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Desktop's browser starts after the computer is renamed, instead of reporting its profile in use by another computer.
+
 ## [0.2.0] - 2026-11-24
 
 ### Changed

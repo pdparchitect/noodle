@@ -79,8 +79,13 @@ extension ComputerStore {
                     let old = directory.appendingPathComponent("Layers").appendingPathComponent(obsolete.uuidString.lowercased())
                     try? FileManager.default.removeItem(at: old)
                 }
-                session.append("\nUpgraded the computer image. Your writable layer was preserved.\n")
-                session.updateResult = "The computer image is up to date."
+                if ContainerComputer.movesSystem(from: previous.directory(in: directory), to: candidate.directory(in: directory)) {
+                    session.append("\nUpgraded the computer to an image on another system. Home folders and /workspace were kept.\n")
+                    session.updateResult = "The computer image is up to date. It runs on another system now, so only home folders and /workspace were kept; install again any programs you added."
+                } else {
+                    session.append("\nUpgraded the computer image. Your writable layer was preserved.\n")
+                    session.updateResult = "The computer image is up to date."
+                }
                 session.imageUpdateAvailable = false
             } else {
                 session.append("\nThe computer already has the current image.\n")

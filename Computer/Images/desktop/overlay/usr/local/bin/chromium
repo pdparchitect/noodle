@@ -64,6 +64,12 @@ if [ ! -e "$profile" ]; then
     mv -T -- "$staging" "$profile"
     trap - EXIT
 fi
+# Chromium clears a stale lock only when it names this computer, and refuses the profile otherwise. One naming another
+# computer is always stale, as nothing here runs under another name: left behind when the computer is renamed.
+lock="$(readlink "$profile/SingletonLock" 2>/dev/null || true)"
+if [ -n "$lock" ] && [ "${lock%-*}" != "$(uname -n)" ]; then
+    rm -f -- "$profile/SingletonLock" "$profile/SingletonCookie" "$profile/SingletonSocket"
+fi
 flock -u 9
 exec 9>&-
 

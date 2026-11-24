@@ -1,5 +1,6 @@
 import ComputerCore
 import Containerization
+import ContainerizationArchive
 import ContainerizationEXT4
 import ContainerizationExtras
 import ContainerizationOCI
@@ -61,10 +62,14 @@ extension ContainerComputer {
             try JSONEncoder().encode(configuration).write(to: layers.appendingPathComponent("ImageConfig.json"))
             await status(previous == nil ? "Creating your writable disk…" : "Preserving your writable disk…", nil)
             if let previous {
-                let source = previous.directory(in: directory).appendingPathComponent("Upper.ext4")
+                let old = previous.directory(in: directory)
+                let source = old.appendingPathComponent("Upper.ext4")
                 let destination = layers.appendingPathComponent("Upper.ext4")
+                let size = UInt64(computer.diskGiB) * 1_073_741_824
+                let moved = movesSystem(from: old, to: layers)
                 try await Task.detached(priority: .userInitiated) {
-                    try FileManager.default.copyItem(at: source, to: destination)
+                    if moved { try keepPeoplesFiles(from: source, to: destination, size: size) }
+                    else { try FileManager.default.copyItem(at: source, to: destination) }
                 }.value
             } else {
                 try emptyDisk(at: layers.appendingPathComponent("Upper.ext4"), size: UInt64(computer.diskGiB) * 1_073_741_824, journal: true)
@@ -182,12 +187,70 @@ extension ContainerComputer {
         try FileManager.default.moveItem(at: staging, to: layers.appendingPathComponent("Network.ext4"))
     }
 
+    /// Whether the new image is built on another system than the old: then only people's own files come across.
+    static func movesSystem(from old: URL, to new: URL) -> Bool {
+        guard let before = imageSystem(ofDisk: old.appendingPathComponent("Base.ext4")),
+              let after = imageSystem(ofDisk: new.appendingPathComponent("Base.ext4")) else { return false }
+        return before != after
+    }
+
+    /// The system an image is built on, from its /etc/os-release: the distribution and its release, as "ubuntu noble",
+    /// "kali kali-rolling" or "alpine 3.22". Nil when the disk does not say.
+    static func imageSystem(ofDisk url: URL) -> String? {
+        guard let reader = try? EXT4.EXT4Reader(blockDevice: .init(url.path)),
+              let data = try? reader.readFile(at: .init("/etc/os-release")) else { return nil }
+        var fields: [String: String] = [:]
+        for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
+            let parts = line.split(separator: "=", maxSplits: 1)
+            if parts.count == 2 { fields[String(parts[0])] = parts[1].trimmingCharacters(in: .init(charactersIn: "\"' ")) }
+        }
+        guard let id = fields["ID"] else { return nil }
+        // Alpine has no codename, and its point releases keep the same packages.
+        let release = fields["VERSION_CODENAME"] ?? fields["VERSION_ID"].map { $0.split(separator: ".").prefix(2).joined(separator: ".") }
+        return [id, release].compactMap { $0 }.joined(separator: " ")
+    }
+
+    /// A new writable disk with only people's own files from an old one: home folders and /workspace. For an image on
+    /// another system, where the old system's programs, package records and library index break the new one.
+    static func keepPeoplesFiles(from source: URL, to destination: URL, size: UInt64) throws {
+        let reader = try EXT4.EXT4Reader(blockDevice: .init(source.path))
+        let formatter = try EXT4.Formatter(.init(destination.path), minDiskSize: size, journal: .default)
+        func copy(_ path: String) throws {
+            let inode = try reader.stat(.init(path), followSymlinks: false).inode
+            let times = FileTimestamps(access: Date(timeIntervalSince1970: TimeInterval(Int32(bitPattern: inode.atime))),
+                                       modification: Date(timeIntervalSince1970: TimeInterval(Int32(bitPattern: inode.mtime))),
+                                       creation: nil)
+            let uid = UInt32(inode.uid) | UInt32(inode.uidHigh) << 16, gid = UInt32(inode.gid) | UInt32(inode.gidHigh) << 16
+            switch inode.mode & 0xF000 {
+            case 0x4000:
+                try formatter.create(path: .init(path), mode: inode.mode, ts: times, uid: uid, gid: gid)
+                for name in try reader.listDirectory(.init(path)) { try copy(path + "/" + name) }
+            case 0x8000:
+                let stream = EXT4FileStream(reader: reader, path: path)
+                try formatter.create(path: .init(path), mode: inode.mode, ts: times, buf: stream, uid: uid, gid: gid)
+                if let error = stream.error { throw error }
+            case 0xA000 where inode.sizeLow < 60:
+                // A short link's target is kept in the inode itself; the reader has no way to read a longer one.
+                let target = withUnsafeBytes(of: inode.block) { Array($0.prefix(Int(inode.sizeLow))) }
+                try formatter.create(path: .init(path), link: .init(String(decoding: target, as: UTF8.self)),
+                                     mode: inode.mode, ts: times, uid: uid, gid: gid)
+            default:
+                break  // Overlay whiteouts, devices, sockets and pipes stay behind.
+            }
+        }
+        try formatter.create(path: .init("/diff"), mode: EXT4.Inode.Mode(.S_IFDIR, 0o755))
+        for folder in ["/diff/home", "/diff/root", "/diff/workspace"] where reader.exists(.init(folder), followSymlinks: false) {
+            try copy(folder)
+        }
+        try formatter.close()
+    }
+
     private static func emptyDisk(at url: URL, size: UInt64, journal: Bool) throws {
         let formatter = try EXT4.Formatter(.init(url.path), minDiskSize: size, journal: journal ? .default : nil)
         try formatter.close()
     }
 
-    static func mountOverlay(in pod: LinuxPod) async throws {
+    static func mountOverlay(in pod: LinuxPod, hosts: Hosts) async throws {
         try await pod.withVirtualMachineInstance { vm in
             let agent = try await vm.dialAgent()
             do {
@@ -203,8 +266,35 @@ extension ContainerComputer {
                 try await agent.mount(.init(type: "overlay", source: "overlay", destination: root,
                     options: ["lowerdir=\(base)", "upperdir=\(upper)/diff", "workdir=\(upper)/work",
                               "index=off", "metacopy=off", "redirect_dir=off"]))
+                // LinuxPod wrote /etc/hosts into the root this mount now covers; write it again on the computer's disk.
+                try await agent.configureHosts(config: hosts, location: root)
                 try await agent.close()
             } catch { try? await agent.close(); throw error }
+        }
+    }
+}
+
+/// A file on an ext4 disk, read a piece at a time as the formatter writes it into another.
+private final class EXT4FileStream: ReadableStream {
+    let reader: EXT4.EXT4Reader
+    let path: String
+    private var offset: UInt64 = 0
+    private(set) var error: Error?
+
+    init(reader: EXT4.EXT4Reader, path: String) {
+        self.reader = reader
+        self.path = path
+    }
+
+    func read(_ buffer: UnsafeMutablePointer<UInt8>, maxLength: Int) -> Int {
+        do {
+            let count = try reader.readFile(at: .init(path), into: UnsafeMutableRawBufferPointer(start: buffer, count: maxLength),
+                                            offset: offset, followSymlinks: false)
+            offset += UInt64(count)
+            return count
+        } catch {
+            self.error = error
+            return -1
         }
     }
 }

@@ -1,6 +1,8 @@
 import XCTest
 import ComputerCore
+import ContainerizationEXT4
 import ContainerizationOCI
+import SystemPackage
 @testable import ComputerEngine
 @testable import NoodleComputer
 
@@ -80,5 +82,61 @@ final class ContainerImageUpdateCheckTests: XCTestCase {
         let failed = ComputerImageUpgrade(session: session) { session.updateResult = nil }
         await failed.run()
         XCTAssertEqual(failed.stage, .closed)
+    }
+}
+
+final class ContainerUpgradeSystemChangeTests: XCTestCase {
+    private func disk(_ url: URL, files: [String: String], links: [String: String] = [:], owner: UInt32? = nil) throws {
+        let formatter = try EXT4.Formatter(FilePath(url.path), minDiskSize: 64 * 1_048_576, journal: .default)
+        for (path, text) in files.sorted(by: { $0.key < $1.key }) {
+            let stream = InputStream(data: Data(text.utf8))
+            stream.open()
+            try formatter.create(path: FilePath(path), mode: EXT4.Inode.Mode(.S_IFREG, 0o640), buf: stream,
+                                 uid: owner, gid: owner, recursion: true)
+            stream.close()
+        }
+        for (path, target) in links {
+            try formatter.create(path: FilePath(path), link: FilePath(target), mode: EXT4.Inode.Mode(.S_IFLNK, 0o777), recursion: true)
+        }
+        try formatter.close()
+    }
+
+    // Images name their system in /etc/os-release, often a link into /usr/lib.
+    func testAnImageNamesItsSystem() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let ubuntu = directory.appendingPathComponent("Ubuntu.ext4"), kali = directory.appendingPathComponent("Kali.ext4")
+        try disk(ubuntu, files: ["/usr/lib/os-release": "NAME=\"Ubuntu\"\nID=ubuntu\nVERSION_CODENAME=noble\n"],
+                 links: ["/etc/os-release": "../usr/lib/os-release"])
+        try disk(kali, files: ["/etc/os-release": "ID=kali\nID_LIKE=debian\nVERSION_ID=\"2026.4\"\nVERSION_CODENAME=kali-rolling\n"])
+        XCTAssertEqual(ContainerComputer.imageSystem(ofDisk: ubuntu), "ubuntu noble")
+        XCTAssertEqual(ContainerComputer.imageSystem(ofDisk: kali), "kali kali-rolling", "a rolling release is one system")
+        XCTAssertNil(ContainerComputer.imageSystem(ofDisk: directory.appendingPathComponent("Missing.ext4")))
+    }
+
+    // On another system the old programs, package records and library index break the new one: nmap missing its
+    // libraries, apt sure Ubuntu's packages are installed. Only people's own files come across.
+    func testOnlyPeoplesFilesCrossToAnotherSystem() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let old = directory.appendingPathComponent("Old.ext4"), new = directory.appendingPathComponent("New.ext4")
+        try disk(old, files: [
+            "/diff/etc/ld.so.cache": "ubuntu libraries", "/diff/usr/bin/nmap": "ubuntu nmap",
+            "/diff/var/lib/dpkg/status": "Package: nmap", "/diff/home/agent/notes.txt": "findings",
+            "/diff/workspace/report.md": "# Report", "/diff/root/.bash_history": "nmap -sV"
+        ], links: ["/diff/home/agent/latest": "notes.txt"], owner: 1000)
+        try ContainerComputer.keepPeoplesFiles(from: old, to: new, size: 64 * 1_048_576)
+        let reader = try EXT4.EXT4Reader(blockDevice: FilePath(new.path))
+        XCTAssertEqual(String(decoding: try reader.readFile(at: FilePath("/diff/home/agent/notes.txt")), as: UTF8.self), "findings")
+        XCTAssertEqual(try reader.stat(FilePath("/diff/home/agent/notes.txt")).inode.uid, 1000)
+        XCTAssertEqual(try reader.stat(FilePath("/diff/home/agent/notes.txt")).inode.mode & 0o777, 0o640)
+        XCTAssertEqual(String(decoding: try reader.readFile(at: FilePath("/diff/home/agent/latest")), as: UTF8.self), "findings")
+        XCTAssertTrue(reader.exists(FilePath("/diff/workspace/report.md")))
+        XCTAssertTrue(reader.exists(FilePath("/diff/root/.bash_history")))
+        for path in ["/diff/etc/ld.so.cache", "/diff/usr/bin/nmap", "/diff/var/lib/dpkg/status"] {
+            XCTAssertFalse(reader.exists(FilePath(path)), path)
+        }
     }
 }

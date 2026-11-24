@@ -131,7 +131,7 @@ public actor ContainerComputer {
         pod = runtime
         do {
             try await runtime.create()
-            try await Self.mountOverlay(in: runtime)
+            try await Self.mountOverlay(in: runtime, hosts: Self.hosts(for: ContainerRegistry.bundled.hostname))
             try Task.checkCancellation()
             if computer.networkEnabled {
                 try await runtime.startContainer("network-init")

@@ -181,6 +181,9 @@ const server = http.createServer((request, response) => {
       catch { return true; }
     }, 'browser shutdown');
     await assert.rejects(connect, /Cannot attach to the Noodle desktop browser/);
+    // A lock left under the computer's former name, as Rook's computers had before they were renamed, must not stop
+    // the browser: Chromium refuses a profile another computer seems to hold.
+    fs.symlinkSync('noodle-computer-115', '/home/agent/.config/noodle-browser/SingletonLock');
     launch('chromium', [url + '/account']);
     browser = await until(connect, 'reopened browser');
     page = await until(async () => (await browser.pages()).find(page => page.url() === url + '/account'), 'reopened account tab');
