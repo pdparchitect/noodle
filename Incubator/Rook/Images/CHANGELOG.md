@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-24
+
 ### Changed
 
 - Shell and Desktop are built on Kali instead of Alpine and Ubuntu, so every Kali package is one `sudo apt install` away. Nothing more is preinstalled, and Rook's desktop, welcome and account are unchanged.
