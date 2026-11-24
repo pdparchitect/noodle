@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Upgrading a computer’s image shows its progress in a window of its own, with Cancel Upgrade, then the result, instead of inside Edit Computer.
+
 ### Fixed
 
 - sudo in a Shell or Desktop computer no longer warns “unable to resolve host noodle-computer”: the computer now finds its own name.

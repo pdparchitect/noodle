@@ -64,3 +64,21 @@ final class ContainerImageUpdateCheckTests: XCTestCase {
         XCTAssertTrue(session.offersImageUpgrade)
     }
 }
+
+@MainActor final class ComputerImageUpgradeWindowTests: XCTestCase {
+    // The upgrade's own window shows its result when it succeeds, and closes when it ends without one: the app reports
+    // a failure itself, and a cancelled upgrade needs nothing more.
+    func testTheUpgradeWindowShowsTheResultOrClosesWhenTheUpgradeEnds() async {
+        let session = ComputerSession(Computer(name: "Desktop", kind: .container))
+        var runs = 0
+        let upgraded = ComputerImageUpgrade(session: session) { runs += 1; session.updateResult = "The computer image is up to date." }
+        XCTAssertEqual(upgraded.stage, .upgrading)
+        await upgraded.run()
+        await upgraded.run()
+        XCTAssertEqual(upgraded.stage, .finished("The computer image is up to date."))
+        XCTAssertEqual(runs, 1, "Showing the window again must not start a second upgrade")
+        let failed = ComputerImageUpgrade(session: session) { session.updateResult = nil }
+        await failed.run()
+        XCTAssertEqual(failed.stage, .closed)
+    }
+}

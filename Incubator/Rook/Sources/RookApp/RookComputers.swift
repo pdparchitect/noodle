@@ -148,19 +148,22 @@ private struct ComputerSidebarItem: View {
     let select: () -> Void
     @State private var deleting = false
     @State private var editing = false
+    @State private var upgrading = false
+    // Says a newer image is ready, as Noodle Computer's library does, in place of the status.
+    private var detail: String { session.offersImageUpgrade && !session.phase.busy ? "Upgrade available" : session.phase.label }
 
     var body: some View {
         Group {
             if icons {
                 Button(action: select) {
-                    SidebarItemTile(title: session.computer.name, detail: session.phase.label, tone: AnyShapeStyle(.secondary),
+                    SidebarItemTile(title: session.computer.name, detail: detail, tone: AnyShapeStyle(.secondary),
                                     emphasized: false, selected: selected) { size in ComputerMark(session: session, size: size) }
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selected ? .isSelected : [])
                 .help(session.computer.name)
             } else {
-                SidebarItemRow(title: session.computer.name, detail: session.phase.label, timestamp: "") { size in
+                SidebarItemRow(title: session.computer.name, detail: detail, timestamp: "") { size in
                     ComputerMark(session: session, size: size)
                 }
                 .sidebarItemInsets()
@@ -169,6 +172,10 @@ private struct ComputerSidebarItem: View {
         .contextMenu {
             Button("Edit Computer…") { editing = true }
             Divider()
+            if session.offersImageUpgrade {
+                ComputerImageUpdateButton(session: session) { upgrading = true }
+                Divider()
+            }
             Button(session.phase == .running ? "Stop" : "Start") {
                 Task { if session.phase == .running { await store.stop(session) } else { await store.start(session) } }
             }
@@ -176,6 +183,7 @@ private struct ComputerSidebarItem: View {
             Divider()
             Button("Delete Computer", role: .destructive) { deleting = true }.disabled(!session.canDelete)
         }
+        .computerImageUpdateConfirmation(store: store, session: session, isPresented: $upgrading)
         .sheet(isPresented: $editing) { EditComputerView(store: store, session: session) }
         .alert(ComputerDeletion.title(session.computer), isPresented: $deleting) {
             Button("Cancel", role: .cancel) {}

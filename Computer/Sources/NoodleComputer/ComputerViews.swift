@@ -346,15 +346,8 @@ struct EditComputerView: View {
         .padding(12)
         .background(Color.secondary.opacity(0.075), in: RoundedRectangle(cornerRadius: 12))
         if let local = session.localMac { LocalMacPermissionsSettings(runtime: local) }
-        if let result = session.updateResult {
-          Text(result).font(.caption).foregroundStyle(.secondary)
-        } else if session.imageUpdateAvailable && session.phase != .updating {
+        if session.imageUpdateAvailable && session.phase != .updating {
           Text("A newer image is available.").font(.caption).foregroundStyle(.orange)
-        }
-        if session.phase == .updating {
-          Button("Cancel Upgrade") { store.cancelImageUpdate(session) }
-          ProgressView(value: session.updateProgress)
-          Text(session.updateStatus ?? "Upgrading…").font(.caption).foregroundStyle(.secondary)
         }
         ComputerAppearanceRow(appearance: $appearance, directory: store.library.directory(for: session.id))
         if session.computer.usesVirtualMachine && !session.computer.installationComplete && session.phase == .stopped {

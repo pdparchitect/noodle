@@ -1,4 +1,5 @@
 import ComputerEngine
+import NoodleSettingsUI
 import SwiftUI
 
 struct ComputerImageUpdateButton: View {
@@ -17,11 +18,86 @@ extension View {
     // context-menu button, so dismissing the menu doesn't discard the alert.
     func computerImageUpdateConfirmation(store: ComputerStore, session: ComputerSession,
                                          isPresented: Binding<Bool>) -> some View {
-        alert("Upgrade \(session.computer.name)?", isPresented: isPresented) {
-            Button("Cancel", role: .cancel) {}
-            Button("Upgrade") { Task { await store.updateImage(session) } }
-        } message: {
-            Text("Download the current image and keep your files and local changes. Files you changed take precedence over files in the new image. A running computer will stop during the upgrade and restart afterward.")
+        modifier(ComputerImageUpgradePresenter(store: store, session: session, confirming: isPresented))
+    }
+}
+
+/// Asks first, then upgrades in the upgrade's own window.
+private struct ComputerImageUpgradePresenter: ViewModifier {
+    let store: ComputerStore
+    @ObservedObject var session: ComputerSession
+    @Binding var confirming: Bool
+    @State private var upgrading = false
+
+    func body(content: Content) -> some View {
+        content
+            .alert("Upgrade \(session.computer.name)?", isPresented: $confirming) {
+                Button("Cancel", role: .cancel) {}
+                Button("Upgrade") { upgrading = true }
+            } message: {
+                Text("Download the current image and keep your files and local changes. Files you changed take precedence over files in the new image. A running computer will stop during the upgrade and restart afterward.")
+            }
+            .sheet(isPresented: $upgrading) { ComputerImageUpgradeSheet(store: store, session: session) }
+    }
+}
+
+/// One image upgrade, run apart from its window so nothing closing around it cancels it; only Cancel Upgrade does.
+@MainActor final class ComputerImageUpgrade: ObservableObject {
+    enum Stage: Equatable { case upgrading, finished(String), closed }
+    @Published private(set) var stage = Stage.upgrading
+    private let session: ComputerSession
+    private let perform: @MainActor () async -> Void
+    private var started = false
+
+    init(session: ComputerSession, perform: @escaping @MainActor () async -> Void) {
+        self.session = session
+        self.perform = perform
+    }
+
+    func run() async {
+        guard !started else { return }
+        started = true
+        await perform()
+        // A failure is reported by the app's own error alert, and a cancelled upgrade needs no result.
+        stage = session.updateResult.map(Stage.finished) ?? .closed
+    }
+}
+
+struct ComputerImageUpgradeSheet: View {
+    let store: ComputerStore
+    @ObservedObject var session: ComputerSession
+    @StateObject private var upgrade: ComputerImageUpgrade
+    @Environment(\.dismiss) private var dismiss
+
+    init(store: ComputerStore, session: ComputerSession) {
+        self.store = store
+        self.session = session
+        _upgrade = StateObject(wrappedValue: ComputerImageUpgrade(session: session) { await store.updateImage(session) })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Upgrade \(session.computer.name)").font(.headline)
+            if case .finished(let result) = upgrade.stage {
+                Text(result).foregroundStyle(.secondary)
+            } else {
+                ProgressView(value: session.updateProgress)
+                Text(session.updateStatus ?? "Upgrading the computer image…").font(.caption).foregroundStyle(.secondary)
+            }
+            HStack {
+                Spacer()
+                if case .finished = upgrade.stage {
+                    Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                } else {
+                    Button("Cancel Upgrade") { store.cancelImageUpdate(session) }
+                }
+            }
         }
+        .padding(20)
+        .frame(width: 380).noodleSheetSizing()
+        .interactiveDismissDisabled()
+        // Unstructured, so the upgrade outlives this window if whatever presents it goes away.
+        .onAppear { Task { await upgrade.run() } }
+        .onChange(of: upgrade.stage) { _, stage in if stage == .closed { dismiss() } }
     }
 }

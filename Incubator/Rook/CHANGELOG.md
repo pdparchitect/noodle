@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- Computers offer Upgrade when a newer Rook image is published, as in Noodle Computer; Rook never checked, so they kept the image they were made with.
+- Computers offer Upgrade when a newer Rook image is published, as in Noodle Computer: the sidebar says Upgrade available, and Upgrade is in the computer’s context menu and Edit Computer. The upgrade shows its progress in a window of its own. Rook never checked, so computers kept the image they were made with.
 - Rook’s Shell and Desktop computers are called rook-computer, and sudo in them no longer warns “unable to resolve host”.
 
 ## [0.5.0] - 2026-11-24
