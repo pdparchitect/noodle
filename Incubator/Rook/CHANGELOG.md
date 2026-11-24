@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Rook’s Shell and Desktop computers are called rook-computer, and sudo in them no longer warns “unable to resolve host”.
+
 ## [0.5.0] - 2026-11-24
 
 ### Added

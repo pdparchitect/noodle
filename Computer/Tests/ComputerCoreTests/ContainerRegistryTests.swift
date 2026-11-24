@@ -92,4 +92,16 @@ final class ContainerRegistryTests: XCTestCase {
             XCTAssertThrowsError(try load(invalid), key)
         }
     }
+
+    /// Every computer is named for the app that runs it, as Rook's catalogue names its computers rook-computer.
+    func testTheCatalogueNamesItsComputers() throws {
+        var catalogue = try catalogue()
+        XCTAssertEqual(try load(catalogue).hostname, "noodle-computer")
+        catalogue["hostname"] = "rook-computer"
+        XCTAssertEqual(try load(catalogue).hostname, "rook-computer")
+        for invalid in ["", "Rook-Computer", "-rook", "rook-", "rook computer", "rook.computer", String(repeating: "r", count: 64)] {
+            catalogue["hostname"] = invalid
+            XCTAssertThrowsError(try load(catalogue), invalid)
+        }
+    }
 }

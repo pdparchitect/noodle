@@ -12,6 +12,8 @@ public struct ContainerRegistry: Decodable, Sendable {
     public let schemaVersion: Int
     public let defaultTemplateID: String
     public let templates: [ComputerTemplate]
+    /// What every computer calls itself: noodle-computer, unless the app's own catalogue names its computers.
+    public let hostname: String
 
     /// Where the catalogue comes from: the app's own, where it ships one for images of its own, as Rook does, and
     /// otherwise the engine's.
@@ -42,7 +44,7 @@ public struct ContainerRegistry: Decodable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, defaultTemplateID, templates
+        case schemaVersion, defaultTemplateID, templates, hostname
     }
 
     public init(from decoder: Decoder) throws {
@@ -50,7 +52,13 @@ public struct ContainerRegistry: Decodable, Sendable {
         schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
         defaultTemplateID = try values.decode(String.self, forKey: .defaultTemplateID)
         templates = try values.decode([ComputerTemplate].self, forKey: .templates)
+        hostname = try values.decodeIfPresent(String.self, forKey: .hostname) ?? "noodle-computer"
         guard schemaVersion == 1 else { throw ComputerError("Unsupported container registry version.") }
+        // One DNS label: lowercase letters, digits and inner hyphens.
+        guard (1...63).contains(hostname.count), hostname.first != "-", hostname.last != "-",
+              hostname.allSatisfy({ ("a"..."z").contains($0) || ("0"..."9").contains($0) || $0 == "-" }) else {
+            throw ComputerError("The container registry hostname must be one lowercase DNS label.")
+        }
         guard templates.contains(where: { $0.id == defaultTemplateID }),
               templates.contains(where: { $0.type == .desktop }),
               templates.contains(where: { $0.type == .shell }) else {

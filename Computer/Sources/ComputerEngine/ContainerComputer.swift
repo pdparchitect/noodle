@@ -75,7 +75,8 @@ public actor ContainerComputer {
             if let display { config.extensions.append(display) }
             config.cpus = computer.cpuCount
             config.memoryInBytes = UInt64(computer.memoryGiB) * 1_073_741_824
-            config.hostname = "noodle-computer"
+            config.hostname = ContainerRegistry.bundled.hostname
+            config.hosts = Self.hosts(for: ContainerRegistry.bundled.hostname)
             config.volumes = [
                 .init(name: "noodle-base", source: .diskImage(path: layers.appendingPathComponent("Base.ext4"), readOnly: true), format: "ext4"),
                 .init(name: "noodle-upper", source: .diskImage(path: layers.appendingPathComponent("Upper.ext4")), format: "ext4")
@@ -172,6 +173,13 @@ public actor ContainerComputer {
         guard computer.template != nil else {
             throw ComputerError("This computer uses a container image that \(ComputerAppIdentity.name) no longer supports. Move it to the Trash and create a new computer.")
         }
+    }
+
+    /// The computer's /etc/hosts, written at every start: localhost, and its own name, which sudo looks up on every run.
+    static func hosts(for hostname: String) -> Hosts {
+        var hosts = Hosts.default
+        hosts.entries.insert(.init(ipAddress: "127.0.1.1", hostnames: [hostname]), at: 1)
+        return hosts
     }
 
     /// Only images built for the native display can start their desktop; older ones need an image update.

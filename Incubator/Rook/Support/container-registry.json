@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "defaultTemplateID": "desktop",
+  "hostname": "rook-computer",
   "templates": [
     {
       "id": "desktop",

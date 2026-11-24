@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- sudo in a Shell or Desktop computer no longer warns “unable to resolve host noodle-computer”: the computer now finds its own name.
+
 ## [0.33.11] - 2026-11-19
 
 ### Changed
