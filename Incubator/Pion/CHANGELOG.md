@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- A held call with a long description or input, such as a script for Cloudflare's own MCP server, scrolls inside its popover, so Approve and Decline stay on screen. A script or other value of several lines shows its first three until you ask for all of it, and is never wrapped or hyphenated, and the sidebar dims what a held call is given after its name.
+
 ## [0.11.0] - 2026-11-24
 
 ### Added

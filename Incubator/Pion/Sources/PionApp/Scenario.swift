@@ -19,6 +19,8 @@ struct PionScenario: Decodable {
         var status: Status?
         /// The agent's tasks as the scenario starts, oldest first.
         var tasks: [TaskEntry]?
+        /// Its calls held for the champion's approval, oldest first.
+        var approvals: [ApprovalEntry]?
         struct Avatar: Decodable { var symbol: String?; var color: Int? }
     }
 
@@ -30,6 +32,18 @@ struct PionScenario: Decodable {
         var state: AgentTask.State?
         var on: String?
         var note: String?
+    }
+
+    /// A call held for the champion, as the broker holds one. `in` is a conversation key, the agent's own conversation
+    /// when left out; `input` is what the call would send.
+    struct ApprovalEntry: Decodable {
+        let provider: String
+        let tool: String
+        var description: String?
+        let input: [String: String]
+        let reason: String
+        var `in`: String?
+        var at: String?
     }
 
     /// A web page's card as it shows without the network: its title, and a picture in the scenario's folder.
@@ -201,6 +215,18 @@ struct PionScenario: Decodable {
                 if let on = task.on {
                     try require(on == "user" || agentKeys.contains(on), "\(name) waits on an unknown agent \(on).")
                     try require((task.state ?? .waiting) == .waiting, "\(name): only a waiting task waits on someone.")
+                }
+            }
+        }
+        for agent in agents {
+            for approval in agent.approvals ?? [] {
+                let name = "\(agent.key)'s held \(approval.tool)"
+                try require(!approval.reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "\(name) has no reason.")
+                if let key = approval.in {
+                    let conversation = (conversations ?? []).first { $0.key == key }
+                    try require(conversation != nil, "\(name) names an unknown conversation \(key).")
+                    let members = (conversation?.group?.members ?? []) + [conversation?.direct, conversation?.investigation?.lead].compactMap { $0 }
+                    try require(members.contains(agent.key), "\(name) is in \(key), which \(agent.key) is not in.")
                 }
             }
         }
@@ -376,6 +402,18 @@ struct PionScenario: Decodable {
                 let waitingOn = task.on.map { $0 == "user" ? MessageAuthor.user : agentIDs[$0].map(MessageAuthor.agent) ?? .user }
                 guard task.state != nil || waitingOn != nil else { continue }
                 _ = try model.repository.updateTask(agentID: agentID, id: id, state: task.state ?? .waiting, waitingOn: waitingOn, now: clock)
+            }
+        }
+        for agent in scenario.agents {
+            guard let agentID = agentIDs[agent.key] else { continue }
+            for approval in agent.approvals ?? [] {
+                let input = String(decoding: try JSONSerialization.data(withJSONObject: approval.input, options: [.sortedKeys, .withoutEscapingSlashes]),
+                                   as: UTF8.self)
+                _ = try model.repository.addApproval(AgentApprovalRequest(agentID: agentID, conversationID: approval.in.flatMap { conversationIDs[$0] },
+                                                                          provider: approval.provider.lowercased(), providerTitle: approval.provider,
+                                                                          tool: approval.tool, toolDescription: approval.description ?? "",
+                                                                          input: input, reason: approval.reason),
+                                                     now: try time(approval.at, clock: clock, fallback: clock))
             }
         }
         for preview in scenario.linkPreviews ?? [] {

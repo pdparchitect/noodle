@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "title": "Held calls: a script and a block",
+  "summary": "Two calls wait for the champion's approval: Cloudflare's own MCP server running a whole script, and Cloudflare Containment blocking one address. Click each to compare.",
+  "clock": "11:45",
+  "champion": "Avery Lin",
+  "agents": [
+    {
+      "key": "zinnia",
+      "name": "Daring Zinnia",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Runs investigations, decides what to look at next",
+      "avatar": {
+        "symbol": "crown.fill",
+        "color": 0
+      },
+      "status": {
+        "phase": "working",
+        "detail": "Waiting on Avery"
+      },
+      "approvals": [
+        {
+          "provider": "Cloudflare",
+          "tool": "execute",
+          "description": "Execute JavaScript code against the Cloudflare API. Write an async arrow function; it runs in an isolated Worker with a `cloudflare` client bound to the signed-in account. Use `search` first to find the endpoint you need.\n\nAvailable in scope:\n- `cloudflare.request({ method, path, query?, body?, headers? })` returns the parsed JSON envelope `{ success, errors, messages, result, result_info }`.\n- `accountId`: the account you signed in to.\n\nPaths are relative to https://api.cloudflare.com/client/v4. Pagination: pass `query: { page, per_page }` and read `result_info.total_pages`.\n\nExample: List zones:\nasync () => {\n  const zones = await cloudflare.request({ method: \"GET\", path: \"/zones\", query: { per_page: 50 } });\n  return zones.result.map(z => ({ id: z.id, name: z.name, status: z.status }));\n}\n\nExample: Create a DNS record:\nasync () => {\n  return cloudflare.request({ method: \"POST\", path: `/zones/${zoneId}/dns_records`, body: { type: \"A\", name: \"www\", content: \"192.0.2.1\", proxied: true } });\n}\n\nExample: Purge cache:\nasync () => {\n  return cloudflare.request({ method: \"POST\", path: `/zones/${zoneId}/purge_cache`, body: { purge_everything: true } });\n}\n\nExample: Worker with bindings (a multipart/form-data upload):\nasync () => {\n  const code = `export default { async fetch(request, env) { return new Response(await env.MY_KV.get('key') || 'none') } };`;\n  const metadata = { main_module: \"worker.js\", bindings: [{ type: \"kv_namespace\", name: \"MY_KV\", namespace_id: \"your-kv-id\" }] };\n  const form = new FormData();\n  form.append(\"metadata\", new Blob([JSON.stringify(metadata)], { type: \"application/json\" }));\n  form.append(\"worker.js\", new Blob([code], { type: \"application/javascript+module\" }), \"worker.js\");\n  return cloudflare.request({ method: \"PUT\", path: `/accounts/${accountId}/workers/scripts/my-worker`, body: form });\n}",
+          "input": {
+            "code": "async () => {\n  const out = {};\n  const zones = (await cloudflare.request({ method: \"GET\", path: \"/zones\", query: { per_page: 50 } })).result;\n  const ids = [\"ssl\",\"min_tls_version\",\"always_use_https\",\"security_header\",\"tls_1_3\",\"automatic_https_rewrites\",\"waf\",\"security_level\"];\n  for (const z of zones) {\n    const s = {};\n    try {\n      const all = (await cloudflare.request({ method: \"GET\", path: `/zones/${z.id}/settings` })).result;\n      for (const x of all) if (ids.includes(x.id)) s[x.id] = x.value;\n    } catch (e) { s.error = String(e).slice(0, 200); }\n    try {\n      const rs = await cloudflare.request({ method: \"GET\", path: `/zones/${z.id}/rulesets` });\n      s.rulesets = rs.result.map(r => ({ id: r.id, phase: r.phase, kind: r.kind, name: r.name }));\n    } catch (e) { s.rulesets_error = String(e).slice(0, 200); }\n    try {\n      const dns = await cloudflare.request({ method: \"GET\", path: `/zones/${z.id}/dns_records`, query: { per_page: 100 } });\n      s.unproxied = dns.result.filter(r => [\"A\",\"AAAA\",\"CNAME\"].includes(r.type) && !r.proxied).map(r => `${r.type} ${r.name} ${r.content}`);\n    } catch (e) { s.dns_error = String(e).slice(0, 200); }\n    out[z.name] = s;\n  }\n  return out;\n}"
+          },
+          "in": "audit",
+          "at": "11:37",
+          "reason": "Reads every zone's TLS, HTTPS, WAF and security-level settings, its rulesets and its unproxied DNS records, so the audit can say which zones fall short. It only sends GET requests."
+        },
+        {
+          "provider": "Cloudflare Containment",
+          "tool": "block-ip",
+          "in": "audit",
+          "at": "11:41",
+          "description": "Block an IP address, or an IPv4 /16 or /24 or IPv6 /32, /48 or /64 range, at Cloudflare's edge with an IP Access rule, for the whole account or one zone, and keep a record that Pion made it, which unblock needs.",
+          "input": {
+            "ip": "198.51.100.23",
+            "zone": "example.com",
+            "reason": "INV-0001: 2,140 blocked logins to the admin panel in 20 minutes."
+          },
+          "reason": "198.51.100.23 sent 2,140 login attempts to admin.example.com in 20 minutes and is a known Lumma stealer panel. Blocking it at the edge for example.com stops the attempts; unblock removes the rule."
+        }
+      ]
+    },
+    {
+      "key": "quill",
+      "name": "Sunny Quill",
+      "harness": "claude-code",
+      "model": "sonnet",
+      "description": "Looks up indicators, actors and techniques",
+      "avatar": {
+        "symbol": "binoculars.fill",
+        "color": 4
+      }
+    },
+    {
+      "key": "brisk",
+      "name": "Brisk Beacon",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Sorts new alerts and reports, separating noise",
+      "avatar": {
+        "symbol": "tray.full.fill",
+        "color": 2
+      }
+    }
+  ],
+  "conversations": [
+    {
+      "key": "audit",
+      "group": {
+        "name": "Cloudflare account security audit",
+        "members": [
+          "zinnia",
+          "quill"
+        ]
+      },
+      "investigation": {
+        "number": 1,
+        "title": "Cloudflare account security audit",
+        "objective": "Find out which zones fall short on TLS, WAF and exposed origins, and contain anything attacking them.",
+        "severity": "medium",
+        "opened": "11:20",
+        "lead": "zinnia"
+      },
+      "messages": [
+        {
+          "at": "11:20",
+          "from": "user",
+          "text": "**INV-0001 is open: Cloudflare account security audit.** @Daring Zinnia leads.\n\nCheck every zone's TLS and WAF settings and anything exposed."
+        },
+        {
+          "at": "11:36",
+          "from": "zinnia",
+          "text": "Asking to run one script through Cloudflare that reads every zone's settings, rulesets and DNS records."
+        },
+        {
+          "at": "11:40",
+          "from": "quill",
+          "text": "198.51.100.23 is hammering admin.example.com: 2,140 blocked logins in 20 minutes. It is a known Lumma stealer panel."
+        },
+        {
+          "at": "11:41",
+          "from": "zinnia",
+          "text": "Asking to block 198.51.100.23 for example.com with Cloudflare Containment."
+        }
+      ]
+    },
+    {
+      "key": "team",
+      "group": {
+        "name": "Team",
+        "description": "Ask the team anything; the lead investigator answers",
+        "members": [
+          "zinnia",
+          "quill",
+          "brisk"
+        ]
+      }
+    }
+  ],
+  "present": {
+    "window": {
+      "size": [
+        1100,
+        760
+      ]
+    },
+    "select": "audit"
+  }
+}
