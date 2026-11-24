@@ -9,7 +9,7 @@ final class PionCatalogueTests: XCTestCase {
         XCTAssertTrue(ids.allSatisfy { UUID(uuidString: $0) != nil }, "an entry is not identified by a UUID")
         let names = Set(PionCatalogue.entries.map(\.name))
         for security in ["VirusTotal", "Shodan", "Okta Audit", "Okta Containment", "Microsoft Entra ID Audit", "Microsoft Entra ID Containment", "Microsoft Defender XDR Audit", "Microsoft Defender XDR Containment", "CrowdStrike Falcon Audit", "CrowdStrike Falcon Containment", "SentinelOne Audit", "SentinelOne Containment",
-                         "Splunk", "Elastic", "Microsoft Sentinel", "Cloudflare Security", "Cloudflare Radar", "Wiz", "AbuseIPDB", "GreyNoise", "CrowdSec CTI", "NVD", "crt.sh", "cve.now", "AWS Audit", "AWS Containment", "Microsoft Azure Audit", "Microsoft Azure Containment",
+                         "Splunk", "Elastic", "Microsoft Sentinel", "Cloudflare Audit", "Cloudflare Containment", "Cloudflare Radar", "Wiz", "AbuseIPDB", "GreyNoise", "CrowdSec CTI", "NVD", "crt.sh", "cve.now", "AWS Audit", "AWS Containment", "Microsoft Azure Audit", "Microsoft Azure Containment",
                          "Google Cloud Audit", "Google Workspace Audit", "Google Workspace Containment", "Grafana Cloud", "Self-Hosted Grafana", "Sentry", "Self-Hosted Sentry"] {
             XCTAssertTrue(names.contains(security), security)
         }

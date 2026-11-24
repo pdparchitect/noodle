@@ -119,6 +119,8 @@ import UniformTypeIdentifiers
         CrowdStrike.keepIndicatorRecords(at: store.root.appendingPathComponent("falcon-indicators.json"))
         // The blocklist entries SentinelOne Containment made, which alone it may remove, kept across launches.
         SentinelOne.keepBlocklistRecords(at: store.root.appendingPathComponent("sentinelone-blocklist.json"))
+        // The IP Access rules and Gateway list items Cloudflare Containment made, which alone it may remove, kept across launches.
+        Cloudflare.keepContainmentRecords(at: store.root.appendingPathComponent("cloudflare-containment.json"))
         var environment = ProcessInfo.processInfo.environment
         if hidesInstalledHarnesses { environment["NOODLE_SIMULATE_NO_HARNESSES"] = "1" }
         let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses, environment: environment)

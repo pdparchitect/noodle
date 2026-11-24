@@ -618,7 +618,7 @@ public enum PionAdapters {
                                                                   "entra": Entra.adapter, "entra-containment": Entra.containmentAdapter, "defender": Defender.adapter, "defender-containment": Defender.containmentAdapter,
                                                                   "crowdstrike": CrowdStrike.adapter, "crowdstrike-containment": CrowdStrike.containmentAdapter, "sentinelone": SentinelOne.adapter, "sentinelone-containment": SentinelOne.containmentAdapter,
                                                                   "splunk": Splunk.adapter, "elastic": Elastic.adapter, "sentinel": Sentinel.adapter,
-                                                                  "cloudflare": Cloudflare.adapter, "wiz": Wiz.adapter, "github": GitHub.adapter,
+                                                                  "cloudflare": Cloudflare.adapter, "cloudflare-containment": Cloudflare.containmentAdapter, "wiz": Wiz.adapter, "github": GitHub.adapter,
                                                                   "abuseipdb": AbuseIPDB.adapter, "urlscan": URLScan.adapter, "greynoise": GreyNoise.adapter, "crowdsec-cti": CrowdSec.adapter, "nvd": NVD.adapter, "crtsh": CrtSh.adapter, "dns": DNS.adapter,
                                                                   "otx": OTX.adapter, "haveibeenpwned": HaveIBeenPwned.adapter, "aws": AWS.adapter, "aws-containment": AWS.containmentAdapter,
                                                                   "google-cloud": GoogleCloud.adapter, "azure": Azure.adapter, "azure-containment": Azure.containmentAdapter,

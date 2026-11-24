@@ -104,7 +104,7 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 - **Groups** of agents for the work between incidents.
 - **Tasks** waiting on you, at the top of the sidebar.
 - **Woken by alerts**: new high alerts and incidents in Microsoft Defender XDR Audit, Microsoft Defender for Cloud, Microsoft Sentinel, CrowdStrike Falcon Audit,
-  SentinelOne Audit, Microsoft Entra ID Audit, Proofpoint, Wiz, Google Cloud Audit, Google Workspace Audit and GitHub, and CVEs joining the top of the
+  SentinelOne Audit, Microsoft Entra ID Audit, Proofpoint, Wiz, Google Cloud Audit, Google Workspace Audit, Cloudflare Audit and GitHub, and CVEs joining the top of the
   cve.now Index, wake the agents those tools are assigned to, who read them and decide how far to look.
 - **Approvals**: agents investigate freely; a change that cuts off access or deletes something
   waits for you, at the top of the sidebar and in a notification, and runs only once you approve it.
@@ -126,7 +126,7 @@ to the agents that should use it.
 | **Identity** | Okta Audit, Okta Containment, Microsoft Entra ID Audit, Microsoft Entra ID Containment, Google Workspace Audit, Google Workspace Containment |
 | **Endpoint and email** | CrowdStrike Falcon Audit, CrowdStrike Falcon Containment, Microsoft Defender XDR Audit, Microsoft Defender XDR Containment, SentinelOne Audit, SentinelOne Containment, Proofpoint TAP |
 | **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |
-| **Cloud and code** | AWS Audit, AWS Containment, Google Cloud Audit, Google Cloud Containment, Microsoft Azure Audit, Microsoft Azure Containment, Cloudflare Security, Wiz, GitHub |
+| **Cloud and code** | AWS Audit, AWS Containment, Google Cloud Audit, Google Cloud Containment, Microsoft Azure Audit, Microsoft Azure Containment, Cloudflare Audit, Cloudflare Containment, Wiz, GitHub |
 
 Any MCP server works too. AWS Audit and AWS Containment each sign in through your organisation's
 IAM Identity Center, with a permission set of their own, and cover every account you are assigned:
@@ -153,6 +153,9 @@ and the containment client only the scopes its actions take, never Real Time Res
 SentinelOne Audit and SentinelOne Containment each use a service user of their own and its API token, on
 one console under `sentinelone.net`: the audit user holds only the Viewer role, and the containment user a
 custom role with only the actions it takes, each sent with the exact IDs approved.
+Cloudflare Audit and Cloudflare Containment each use a scoped API token of their own, sent only to
+`api.cloudflare.com`: the audit token holds only Read permissions, for the edge and Zero Trust, and the
+containment token only the edit permissions its actions take.
 
 Some services have a guide in [docs/tools](docs/tools) explaining the access each tool asks for,
 the least access to set it up with, and its caveats.
