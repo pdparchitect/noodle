@@ -24,6 +24,7 @@ PRODUCTS = {
 INCUBATOR = {
     "pion": ("Incubator/Pion/VERSION", "Incubator/Pion/CHANGELOG.md", "pion-v"),
     "rook": ("Incubator/Rook/VERSION", "Incubator/Rook/CHANGELOG.md", "rook-v"),
+    "rook-images": ("Incubator/Rook/Images/VERSION", "Incubator/Rook/Images/CHANGELOG.md", "rook-images-v"),
 }
 ALL = PRODUCTS | INCUBATOR
 SEMVER = r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
@@ -62,7 +63,7 @@ def notes(product):
 def release_notes(product):
     body = notes(product)
     # Container images and the phone app have no macOS installer to link to.
-    if product in ('images', 'mobile'):
+    if product in ('images', 'rook-images', 'mobile'):
         return body
     _, tag = version(product)
     basename = 'Noodle' if product == 'noodle' else product.title() if product in INCUBATOR else f'Noodle-{product.title()}'

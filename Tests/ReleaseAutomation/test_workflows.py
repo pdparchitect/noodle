@@ -45,6 +45,56 @@ def matches_paths(paths, patterns):
     return False
 
 
+class RookImagesWorkflowTests(unittest.TestCase):
+    """Rook's images release on their own: a dated, untagged version pushed to main publishes after its checks."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.flow = workflow('rook-images.yml')
+        cls.jobs = cls.flow['jobs']
+
+    def test_a_dated_version_pushed_to_main_publishes(self):
+        triggers = self.flow.get('on', self.flow.get('true'))
+        self.assertEqual(triggers['push']['branches'], ['main'])
+        self.assertEqual(sorted(triggers['push']['paths']),
+                         ['Incubator/Rook/Images/CHANGELOG.md', 'Incubator/Rook/Images/VERSION'])
+        self.assertIn('release-versions.py pending rook-images', json.dumps(self.jobs['plan']))
+        publish = self.jobs['plan']['outputs']['publish'].strip().removeprefix('${{').removesuffix('}}')
+        cases = [
+            ('push', 'refs/heads/main', None, 'true', True),
+            ('push', 'refs/heads/main', None, 'false', False),
+            ('workflow_dispatch', 'refs/heads/main', True, 'true', True),
+            ('workflow_dispatch', 'refs/heads/main', False, 'true', False),
+            ('workflow_dispatch', 'refs/heads/other', True, 'true', False),
+            ('pull_request', 'refs/pull/1/merge', None, 'true', False),
+        ]
+        for event, ref, chosen, release, expected in cases:
+            with self.subTest(event=event, ref=ref, publish=chosen, release=release):
+                values = {'github.event_name': event, 'github.ref': ref, 'inputs.publish': chosen,
+                          'steps.plan.outputs.release': release}
+                self.assertEqual(bool(condition(publish, values)), expected)
+
+    def test_publication_follows_checks_and_tags_first(self):
+        build, publish = self.jobs['build'], self.jobs['publish']
+        self.assertEqual(build['needs'], 'plan')
+        # A push that releases nothing builds nothing; pull requests and manual runs always check.
+        for event, release, expected in [('push', 'false', False), ('push', 'true', True),
+                                         ('pull_request', 'false', True), ('workflow_dispatch', 'false', True)]:
+            self.assertEqual(condition(build['if'], {'github.event_name': event, 'needs.plan.outputs.release': release}), expected)
+        self.assertEqual(publish['needs'], ['plan', 'build'])
+        self.assertTrue(condition(publish['if'], {'needs.plan.outputs.publish': 'true'}))
+        self.assertFalse(condition(publish['if'], {'needs.plan.outputs.publish': 'false'}))
+        self.assertEqual(publish['permissions']['contents'], 'write')
+        names = [step.get('name', '') for step in publish['steps']]
+        self.assertLess(names.index('Tag the released images'), names.index('Publish and verify public versioned and latest images'))
+        tag = next(step for step in publish['steps'] if step.get('name') == 'Tag the released images')
+        self.assertEqual(json.loads(tag['env']['RELEASE_PRODUCTS']), ['rook-images'])
+        saved = [step for step in build['steps'] if 'rook-image-builds' in json.dumps(step) or step.get('name') == 'Save tested images']
+        self.assertTrue(saved)
+        for step in saved:
+            self.assertEqual(step['if'], "needs.plan.outputs.publish == 'true'")
+
+
 class WorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

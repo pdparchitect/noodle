@@ -68,6 +68,18 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(pending, 'release=false\nversion=0.1.0\n')
         self.assertIn('Pion-arm64.dmg', self.module.release_notes('pion'))
 
+    def test_rook_images_release_only_on_their_own(self):
+        self.write_version('rook-images', '0.2.0')
+        self.commit()
+        self.assertEqual(self.module.plan(), [])
+        pending = run('python3', 'scripts/release-versions.py', 'pending', 'rook-images', cwd=self.root).stdout
+        self.assertEqual(pending, 'release=true\nversion=0.2.0\n')
+        self.git('tag', 'rook-images-v0.2.0')
+        pending = run('python3', 'scripts/release-versions.py', 'pending', 'rook-images', cwd=self.root).stdout
+        self.assertEqual(pending, 'release=false\nversion=0.2.0\n')
+        # Container images have no installer to link to.
+        self.assertEqual(self.module.release_notes('rook-images'), '- A release change.\n')
+
     def test_independent_versions_and_numeric_ordering(self):
         self.write_version('computer', '1.10.0')
         self.write_version('images', '1.0.1')

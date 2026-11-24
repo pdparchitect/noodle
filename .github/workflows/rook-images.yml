@@ -2,9 +2,15 @@ name: Rook computer images
 
 # Rook's Shell and Desktop images are Noodle Computer's on Kali's base, with Rook's banner and wallpaper from
 # Incubator/Rook/Images/brand: the Desktop from Computer/Images, the Shell from Incubator/Rook/Images/shell. They are
-# versioned on their own, never with Noodle's images, and run the same checks. A pull request builds and checks them;
-# publishing is started by hand.
+# versioned on their own, never with Noodle's images, and run the same checks. A dated section for
+# Incubator/Rook/Images/VERSION in its CHANGELOG.md, pushed to main, publishes that version once its checks pass. A pull
+# request only checks; a manual run checks, and publishes an unreleased dated version when asked.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'Incubator/Rook/Images/VERSION'
+      - 'Incubator/Rook/Images/CHANGELOG.md'
   pull_request:
     paths:
       - 'Incubator/Rook/Images/**'
@@ -15,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish the checked images as the version in Incubator/Rook/Images/VERSION and as latest
+        description: Publish the checked images as the dated, unreleased version in Incubator/Rook/Images/VERSION and as latest
         type: boolean
         default: false
 
@@ -33,7 +39,24 @@ env:
   KALI_IMAGE: docker.io/kalilinux/kali-rolling@sha256:69a9a33d98a584a537bd0f7144d20c3b6d23f3bafa9ffcf0cadf4c5f186d02ff
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      # Publish only from main: on a push, or a manual run that asks.
+      publish: ${{ steps.plan.outputs.release == 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish)) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: plan
+        name: Find an unreleased, dated version of Rook's images
+        run: python3 scripts/release-versions.py pending rook-images
+
   build:
+    needs: plan
+    # A push that releases nothing has nothing to check.
+    if: github.event_name != 'push' || needs.plan.outputs.release == 'true'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 40
     steps:
@@ -99,13 +122,13 @@ jobs:
         run: docker run --rm -i --user root --network none --entrypoint /bin/bash "$IMAGE_PREFIX-desktop-image:check" < Computer/Images/tests/browser.sh
       # Export the exact tested builds. Publication loads these; it never rebuilds.
       - name: Save tested images
-        if: github.event_name == 'workflow_dispatch' && inputs.publish
+        if: needs.plan.outputs.publish == 'true'
         run: |
           set -eu
           docker save "$IMAGE_PREFIX-shell-image:check" "$IMAGE_PREFIX-desktop-image:check" | gzip > rook-images.tar.gz
           sha256sum rook-images.tar.gz > rook-images.tar.gz.sha256
       - uses: actions/upload-artifact@v6
-        if: github.event_name == 'workflow_dispatch' && inputs.publish
+        if: needs.plan.outputs.publish == 'true'
         with:
           name: rook-image-builds
           path: |
@@ -116,15 +139,23 @@ jobs:
           retention-days: 7
 
   publish:
-    needs: build
-    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
+    needs: [plan, build]
+    if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 20
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Tag the released images
+        env:
+          RELEASE_PRODUCTS: '["rook-images"]'
+        run: |
+          git fetch origin --tags
+          python3 scripts/release-versions.py tag
       - uses: actions/download-artifact@v7
         with:
           name: rook-image-builds
