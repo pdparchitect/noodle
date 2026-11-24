@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The terminal welcome draws Rook slimmer and taller, with a stepped base.
+
 ### Fixed
 
 - Desktop's browser starts after the computer is renamed, instead of reporting its profile in use by another computer.

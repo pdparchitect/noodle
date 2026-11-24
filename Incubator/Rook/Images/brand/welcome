@@ -11,9 +11,11 @@ case "${TERM:-dumb}" in
     reset=$(printf '\033[22m')
     ;;
 esac
-printf '\n%s%s\n' "$bold" '      _   _   _'
-printf '%s\n' '     | |_| |_| |'
-printf '%s\n' '      \       /'
-printf '%s\n' '       |     |        R O O K'
-printf '%s\n' '       |     |        Autonomous AI red team.'
-printf '%s%s\n\n' '      /_______\' "$reset"
+printf '\n%s%s\n' "$bold" '    _   _   _'
+printf '%s\n' '   | |_| |_| |'
+printf '%s\n' '    \       /'
+printf '%s\n' '     |     |'
+printf '%s\n' '     |     |         R O O K'
+printf '%s\n' '     |     |         Autonomous AI red team.'
+printf '%s\n' '    /       \'
+printf '%s%s\n\n' '   (_________)' "$reset"
