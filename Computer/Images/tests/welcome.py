@@ -9,8 +9,9 @@ import sys
 import time
 
 runtime, shell_image, desktop_image = sys.argv[1:]
-# The banner's mark; another product's images pass theirs.
+# The banner's mark and one line of its drawing; another product's images pass theirs.
 mark = os.environ.get('WELCOME_MARK', 'N O O D L E')
+art = os.environ.get('WELCOME_ART', "     '--'    '------'")
 tagline = 'Your own agentic workspace.'
 
 
@@ -69,7 +70,7 @@ def check(label, output, count=1, bold=None):
         assert ('\x1b[1m' in output) == bold, (label, output)
         assert ('\x1b[22m' in output) == bold, (label, output)
     if count:
-        assert "     '--'    '------'" in output, (label, output)
+        assert art in output, (label, output)
     print('PASS:', label, flush=True)
 
 
