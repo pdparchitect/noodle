@@ -22,6 +22,9 @@ import SwiftUI
     @ObservationIgnored private let staging: URL
     @ObservationIgnored private let model: RookModel
     @ObservationIgnored private var subscriptions: Set<AnyCancellable> = []
+    /// Marks computers whose image has a newer one, as Noodle Computer does, so they offer Upgrade. Rook keeps
+    /// its computers as long as it runs, so this runs as long too.
+    @ObservationIgnored private var imageUpdates: Task<Void, Never>?
 
     /// Only Linux computers and SSH: Windows and this Mac need helpers Rook does not carry.
     static let kinds: Set<ComputerKind> = [.container, .ssh]
@@ -38,6 +41,7 @@ import SwiftUI
         store.$sessions.dropFirst().receive(on: RunLoop.main).sink { [weak self] sessions in
             self?.forgetDeleted(keeping: Set(sessions.map(\.id)))
         }.store(in: &subscriptions)
+        imageUpdates = Task { [store] in await store.watchImageUpdates() }
     }
 
     private func forgetDeleted(keeping ids: Set<UUID>) {

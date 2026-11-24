@@ -17,9 +17,16 @@ extension ComputerStore {
     /// leave the mark alone; the Update button still reports them when used.
     public func checkImageUpdates() async {
         for session in sessions where session.computer.kind == .container && imageUpdateTasks[session.id] == nil {
-            let current = try? await ContainerComputer.imageIsCurrent(
-                computer: session.computer, directory: library.directory(for: session.id), cache: cache)
+            let current = try? await imageIsCurrent(session.computer, library.directory(for: session.id), cache)
             if let current, imageUpdateTasks[session.id] == nil { session.imageUpdateAvailable = !current }
+        }
+    }
+
+    /// Checks now and then every 12 hours until cancelled. Every app that runs these computers keeps one going.
+    public func watchImageUpdates(every interval: Duration = .seconds(12 * 60 * 60)) async {
+        while !Task.isCancelled {
+            await checkImageUpdates()
+            try? await Task.sleep(for: interval)
         }
     }
 

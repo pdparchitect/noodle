@@ -195,6 +195,10 @@ public enum ComputerDisplayMode: String {
     private var creationTask: Task<Bool, Never>?
     private var creationID: UUID?
     public var imageUpdateTasks: [UUID: Task<Void, Never>] = [:]
+    /// Whether a computer's image is still the registry's newest; tests answer in place of a registry.
+    public var imageIsCurrent: (Computer, URL, URL) async throws -> Bool? = { computer, directory, cache in
+        try await ContainerComputer.imageIsCurrent(computer: computer, directory: directory, cache: cache)
+    }
     @Published public var storageReport: StorageReport?
     @Published public var storageBusy = false
     @Published public var storageCleaning = false

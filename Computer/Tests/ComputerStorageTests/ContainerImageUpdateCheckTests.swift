@@ -46,3 +46,21 @@ final class ContainerImageUpdateCheckTests: XCTestCase {
         XCTAssertFalse(shell.offersImageUpgrade)
     }
 }
+
+@MainActor final class ContainerImageUpdateWatchTests: XCTestCase {
+    // Every app that runs these computers keeps this watch going, so a newer image is offered without asking.
+    func testWatchingMarksComputersWithANewerImageAndKeepsChecking() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ComputerStore(root: root)
+        let session = ComputerSession(Computer(name: "Desktop", kind: .container))
+        store.sessions = [session]
+        var checks = 0
+        store.imageIsCurrent = { _, _, _ in checks += 1; return false }
+        let watch = Task { await store.watchImageUpdates(every: .milliseconds(10)) }
+        defer { watch.cancel() }
+        for _ in 0..<500 where checks < 2 { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertGreaterThanOrEqual(checks, 2)
+        XCTAssertTrue(session.offersImageUpgrade)
+    }
+}

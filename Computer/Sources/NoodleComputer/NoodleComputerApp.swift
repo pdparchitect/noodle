@@ -563,12 +563,7 @@ struct ComputerLibraryView: View {
     .onChange(of: shownSessions.map(\.id)) { _, ids in
       if !ids.contains(store.selection ?? UUID()) { store.selection = ids.first }
     }
-    .task {
-      while !Task.isCancelled {
-        await store.checkImageUpdates()
-        try? await Task.sleep(for: .seconds(12 * 60 * 60))
-      }
-    }
+    .task { await store.watchImageUpdates() }
     .alert(
       store.errorRecovery?.title ?? ComputerAppIdentity.name,
       isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })
