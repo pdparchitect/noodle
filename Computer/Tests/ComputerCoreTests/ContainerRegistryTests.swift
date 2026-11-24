@@ -13,6 +13,23 @@ final class ContainerRegistryTests: XCTestCase {
         try ContainerRegistry(data: JSONSerialization.data(withJSONObject: catalogue))
     }
 
+    /// An app that hosts the engine with images of its own, as Rook does, ships its own catalogue; others use the engine's.
+    func testAnAppsOwnCatalogueComesBeforeTheEngines() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        // Bundles cache what they hold, so each is complete before it is first opened.
+        func bundle(_ name: String, catalogue: Bool) throws -> Bundle {
+            let folder = root.appendingPathComponent(name, isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            if catalogue { try Data("{}".utf8).write(to: folder.appendingPathComponent("container-registry.json")) }
+            return try XCTUnwrap(Bundle(url: folder))
+        }
+        let engine = try bundle("Engine.bundle", catalogue: true)
+        let plain = try bundle("Plain.bundle", catalogue: false), own = try bundle("Own.bundle", catalogue: true)
+        XCTAssertEqual(ContainerRegistry.catalogueURL(app: plain, engine: engine)?.deletingLastPathComponent().lastPathComponent, "Engine.bundle")
+        XCTAssertEqual(ContainerRegistry.catalogueURL(app: own, engine: engine)?.deletingLastPathComponent().lastPathComponent, "Own.bundle")
+    }
+
     func testAdditionalTemplateAndDefaultAreDataDriven() throws {
         var catalogue = try catalogue()
         var templates = try XCTUnwrap(catalogue["templates"] as? [[String: Any]])

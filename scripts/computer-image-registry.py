@@ -11,6 +11,9 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent.parent
+# Another product's images, such as Rook's, pass their own name and version file.
+PREFIX = os.environ.get("IMAGE_PREFIX", "noodle-computer")
+VERSION_FILE = os.environ.get("IMAGE_VERSION_FILE", "Computer/Images/VERSION")
 ACCEPT = ", ".join([
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.oci.image.manifest.v1+json",
@@ -21,7 +24,7 @@ ACCEPT = ", ".join([
 
 class Registry:
     def __init__(self, kind):
-        self.repo = f"pdparchitect/noodle-computer-{kind}-image"
+        self.repo = f"pdparchitect/{PREFIX}-{kind}-image"
         query = urlencode({"service": "ghcr.io", "scope": f"repository:{self.repo}:pull"})
         # This is an anonymous, pull-only registry token, never a saved login.
         with urlopen(f"https://ghcr.io/token?{query}", timeout=60) as response:
@@ -62,7 +65,7 @@ class Registry:
 
 def verify_labels(labels, version, revision=None):
     if labels.get("org.opencontainers.image.version") != version:
-        raise ValueError("Image version does not match Computer/Images/VERSION")
+        raise ValueError(f"Image version does not match {VERSION_FILE}")
     if revision and labels.get("org.opencontainers.image.revision") != revision:
         raise ValueError("Image does not come from the checked source revision")
 
@@ -71,13 +74,13 @@ def main():
     command = sys.argv[1]
     if command not in ("preflight", "verify", "channel"):
         raise ValueError("Expected preflight, verify or channel")
-    version = (ROOT / "Computer/Images/VERSION").read_text().strip()
+    version = (ROOT / VERSION_FILE).read_text().strip()
     for kind in ("shell", "desktop"):
         registry = Registry(kind)
         published = registry.image(version, missing_ok=command == "preflight")
         if command == "preflight":
             local = json.loads(subprocess.check_output([
-                "docker", "image", "inspect", f"noodle-computer-{kind}-image:check"], text=True))[0]
+                "docker", "image", "inspect", f"{PREFIX}-{kind}-image:check"], text=True))[0]
             verify_labels(local["Config"]["Labels"], version, os.environ["GITHUB_SHA"])
             if published and published[1] != local["Id"]:
                 raise ValueError(f"Refusing to overwrite {kind}:{version} with a different image")

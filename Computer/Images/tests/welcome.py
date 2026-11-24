@@ -9,7 +9,8 @@ import sys
 import time
 
 runtime, shell_image, desktop_image = sys.argv[1:]
-mark = 'N O O D L E'
+# The banner's mark; another product's images pass theirs.
+mark = os.environ.get('WELCOME_MARK', 'N O O D L E')
 tagline = 'Your own agentic workspace.'
 
 

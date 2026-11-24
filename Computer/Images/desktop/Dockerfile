@@ -8,6 +8,11 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     gcc libc6-dev libx11-dev libxext-dev libxtst-dev libxcomposite-dev
 COPY desktop/build/desktop-surface.c /tmp/desktop-surface.c
 RUN gcc -O2 -Wall -Werror -o /tmp/desktop-surface /tmp/desktop-surface.c -lX11 -lXext -lXtst -lXcomposite
+# What carries the product's name. Another product builds this image with its own: --build-context brand=FOLDER,
+# holding `welcome` and `desktop-wallpaper.png`, and --build-arg DESKTOP_BRAND.
+FROM scratch AS brand
+COPY shared/noodle-welcome /welcome
+COPY desktop/overlay/usr/share/backgrounds/desktop-wallpaper.png /desktop-wallpaper.png
 FROM ${UBUNTU_IMAGE}
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG TARGETARCH
@@ -68,9 +73,10 @@ COPY desktop/browser/package.json desktop/browser/package-lock.json /opt/noodle-
 RUN cd /opt/noodle-browser && npm ci --omit=dev --ignore-scripts --no-audit --no-fund && npm cache clean --force
 COPY desktop/browser/index.cjs /opt/noodle-browser/index.cjs
 COPY desktop/overlay/ /
+COPY --from=brand /desktop-wallpaper.png /usr/share/backgrounds/desktop-wallpaper.png
 COPY desktop/build/generate-resource-overlay.py /tmp/generate-gtk-resource-overlay.py
 COPY desktop/NOTICE.md /usr/share/doc/noodle-desktop/NOTICE.md
-COPY shared/noodle-welcome /usr/local/bin/noodle-welcome
+COPY --from=brand /welcome /usr/local/bin/noodle-welcome
 COPY shared/interactive-shell.sh /etc/noodle/interactive-shell.sh
 COPY shared/verify.sh /usr/local/lib/noodle-image-check
 RUN chmod 0755 /init /usr/local/bin/desktop-* /usr/local/bin/chromium /usr/local/bin/cortilectl \

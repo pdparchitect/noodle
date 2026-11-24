@@ -1,0 +1,131 @@
+name: Rook computer images
+
+# Rook's Shell and Desktop images are Noodle Computer's, built from Computer/Images with Rook's banner and
+# wallpaper from Incubator/Rook/Images/brand. They are versioned on their own, never with Noodle's images, and
+# run the same checks. A pull request builds and checks them; publishing is started by hand.
+on:
+  pull_request:
+    paths:
+      - 'Incubator/Rook/Images/**'
+      - 'Computer/Images/**'
+      - 'scripts/publish-computer-images.sh'
+      - 'scripts/computer-image-registry.py'
+      - '.github/workflows/rook-images.yml'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the checked images as the version in Incubator/Rook/Images/VERSION and as latest
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rook-images-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_PREFIX: rook-computer
+  IMAGE_VERSION_FILE: Incubator/Rook/Images/VERSION
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - uses: docker/setup-buildx-action@v4
+      - name: Validate image version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < "$IMAGE_VERSION_FILE")"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+      - name: Build both ARM64 images with Rook's brand
+        env:
+          IMAGE_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -eu
+          for kind in shell desktop; do
+            docker buildx build --platform linux/arm64 --load \
+              --build-arg IMAGE_VERSION="$IMAGE_VERSION" --build-arg SOURCE_REVISION="$GITHUB_SHA" \
+              --build-arg IMAGE_PRODUCT="Rook" --build-arg DESKTOP_BRAND="Rook" \
+              --build-context brand=Incubator/Rook/Images/brand \
+              --tag "$IMAGE_PREFIX-$kind-image:check" --file "Computer/Images/$kind/Dockerfile" Computer/Images
+          done
+      - name: Verify both image contracts without networking or host mounts
+        run: |
+          set -eu
+          for kind in shell desktop; do
+            docker run --rm --network none --entrypoint /bin/sh "$IMAGE_PREFIX-$kind-image:check" /usr/local/lib/noodle-image-check "$kind"
+          done
+      - name: Verify desktop startup and extension hooks
+        run: docker run --rm -i --user root --network none --entrypoint /bin/bash "$IMAGE_PREFIX-desktop-image:check" < Computer/Images/tests/startup.sh
+      - name: Verify Rook's interactive welcome in both images
+        env:
+          WELCOME_MARK: R O O K
+        run: python3 Computer/Images/tests/welcome.py docker "$IMAGE_PREFIX-shell-image:check" "$IMAGE_PREFIX-desktop-image:check"
+      - name: Verify non-root defaults and explicit sudo in both images
+        run: |
+          set -eu
+          for kind in shell desktop; do
+            docker run --rm -i --network none --entrypoint /bin/sh "$IMAGE_PREFIX-$kind-image:check" < Computer/Images/tests/user.sh
+          done
+      - name: Verify desktop and Chromium frame rendering
+        run: docker run --rm -i --network none --entrypoint /bin/sh "$IMAGE_PREFIX-desktop-image:check" < Computer/Images/tests/desktop.sh
+      - name: Verify file helper account transition
+        run: python3 Computer/Images/tests/file-user.py docker "$IMAGE_PREFIX-shell-image:check" "$IMAGE_PREFIX-desktop-image:check"
+      - name: Verify visible browser automation and persistent sign-in
+        run: docker run --rm -i --user root --network none --entrypoint /bin/bash "$IMAGE_PREFIX-desktop-image:check" < Computer/Images/tests/browser.sh
+      # Export the exact tested builds. Publication loads these; it never rebuilds.
+      - name: Save tested images
+        if: github.event_name == 'workflow_dispatch' && inputs.publish
+        run: |
+          set -eu
+          docker save "$IMAGE_PREFIX-shell-image:check" "$IMAGE_PREFIX-desktop-image:check" | gzip > rook-images.tar.gz
+          sha256sum rook-images.tar.gz > rook-images.tar.gz.sha256
+      - uses: actions/upload-artifact@v6
+        if: github.event_name == 'workflow_dispatch' && inputs.publish
+        with:
+          name: rook-image-builds
+          path: |
+            rook-images.tar.gz
+            rook-images.tar.gz.sha256
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          name: rook-image-builds
+      - name: Load the tested images
+        run: |
+          sha256sum -c rook-images.tar.gz.sha256
+          docker load < rook-images.tar.gz
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish and verify public versioned and latest images
+        run: bash scripts/publish-computer-images.sh
+      - uses: actions/upload-artifact@v6
+        with:
+          name: rook-image-digests
+          path: computer-image-digests.txt
+          if-no-files-found: error

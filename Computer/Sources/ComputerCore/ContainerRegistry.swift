@@ -13,9 +13,15 @@ public struct ContainerRegistry: Decodable, Sendable {
     public let defaultTemplateID: String
     public let templates: [ComputerTemplate]
 
+    /// Where the catalogue comes from: the app's own, where it ships one for images of its own, as Rook does, and
+    /// otherwise the engine's.
+    static func catalogueURL(app: Bundle, engine: Bundle) -> URL? {
+        app.url(forResource: "container-registry", withExtension: "json") ?? engine.url(forResource: "container-registry", withExtension: "json")
+    }
+
     public static let bundled: ContainerRegistry = {
         do {
-            guard let url = ComputerCoreResources.bundle.url(forResource: "container-registry", withExtension: "json") else {
+            guard let url = catalogueURL(app: .main, engine: ComputerCoreResources.bundle) else {
                 throw ComputerError("The container registry is missing from the app bundle.")
             }
             return try ContainerRegistry(data: Data(contentsOf: url))

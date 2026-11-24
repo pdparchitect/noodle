@@ -228,6 +228,8 @@ let project = Project(
                 .folderReference(path: "../../Support/ToolIcons"),
                 "Support/AppSymbol.svg",
                 .folderReference(path: "../../Computer/Resources/Runtime"),
+                // Noodle Computer's templates, made from Rook's own images, built in Incubator/Rook/Images.
+                "Support/container-registry.json",
                 "../../Computer/Support/KERNEL-NOTICE.txt",
             ],
             entitlements: .file(path: "Support/Rook.entitlements"),
