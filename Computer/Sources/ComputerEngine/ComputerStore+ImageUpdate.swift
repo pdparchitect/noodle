@@ -105,7 +105,7 @@ extension ComputerStore {
             }
             if session.container == nil, session.virtual == nil { session.phase = .stopped }
             if !Task.isCancelled {
-                self.error = "The image could not be upgraded. Your current disk is unchanged.\n\(error.localizedDescription)"
+                self.error = "The image could not be upgraded. Your current disk is unchanged.\n\n\(error.localizedDescription)"
                 if wasRunning && !committed { await start(session) }
             }
         }
