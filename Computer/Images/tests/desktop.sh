@@ -140,8 +140,9 @@ try:
         expected = tuple((wallpaper[panel['Y']][px] >> shift) & 255 for shift in (16, 8, 0))
         assert max(abs(a - b) for a, b in zip(pixel(px, panel['Y']), expected)) <= 8, \
             'Panel corner must reveal the wallpaper, not a square black corner'
-    assert max(pixel(terminal['X'] + terminal['WIDTH'] // 2,
-                     terminal['Y'] + terminal['HEIGHT'] // 2)) < 10, 'Terminal background must be black'
+    middle = pixel(terminal['X'] + terminal['WIDTH'] // 2, terminal['Y'] + terminal['HEIGHT'] // 2)
+    # A terminal that never drew shows the wallpaper here; its log says why.
+    assert max(middle) < 10, f'Terminal background must be black, found {middle}:\n' + open(log.name).read()
     # Include Openbox decorations: the client rectangle alone misses the frame.
     extents = sp.check_output(['xprop', '-id', str(terminal['WINDOW']), '_NET_FRAME_EXTENTS'], text=True)
     left, right, top, bottom = map(int, extents.split('=')[1].split(','))

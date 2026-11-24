@@ -73,6 +73,7 @@ jobs:
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           echo "value=$version" >> "$GITHUB_OUTPUT"
       - name: Build both ARM64 images with Rook's brand
+        id: build
         env:
           IMAGE_VERSION: ${{ steps.version.outputs.value }}
         run: |
@@ -89,36 +90,45 @@ jobs:
           done
       # Computer copies the Shell onto a 256 MB disk to set up every computer's network.
       - name: Keep the Shell small enough to set up networking
+        # Every check runs once both images built, so one run reports every failure; publishing still needs all to pass.
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           set -eu
           size="$(docker image inspect --format '{{.Size}}' "$IMAGE_PREFIX-shell-image:check")"
           echo "Shell image: $((size / 1048576)) MB"
           [ "$size" -lt $((200 * 1048576)) ]
       - name: Verify both image contracts without networking or host mounts
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           set -eu
           for kind in shell desktop; do
             docker run --rm --network none --entrypoint /bin/sh "$IMAGE_PREFIX-$kind-image:check" /usr/local/lib/noodle-image-check "$kind"
           done
       - name: Verify desktop startup and extension hooks
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: docker run --rm -i --user root --network none --entrypoint /bin/bash "$IMAGE_PREFIX-desktop-image:check" < Computer/Images/tests/startup.sh
       - name: Verify Rook's interactive welcome in both images
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         env:
           WELCOME_MARK: R O O K
           WELCOME_ART: '      /_______\'
           WELCOME_TAGLINE: Autonomous AI red team.
         run: python3 Computer/Images/tests/welcome.py docker "$IMAGE_PREFIX-shell-image:check" "$IMAGE_PREFIX-desktop-image:check"
       - name: Verify non-root defaults and explicit sudo in both images
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           set -eu
           for kind in shell desktop; do
             docker run --rm -i --network none --entrypoint /bin/sh "$IMAGE_PREFIX-$kind-image:check" < Computer/Images/tests/user.sh
           done
       - name: Verify desktop and Chromium frame rendering
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: docker run --rm -i --network none --entrypoint /bin/sh "$IMAGE_PREFIX-desktop-image:check" < Computer/Images/tests/desktop.sh
       - name: Verify file helper account transition
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: python3 Computer/Images/tests/file-user.py docker "$IMAGE_PREFIX-shell-image:check" "$IMAGE_PREFIX-desktop-image:check"
       - name: Verify visible browser automation and persistent sign-in
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: docker run --rm -i --user root --network none --entrypoint /bin/bash "$IMAGE_PREFIX-desktop-image:check" < Computer/Images/tests/browser.sh
       # Export the exact tested builds. Publication loads these; it never rebuilds.
       - name: Save tested images
