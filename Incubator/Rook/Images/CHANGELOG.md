@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Dragging a Desktop window no longer blanks what it shows until you click it.
+
 ## [0.2.1] - 2026-11-24
 
 ### Changed

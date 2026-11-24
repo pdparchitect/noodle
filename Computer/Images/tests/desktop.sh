@@ -184,6 +184,20 @@ try:
     x.XDestroyImage(snapshot)
     x.XCloseDisplay(display)
     print('PASS: real terminal is black, panel corners and all four window corners are rounded')
+    # Dragged in steps, as a person drags it: picom 13 lost a moved terminal's contents until the terminal drew again.
+    for step in range(8):
+        sp.run(['xdotool', 'windowmove', str(terminal['WINDOW']), str(120 + step * 20), str(140 + step * 10)], check=True)
+        time.sleep(0.05)
+    time.sleep(1)
+    moved = geometry('^Noodle Theme Verification$')
+    display = x.XOpenDisplay(None)
+    overlay = composite.XCompositeGetOverlayWindow(display, x.XDefaultRootWindow(display))
+    snapshot = x.XGetImage(display, overlay, 0, 0, 1024, 768, c.c_ulong(-1), 2)
+    middle = pixel(moved['X'] + moved['WIDTH'] // 2, moved['Y'] + moved['HEIGHT'] // 2)
+    x.XDestroyImage(snapshot)
+    x.XCloseDisplay(display)
+    assert max(middle) < 10, f'A moved terminal must keep its contents, found {middle} at {moved}'
+    print('PASS: a moved terminal keeps its contents')
     # Edge-to-edge states must not expose wallpaper through rounded cutouts.
     for state in ('maximized_vert,maximized_horz', 'fullscreen'):
         sp.run(['wmctrl', '-ir', str(terminal['WINDOW']), '-b', 'add,' + state], check=True)
