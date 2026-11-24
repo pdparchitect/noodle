@@ -123,7 +123,7 @@ struct RookApp: App {
         #if ROOK_DEV_HOOKS
         if let scenario = ScenarioSession.launch() {
             model = scenario.model
-            computers = nil
+            computers = scenario.computers
             super.init()
             scenario.window = window
             return

@@ -1,5 +1,7 @@
 #if ROOK_DEV_HOOKS
 import AppKit
+import ComputerCore
+import ComputerEngine
 import NoodleCore
 import RookCore
 import SwiftUI
@@ -72,8 +74,24 @@ struct RookScenario: Decodable {
         struct Group: Decodable { let name: String; var description: String?; let members: [String] }
     }
 
+    /// A computer in the sidebar: a Linux container from one of Noodle Computer's templates, or a server over SSH.
+    /// Nothing boots or connects; `state` only says how it shows.
+    struct Computer: Decodable {
+        let key: String
+        let name: String
+        /// A template's id, such as shell or desktop, or ssh.
+        let kind: String
+        /// user@server for ssh.
+        var address: String?
+        var description: String?
+        var state: State?
+        enum State: String, Decodable { case running, stopped, starting }
+    }
+
     struct MissionRecord: Decodable {
         var number: Int?
+        /// The keys of the computers the Mission's agents use.
+        var computers: [String]?
         let title: String
         var objective: String?
         var severity: Mission.Severity?
@@ -142,6 +160,7 @@ struct RookScenario: Decodable {
     var champion: String?
     var settings: [String: Setting]?
     let agents: [Agent]
+    var computers: [Computer]?
     var conversations: [Conversation]?
     var present: Present?
     var timeline: [Step]?
@@ -151,7 +170,7 @@ struct RookScenario: Decodable {
 
     var folder = URL(fileURLWithPath: "/")
     private enum CodingKeys: String, CodingKey {
-        case version, title, summary, clock, appearance, champion, settings, agents, conversations, present, timeline, linkPreviews, film
+        case version, title, summary, clock, appearance, champion, settings, agents, computers, conversations, present, timeline, linkPreviews, film
     }
 
     static func load(from folder: URL) throws -> RookScenario {
@@ -180,6 +199,15 @@ struct RookScenario: Decodable {
         func require(_ condition: Bool, _ message: String) throws { if !condition { throw CaseError(message) } }
         let agentKeys = Set(agents.map(\.key)), conversationKeys = Set((conversations ?? []).map(\.key))
         try require(agentKeys.count == agents.count, "Two agents share a key.")
+        let computerKeys = Set((computers ?? []).map(\.key))
+        try require(computerKeys.count == (computers ?? []).count, "Two computers share a key.")
+        let templates = Set(ContainerRegistry.bundled.templates.map(\.id))
+        for computer in computers ?? [] {
+            try require(computer.kind == "ssh" || templates.contains(computer.kind),
+                        "\(computer.key) is ssh or one of \(templates.sorted().joined(separator: ", ")).")
+            try require(computer.kind != "ssh" || (try? SSHDestination(address: computer.address ?? "")) != nil,
+                        "\(computer.key) needs an address as user@server.")
+        }
         func author(_ key: String?, _ context: String) throws {
             guard let key else { return }
             try require(key == "user" || agentKeys.contains(key), "\(context) names an unknown agent \(key).")
@@ -192,6 +220,7 @@ struct RookScenario: Decodable {
             if let mission = conversation.mission {
                 try require(conversation.group != nil, "\(conversation.key): only a group is a Mission.")
                 if let lead = mission.lead { try author(lead, conversation.key) }
+                for key in mission.computers ?? [] { try require(computerKeys.contains(key), "\(conversation.key) names an unknown computer \(key).") }
             }
         }
         for agent in agents {
@@ -239,6 +268,10 @@ struct RookScenario: Decodable {
     weak var window: WindowState?
     private var agentIDs: [String: UUID] = [:]
     private var conversationIDs: [String: UUID] = [:]
+    private var computerIDs: [String: UUID] = [:]
+    /// The scenario's computers, in a library of its own; nil when it has none.
+    private(set) var computers: RookComputers?
+    private let root: URL
     /// Noodle's line protocol with scripts/scenario.sh.
     private let terminal = ScenarioTerminal()
     /// A capture run: scripts/scenario.sh photographs or records it, so the timeline plays as it would be watched.
@@ -249,6 +282,7 @@ struct RookScenario: Decodable {
     private init(scenario: RookScenario?, selection: String?, root: URL) throws {
         self.scenario = scenario
         self.selection = selection
+        self.root = root
         model = RookModel(root: root, messenger: nil, isScripted: true)
         try model.repository.prepare()
         if let scenario { try seed(scenario) }
@@ -328,6 +362,7 @@ struct RookScenario: Decodable {
             model.scriptedPhases[record.id] = agent.status?.phase ?? .ready
         }
         model.reload()
+        try seedComputers(scenario)
         let agents = try model.repository.loadAgents()
         for conversation in scenario.conversations ?? [] {
             let id: UUID
@@ -344,6 +379,10 @@ struct RookScenario: Decodable {
                 _ = try model.store.open(id: id, title: record.title, objective: record.objective ?? "",
                                          severity: record.severity, champion: model.champion,
                                          source: record.source, number: number, now: opened)
+                for key in record.computers ?? [] {
+                    guard let computer = computerIDs[key], let name = scenario.computers?.first(where: { $0.key == key })?.name else { continue }
+                    try model.store.setComputer(computer, named: name, assigned: true, in: id, by: .champion(model.champion), now: opened)
+                }
             } else if let group = conversation.group {
                 id = try model.repository.createGroup(named: group.name, publicDescription: group.description,
                                                       participantIDs: group.members.compactMap { agentIDs[$0] }, existingAgents: agents,
@@ -391,6 +430,36 @@ struct RookScenario: Decodable {
         model.refresh()
         // Everything seeded counts as read, so the scenario opens as its author left it.
         for conversation in model.conversations { model.markRead(conversation.id) }
+    }
+
+    /// Writes the computers into the scenario's own library, then opens it as Rook opens its own.
+    private func seedComputers(_ scenario: RookScenario) throws {
+        guard let entries = scenario.computers, !entries.isEmpty else { return }
+        let folder = root.appendingPathComponent("Computers", isDirectory: true)
+        let library = try ComputerLibrary(root: folder)
+        for entry in entries {
+            var computer: ComputerCore.Computer
+            if entry.kind == "ssh" {
+                computer = ComputerCore.Computer(name: entry.name, kind: .ssh)
+                computer.ssh = try SSHDestination(address: entry.address ?? "")
+            } else if let template = ContainerRegistry.bundled.templates.first(where: { $0.id == entry.kind }) {
+                computer = template.makeComputer(name: entry.name)
+            } else { continue }
+            computer.description = entry.description
+            try FileManager.default.createDirectory(at: library.stagingDirectory(for: computer.id), withIntermediateDirectories: true)
+            try library.commit(computer)
+            computerIDs[entry.key] = computer.id
+        }
+        let computers = try RookComputers(model: model, root: folder)
+        for entry in entries {
+            guard let session = computerIDs[entry.key].flatMap(computers.session) else { continue }
+            switch entry.state ?? .stopped {
+            case .running: session.phase = .running
+            case .starting: session.phase = .starting
+            case .stopped: break
+            }
+        }
+        self.computers = computers
     }
 
     private func author(_ key: String) -> MessageAuthor { agentIDs[key].map(MessageAuthor.agent) ?? .user }
@@ -562,7 +631,7 @@ struct RookScenario: Decodable {
     }
 
     private func apply(_ present: RookScenario.Present) {
-        if let key = present.select, let id = conversationIDs[key] { model.selection = id }
+        if let key = present.select, let id = conversationIDs[key] ?? computerIDs[key] { model.selection = id }
         if let sheet = present.sheet, let window {
             switch sheet {
             case "edit": if let conversation = model.conversation(model.selection) { window.edit(conversation, in: model) }

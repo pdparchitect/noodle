@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "title": "Internal pentest from the company jump box",
+  "summary": "On an authorized internal test the team works from the jump box the company issued for it, over SSH, and keeps everything it collects on a separate Linux computer. A Jenkins server exposes a service account that turns out to administer the server VLAN, and the lead holds for the champion before anyone uses it.",
+  "clock": "10:50",
+  "appearance": "dark",
+  "champion": "Dana Okafor",
+  "settings": {
+    "RookBackdropEffect": "grid"
+  },
+  "agents": [
+    {
+      "key": "margot",
+      "name": "Lunar Fox",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Lead operator",
+      "avatar": { "symbol": "star.fill", "color": 0 },
+      "status": { "phase": "working", "detail": "Holding on Dana" }
+    },
+    {
+      "key": "ines",
+      "name": "Clever Heron",
+      "harness": "claude-code",
+      "model": "opus",
+      "description": "Recon",
+      "avatar": { "symbol": "binoculars.fill", "color": 1 },
+      "status": { "phase": "ready", "detail": "Sweep of 10.20.0.0/22 done" }
+    },
+    {
+      "key": "ada",
+      "name": "Quiet Lynx",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Web & app",
+      "avatar": { "symbol": "globe", "color": 2 },
+      "status": { "phase": "working", "detail": "Reading Jenkins job configs" }
+    },
+    {
+      "key": "ben",
+      "name": "Silver Kite",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Identity & AD",
+      "avatar": { "symbol": "person.badge.key.fill", "color": 3 },
+      "status": { "phase": "ready", "detail": "svc-build checked, read-only" }
+    }
+  ],
+  "computers": [
+    {
+      "key": "jump",
+      "name": "ACME Jump Box",
+      "kind": "ssh",
+      "address": "rook@jump01.corp.acme.example",
+      "description": "Issued by ACME for this test, on the server VLAN",
+      "state": "running"
+    },
+    {
+      "key": "analysis",
+      "name": "Analysis",
+      "kind": "shell",
+      "description": "Scans and anything collected, kept off the corporate network",
+      "state": "running"
+    },
+    {
+      "key": "lab",
+      "name": "Phishing Lab",
+      "kind": "desktop",
+      "description": "For the awareness exercise next week",
+      "state": "stopped"
+    }
+  ],
+  "conversations": [
+    {
+      "key": "internal",
+      "group": {
+        "name": "Internal pentest: ACME server VLAN",
+        "members": ["margot", "ines", "ada", "ben"]
+      },
+      "mission": {
+        "number": 21,
+        "title": "Internal pentest: ACME server VLAN",
+        "objective": "From ACME's jump box, find a path to administrative control of the server VLAN, and stop before using any credential without Dana's go-ahead.",
+        "severity": "high",
+        "status": "active",
+        "source": "Authorized engagement, in scope",
+        "opened": "09:30",
+        "lead": "margot",
+        "computers": ["jump", "analysis"],
+        "case": {
+          "entities": [
+            { "kind": "host", "name": "jenkins.corp.acme.example", "detail": "Build server on 10.20.1.15; anonymous users can read job configs", "at": "09:52", "by": "ines" },
+            { "kind": "artifact", "name": "deploy-intranet/config.xml", "detail": "Jenkins job config holding a password in plain text", "at": "10:12", "by": "ada" },
+            { "kind": "credential", "name": "svc-build password", "detail": "Plain-text password from the job config; not used to sign in", "at": "10:12", "by": "ada" },
+            { "kind": "account", "name": "svc-build", "detail": "Domain service account; member of Server Admins", "at": "10:31", "by": "ben" },
+            { "kind": "service", "name": "Server Admins", "detail": "Domain group with local admin on every host in 10.20.2.0/24", "at": "10:31", "by": "ben" }
+          ],
+          "links": [
+            { "from": "deploy-intranet/config.xml", "relation": "found-on", "to": "jenkins.corp.acme.example", "at": "10:12", "by": "ada" },
+            { "from": "svc-build password", "relation": "found-in", "to": "deploy-intranet/config.xml", "at": "10:12", "by": "ada" },
+            { "from": "svc-build password", "relation": "unlocks", "to": "svc-build", "at": "10:31", "by": "ben" },
+            { "from": "svc-build", "relation": "member-of", "to": "Server Admins", "at": "10:31", "by": "ben" }
+          ],
+          "evidence": [
+            { "source": "ACME Jump Box (nmap)", "method": "nmap -sV --top-ports 200 10.20.0.0/22 -oA vlan", "result": "61 hosts up; Jenkins on 10.20.1.15:8080; SMB signing not required on 14 hosts.", "at": "09:52", "by": "ines" },
+            { "source": "ACME Jump Box (curl)", "method": "curl -s http://10.20.1.15:8080/job/deploy-intranet/config.xml", "result": "Returned without signing in; the job's shell step sets SVC_PASS in plain text.", "at": "10:12", "by": "ada" },
+            { "source": "Analysis (grep)", "method": "grep -rn 'PASS\\|password' jenkins-configs/", "result": "One hit, in deploy-intranet; the other 23 job configs hold no secrets.", "at": "10:14", "by": "ada" },
+            { "source": "ACME Jump Box (ldapwhoami, ldapsearch)", "method": "One LDAP bind as svc-build, then a read of its memberOf", "result": "The password is current; svc-build is in Server Admins.", "at": "10:31", "by": "ben" }
+          ],
+          "findings": [
+            { "claim": "Anyone on the server VLAN can read a Jenkins job that holds a current domain password in plain text.", "evidence": ["V-2", "V-3"], "confidence": "high", "entities": ["jenkins.corp.acme.example", "svc-build password"], "at": "10:16", "by": "ada" },
+            { "claim": "That password belongs to svc-build, which administers every server in 10.20.2.0/24 through Server Admins.", "evidence": ["V-4"], "confidence": "high", "entities": ["svc-build", "Server Admins"], "at": "10:33", "by": "ben" }
+          ]
+        }
+      },
+      "messages": [
+        {
+          "at": "09:30",
+          "from": "user",
+          "text": "**M-0021 is open: internal pentest of the ACME server VLAN.** @Lunar Fox leads.\n\nWork only from **ACME Jump Box**; it is the box ACME issued for this test. Scope is 10.20.0.0/22. No denial of service, and clear anything that signs in as someone with me first."
+        },
+        {
+          "at": "09:34",
+          "from": "margot",
+          "text": "Plan: @Clever Heron sweeps the VLAN from the jump box, @Quiet Lynx takes whatever web services turn up, and @Silver Kite looks at identity once we have names. Anything we collect goes to **Analysis**; nothing is kept on ACME's box."
+        },
+        {
+          "at": "09:52",
+          "from": "ines",
+          "text": "Sweep done from **ACME Jump Box**:\n\n```\n$ nmap -sV --top-ports 200 10.20.0.0/22 -oA vlan\n61 hosts up\n10.20.1.15   8080/tcp  http  Jetty (Jenkins 2.387)\n...\n14 hosts: SMB signing enabled but not required\n```\n\nThe Jenkins stands out. Copied `vlan.xml` to Analysis and removed it from the jump box."
+        },
+        {
+          "at": "10:12",
+          "from": "ada",
+          "text": "Jenkins lets anonymous users read job configs. One of them, `deploy-intranet`, sets a password in its shell step:\n\n```\n$ curl -s http://10.20.1.15:8080/job/deploy-intranet/config.xml | grep -n SVC\n41:  export SVC_USER=svc-build\n42:  export SVC_PASS='Wi••••••••••26'\n```\n\nRead only: no builds triggered, nothing changed. Pulled all 24 configs to **Analysis**; the other 23 hold no secrets."
+        },
+        {
+          "at": "10:31",
+          "from": "ben",
+          "text": "One LDAP bind from the jump box, nothing else:\n\n```\n$ ldapwhoami -H ldap://dc01 -D svc-build -w ••••\nu:CORP\\svc-build\n$ ldapsearch ... '(sAMAccountName=svc-build)' memberOf\nmemberOf: CN=Server Admins,OU=Groups,DC=corp,DC=acme,DC=example\n```\n\nThe password is current, and Server Admins is local admin on every host in 10.20.2.0/24. I have not signed in anywhere with it."
+        },
+        {
+          "at": "10:38",
+          "from": "margot",
+          "text": "@Dana Okafor, where we are: an anonymous Jenkins page hands out **svc-build**, and svc-build administers the whole server subnet. Severity is high.\n\nTo prove the reach I would like to sign in as svc-build on two servers you choose and list the local administrators, read-only, from the jump box. Holding until you say go."
+        }
+      ]
+    }
+  ],
+  "present": {
+    "window": { "size": [1440, 880] },
+    "select": "internal"
+  },
+  "timeline": [
+    { "present": { "inspector": "hidden" } },
+    { "capture": "01-mission" },
+    { "waitFor": "key" },
+    { "present": { "inspector": "case" } },
+    { "capture": "02-case" },
+    { "waitFor": "key" },
+    { "present": { "sheet": "edit" } },
+    { "wait": 0.8 },
+    { "capture": "03-edit-mission" },
+    { "present": { "sheet": "none" } }
+  ]
+}
