@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-24
+
 ### Changed
 
 - The terminal welcome draws Rook slimmer and taller, with a stepped base.
