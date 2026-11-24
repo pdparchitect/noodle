@@ -5,30 +5,6 @@ import ComputerEngine
 import NoodleSettingsUI
 import SwiftUI
 
-struct StorageSettingsView: View {
-    @State private var model: ComputerStore?
-    @State private var error: String?
-
-    var body: some View {
-        Group {
-            if let model { StorageView(model: model) }
-            else {
-                Form {
-                    if let error { Text(error).foregroundStyle(.secondary).textSelection(.enabled) }
-                    Button("Refresh") { load() }
-                }.formStyle(.grouped)
-            }
-        }
-        .settingsContentSize(width: 580)
-        .task { load() }
-    }
-
-    private func load() {
-        do { model = try ComputerAppDelegate.loadLibrary(); error = nil }
-        catch { self.error = error.localizedDescription }
-    }
-}
-
 struct StorageView: View {
     @ObservedObject var model: ComputerStore
     @State private var confirming = false

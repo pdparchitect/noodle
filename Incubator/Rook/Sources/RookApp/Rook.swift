@@ -87,6 +87,7 @@ struct RookApp: App {
             RookSettingsView(host: delegate.settings)
                 .environment(delegate.calls)
                 .environment(delegate.settings)
+                .environment(\.rookComputers, delegate.computers)
         }
         .windowResizability(.contentSize)
     }

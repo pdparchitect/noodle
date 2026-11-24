@@ -219,6 +219,7 @@ let project = Project(
                 "../../Computer/Sources/NoodleComputer/FileDropDestination.swift",
                 "../../Computer/Sources/NoodleComputer/ComputerImageUpdateButton.swift",
                 "../../Computer/Sources/NoodleComputer/LocalMacView.swift",
+                "../../Computer/Sources/NoodleComputer/StorageView.swift",
             ],
             resources: [
                 "Support/Assets.xcassets",
