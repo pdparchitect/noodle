@@ -163,10 +163,32 @@ try:
         compositor.wait(timeout=5)
         time.sleep(1)
         bare = read(x.XDefaultRootWindow(display), terminal['X'] + terminal['WIDTH'] // 2, terminal['Y'] + terminal['HEIGHT'] // 2)
-        details = sp.run(f"kitty --version; picom --version; xwininfo -id {terminal['WINDOW']} | grep -E 'Depth|Visual'",
+        details = sp.run(f"kitty --version; picom --version; xwininfo -id {terminal['WINDOW']} | grep -E 'Depth|Visual'; "
+                         "dpkg-query -W -f '${Package} ${Version}\\n' | grep -Ei 'mesa|gallium|libgl|libegl|libgbm|libdrm'; "
+                         "ls -l /usr/lib/*/dri /usr/lib/*/gbm 2>&1 | head -40",
                          shell=True, capture_output=True, text=True)
+        # The same terminal again with the software renderer named outright and the GL loaders' own logging.
+        with open('/tmp/noodle-kitty-retry.log', 'w') as retry_log:
+            processes.append(sp.Popen(['kitty', '--debug-rendering', '--config', '/etc/xdg/kitty/theme.conf',
+                                       '--title', 'Noodle Kitty Retry', '-o', 'initial_window_width=640',
+                                       '-o', 'initial_window_height=420', '/bin/sh', '-c', 'sleep 60'],
+                                      env={**os.environ, 'LIBGL_ALWAYS_SOFTWARE': '1', 'GALLIUM_DRIVER': 'llvmpipe',
+                                           'LIBGL_DEBUG': 'verbose', 'EGL_LOG_LEVEL': 'debug', 'MESA_DEBUG': '1'},
+                                      stdout=retry_log, stderr=sp.STDOUT))
+        retried = None
+        for attempt in range(20):
+            time.sleep(0.5)
+            try:
+                again = geometry('^Noodle Kitty Retry$')
+            except sp.CalledProcessError:
+                continue
+            retried = read(x.XDefaultRootWindow(display), again['X'] + again['WIDTH'] // 2, again['Y'] + again['HEIGHT'] // 2)
+            if retried and max(retried) < 10:
+                break
         raise AssertionError(f'Terminal background must be black, found {middle} on screen, {own} in its own window, '
-                             f'{bare} without the compositor.\n{details.stdout}{details.stderr}' + open(log.name).read())
+                             f'{bare} without the compositor, {retried} when retried with llvmpipe named.\n'
+                             f'{details.stdout}{details.stderr}\nFirst terminal:\n' + open(log.name).read() +
+                             '\nRetry:\n' + open('/tmp/noodle-kitty-retry.log').read())
     # Include Openbox decorations: the client rectangle alone misses the frame.
     extents = sp.check_output(['xprop', '-id', str(terminal['WINDOW']), '_NET_FRAME_EXTENTS'], text=True)
     left, right, top, bottom = map(int, extents.split('=')[1].split(','))
