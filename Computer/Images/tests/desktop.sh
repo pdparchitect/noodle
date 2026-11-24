@@ -149,8 +149,8 @@ try:
         assert max(abs(a - b) for a, b in zip(pixel(px, panel['Y']), expected)) <= 8, \
             'Panel corner must reveal the wallpaper, not a square black corner'
     if max(middle) >= 10:
-        # Say whether the terminal or the compositor is at fault: what the window holds itself, what the screen shows
-        # without the compositor, and the versions and window depth involved.
+        # Separate the two suspects: the same terminal with the software renderer named while the compositor runs (A),
+        # then with the desktop's usual settings once the compositor is stopped (B).
         def read(drawable, px, py):
             image = x.XGetImage(display, drawable, px, py, 1, 1, c.c_ulong(-1), 2)
             if not image:
@@ -158,37 +158,29 @@ try:
             value = x.XGetPixel(image, 0, 0)
             x.XDestroyImage(image)
             return tuple((value >> shift) & 255 for shift in (16, 8, 0))
-        own = read(terminal['WINDOW'], terminal['WIDTH'] // 2, terminal['HEIGHT'] // 2)
+        def trial(title, environment, drawable):
+            processes.append(sp.Popen(['kitty', '--config', '/etc/xdg/kitty/theme.conf', '--title', title,
+                                       '-o', 'initial_window_width=640', '-o', 'initial_window_height=420',
+                                       '/bin/sh', '-c', 'sleep 60'],
+                                      env={**os.environ, **environment}, stdout=log, stderr=log))
+            seen = None
+            for attempt in range(20):
+                time.sleep(0.5)
+                try:
+                    window = geometry('^' + title + '$')
+                except sp.CalledProcessError:
+                    continue
+                seen = read(drawable, window['X'] + window['WIDTH'] // 2, window['Y'] + window['HEIGHT'] // 2)
+                if seen and max(seen) < 10:
+                    break
+            return seen
+        a = trial('Noodle Kitty A', {'LIBGL_ALWAYS_SOFTWARE': '1', 'GALLIUM_DRIVER': 'llvmpipe'}, overlay)
         compositor.terminate()
         compositor.wait(timeout=5)
-        time.sleep(1)
-        bare = read(x.XDefaultRootWindow(display), terminal['X'] + terminal['WIDTH'] // 2, terminal['Y'] + terminal['HEIGHT'] // 2)
-        details = sp.run(f"kitty --version; picom --version; xwininfo -id {terminal['WINDOW']} | grep -E 'Depth|Visual'; "
-                         "dpkg-query -W -f '${Package} ${Version}\\n' | grep -Ei 'mesa|gallium|libgl|libegl|libgbm|libdrm'; "
-                         "ls -l /usr/lib/*/dri /usr/lib/*/gbm 2>&1 | head -40",
-                         shell=True, capture_output=True, text=True)
-        # The same terminal again with the software renderer named outright and the GL loaders' own logging.
-        with open('/tmp/noodle-kitty-retry.log', 'w') as retry_log:
-            processes.append(sp.Popen(['kitty', '--debug-rendering', '--config', '/etc/xdg/kitty/theme.conf',
-                                       '--title', 'Noodle Kitty Retry', '-o', 'initial_window_width=640',
-                                       '-o', 'initial_window_height=420', '/bin/sh', '-c', 'sleep 60'],
-                                      env={**os.environ, 'LIBGL_ALWAYS_SOFTWARE': '1', 'GALLIUM_DRIVER': 'llvmpipe',
-                                           'LIBGL_DEBUG': 'verbose', 'EGL_LOG_LEVEL': 'debug', 'MESA_DEBUG': '1'},
-                                      stdout=retry_log, stderr=sp.STDOUT))
-        retried = None
-        for attempt in range(20):
-            time.sleep(0.5)
-            try:
-                again = geometry('^Noodle Kitty Retry$')
-            except sp.CalledProcessError:
-                continue
-            retried = read(x.XDefaultRootWindow(display), again['X'] + again['WIDTH'] // 2, again['Y'] + again['HEIGHT'] // 2)
-            if retried and max(retried) < 10:
-                break
-        raise AssertionError(f'Terminal background must be black, found {middle} on screen, {own} in its own window, '
-                             f'{bare} without the compositor, {retried} when retried with llvmpipe named.\n'
-                             f'{details.stdout}{details.stderr}\nFirst terminal:\n' + open(log.name).read() +
-                             '\nRetry:\n' + open('/tmp/noodle-kitty-retry.log').read())
+        b = trial('Noodle Kitty B', {'LIBGL_ALWAYS_SOFTWARE': '1'}, x.XDefaultRootWindow(display))
+        versions = sp.run('kitty --version; picom --version', shell=True, capture_output=True, text=True)
+        raise AssertionError(f'Terminal background must be black, found {middle}. With llvmpipe named and the compositor '
+                             f'running: {a}. Without the compositor: {b}.\n{versions.stdout}' + open(log.name).read())
     # Include Openbox decorations: the client rectangle alone misses the frame.
     extents = sp.check_output(['xprop', '-id', str(terminal['WINDOW']), '_NET_FRAME_EXTENTS'], text=True)
     left, right, top, bottom = map(int, extents.split('=')[1].split(','))
