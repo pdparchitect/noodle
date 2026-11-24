@@ -15,8 +15,18 @@ struct ComputerDetailView: View {
   @ObservedObject var store: ComputerStore
   @ObservedObject var session: ComputerSession
   var sidebarCollapsed = false
+  /// One opacity for every computer's terminal and files, set by an app that offers no appearance settings, as Rook.
+  var panelOpacity: Double? = nil
   @State private var editing = false
   @State private var stopping = false
+
+  private var appearance: ComputerAppearance { Self.panelAppearance(session.computer.appearance, opacity: panelOpacity) }
+
+  static func panelAppearance(_ stored: ComputerAppearance?, opacity: Double?) -> ComputerAppearance {
+    var appearance = stored ?? .init()
+    if let opacity { appearance.terminalOpacity = opacity }
+    return appearance
+  }
 
   var body: some View {
     Group {
@@ -43,9 +53,9 @@ struct ComputerDetailView: View {
             .allowsHitTesting(session.displayMode == .desktop)
             .accessibilityHidden(session.displayMode != .desktop)
           if session.showingFiles {
-            ComputerFilesView(model: session.filesModel(for: local), appearance: session.computer.appearance ?? .init()).id(session.id)
+            ComputerFilesView(model: session.filesModel(for: local), appearance: appearance).id(session.id)
           } else if session.showingTerminal, let terminal = session.terminal {
-            ComputerTerminalView(terminal: terminal, appearance: session.computer.appearance ?? .init())
+            ComputerTerminalView(terminal: terminal, appearance: appearance)
           }
         }
         // Restart polling, native surfaces and the file view's StateObject when
@@ -54,9 +64,9 @@ struct ComputerDetailView: View {
       } else if let ssh = session.sshRuntime {
         Group {
           if session.showingFiles {
-            ComputerFilesView(model: session.filesModel(for: ssh), appearance: session.computer.appearance ?? .init()).id(session.id)
+            ComputerFilesView(model: session.filesModel(for: ssh), appearance: appearance).id(session.id)
           } else if let terminal = session.terminal {
-            ComputerTerminalView(terminal: terminal, appearance: session.computer.appearance ?? .init())
+            ComputerTerminalView(terminal: terminal, appearance: appearance)
           }
         }
         .id(ObjectIdentifier(ssh))
@@ -68,9 +78,9 @@ struct ComputerDetailView: View {
               .allowsHitTesting(session.displayMode == .desktop)
               .accessibilityHidden(session.displayMode != .desktop)
             if session.showingFiles {
-              ComputerFilesView(model: session.filesModel(for: windows), appearance: session.computer.appearance ?? .init()).id(session.id)
+              ComputerFilesView(model: session.filesModel(for: windows), appearance: appearance).id(session.id)
             } else if session.showingTerminal, let terminal = session.terminal {
-              ComputerTerminalView(terminal: terminal, appearance: session.computer.appearance ?? .init())
+              ComputerTerminalView(terminal: terminal, appearance: appearance)
             }
           }
           .id(ObjectIdentifier(windows))
@@ -91,15 +101,15 @@ struct ComputerDetailView: View {
             }
           }
           if session.showingFiles, session.phase == .running, let runtime = session.container {
-            ComputerFilesView(model: session.filesModel(for: runtime), appearance: session.computer.appearance ?? .init()).id(session.id)
+            ComputerFilesView(model: session.filesModel(for: runtime), appearance: appearance).id(session.id)
           } else if session.showingTerminal, let terminal = session.terminal {
-            ComputerTerminalView(terminal: terminal, appearance: session.computer.appearance ?? .init())
+            ComputerTerminalView(terminal: terminal, appearance: appearance)
           }
         }
       } else if session.showingFiles, session.phase == .running, let runtime = session.container {
-        ComputerFilesView(model: session.filesModel(for: runtime), appearance: session.computer.appearance ?? .init()).id(session.id)
+        ComputerFilesView(model: session.filesModel(for: runtime), appearance: appearance).id(session.id)
       } else if let terminal = session.terminal {
-        ComputerTerminalView(terminal: terminal, appearance: session.computer.appearance ?? .init())
+        ComputerTerminalView(terminal: terminal, appearance: appearance)
       } else {
         ContentUnavailableView {
           Label(

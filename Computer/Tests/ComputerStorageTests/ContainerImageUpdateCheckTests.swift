@@ -140,3 +140,18 @@ final class ContainerUpgradeSystemChangeTests: XCTestCase {
         }
     }
 }
+
+final class ComputerPanelOpacityTests: XCTestCase {
+    // An app that sets one opacity for every computer's terminal and files, as Rook does, keeps each computer's colours;
+    // without one, each computer's own appearance applies, as in Noodle Computer.
+    func testAnAppMaySetEveryComputersPanelOpacity() {
+        var stored = ComputerAppearance()
+        stored.terminalBackground = "102030"
+        stored.terminalOpacity = 1
+        XCTAssertEqual(ComputerDetailView.panelAppearance(stored, opacity: nil), stored)
+        let shown = ComputerDetailView.panelAppearance(stored, opacity: 0.85)
+        XCTAssertEqual(shown.terminalOpacity, 0.85)
+        XCTAssertEqual(shown.terminalBackground, "102030")
+        XCTAssertEqual(ComputerDetailView.panelAppearance(nil, opacity: 0.85).terminalOpacity, 0.85)
+    }
+}

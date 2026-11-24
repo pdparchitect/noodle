@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- A computer's terminal and files are slightly see-through, so Rook's window shows behind them.
+
 ### Fixed
 
 - Computers offer Upgrade when a newer Rook image is published, as in Noodle Computer: the sidebar says Upgrade available, and Upgrade is in the computer’s context menu and Edit Computer. The upgrade shows its progress in a window of its own. Rook never checked, so computers kept the image they were made with.

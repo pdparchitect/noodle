@@ -41,8 +41,9 @@ struct MainWindow: View {
                 // Kept while the selection changes, as Noodle's is: only the transcript is replaced.
                 ConversationView(model: model, window: window, conversation: conversation, presentsGraphSheet: false)
             } else if let computers, let id = model.selection, let session = computers.session(id) {
-                // Noodle Computer's own view: the terminal, files or desktop, with Start, Stop and Edit in the toolbar.
-                ComputerDetailView(store: computers.store, session: session).id(session.id)
+                // Noodle Computer's own view: the terminal, files or desktop, with Start, Stop and Edit in the toolbar. Its
+                // terminal and files let Rook's window show through a little.
+                ComputerDetailView(store: computers.store, session: session, panelOpacity: 0.85).id(session.id)
             } else if model.agents.isEmpty {
                 ContentUnavailableView {
                     Label("No Agents", systemImage: "person.2")
