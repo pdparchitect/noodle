@@ -82,13 +82,12 @@ try:
     wallpaper = [[x.XGetPixel(snapshot, px, py) for px in range(1024)] for py in range(768)]
     colours = [x.XGetPixel(snapshot, px, py)
                for py in (100, 380, 650) for px in (100, 500, 900)]
-    assert len(set(colours)) >= 4, 'Wallpaper did not render its landscape colours'
-    rgb = [(v >> shift) & 255 for v in colours for shift in (16, 8, 0)]
-    assert sum(rgb) / len(rgb) > 120, 'Wallpaper unexpectedly dark or blank'
+    # Any product's wallpaper, light or dark: several colours means it drew, not a blank screen.
+    assert len(set(colours)) >= 4, 'Wallpaper did not render: the framebuffer is blank or one colour'
 finally:
     x.XDestroyImage(snapshot)
     x.XCloseDisplay(display)
-print('PASS: desktop wallpaper renders as a bright, non-blank framebuffer')
+print('PASS: desktop wallpaper renders as a non-blank framebuffer')
 
 # Exercise the real panel and terminal, not just their configuration files.
 processes = []
@@ -136,8 +135,11 @@ try:
         value = x.XGetPixel(snapshot, px, py)
         return tuple((value >> shift) & 255 for shift in (16, 8, 0))
     assert max(pixel(panel['X'] + panel['WIDTH'] // 2, panel['Y'] + 18)) < 30, 'Panel must remain black'
+    # Compared with the wallpaper itself, so a dark one, such as Rook's, is checked as well as a light one.
     for px in (panel['X'], panel['X'] + panel['WIDTH'] - 1):
-        assert min(pixel(px, panel['Y'])) > 80, 'Panel corner must reveal the wallpaper, not a square black corner'
+        expected = tuple((wallpaper[panel['Y']][px] >> shift) & 255 for shift in (16, 8, 0))
+        assert max(abs(a - b) for a, b in zip(pixel(px, panel['Y']), expected)) <= 8, \
+            'Panel corner must reveal the wallpaper, not a square black corner'
     assert max(pixel(terminal['X'] + terminal['WIDTH'] // 2,
                      terminal['Y'] + terminal['HEIGHT'] // 2)) < 10, 'Terminal background must be black'
     # Include Openbox decorations: the client rectangle alone misses the frame.
