@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Desktop starts Chromium without a window, so agents can attach to it at once; opening Browser shows a window from the same running browser.
+
 ## [0.4.2] - 2026-10-10
 
 ### Fixed

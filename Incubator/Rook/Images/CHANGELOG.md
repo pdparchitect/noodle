@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Desktop starts Chromium without a window, so agents can attach to it at once; opening Browser shows a window from the same running browser.
 - The terminal welcome shows “Autonomous AI red team.” beside Rook's drawing, under its name.
 
 ## [0.1.0] - 2026-11-24

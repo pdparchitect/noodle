@@ -133,10 +133,16 @@ const server = http.createServer((request, response) => {
     browser = null;
     await until(() => legacyProcess.exitCode !== null, 'legacy browser shutdown');
 
-    // The exact product session hook opens the visible browser as agent.
+    // The exact product session hook starts the browser as agent, attachable but without a window.
     launch('runuser', ['-u', 'agent', '--', '/etc/desktop/session.d/noodle-browser']);
     browser = await until(connect, 'desktop browser');
     const endpoint = browser.wsEndpoint();
+    await delay(3_000);
+    assert.throws(() => execFileSync('xdotool', ['search', '--onlyvisible', '--class', 'chromium'], { stdio: 'pipe' }),
+      'the session browser starts without a window');
+    await browser.disconnect();
+    browser = await connect();
+    assert.equal(browser.wsEndpoint(), endpoint, 'a windowless browser stays running');
     assert.throws(() => execFileSync('chromium', ['--headless'], { stdio: 'pipe' }), error => error.status === 2);
     const listeners = execFileSync('ss', ['-H', '-ltn'], { encoding: 'utf8' })
       .split('\n').filter(line => /:9222\s/.test(line)).map(line => line.trim().split(/\s+/)[3]);

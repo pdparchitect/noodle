@@ -2,4 +2,5 @@
 # Runs inside the authenticated X11/D-Bus session, after the keyring is ready.
 . /usr/local/lib/desktop-environment
 [ "$DESKTOP_BROWSER_AUTOSTART" = 1 ] || exit 0
-exec chromium >>/var/log/desktop/browser.log 2>&1
+# Windowless: ready for agents to attach, and the first Browser launch opens a window in this process.
+exec chromium --no-startup-window >>/var/log/desktop/browser.log 2>&1

@@ -59,8 +59,9 @@ enum ComputerToolGuidance {
         For website automation in a Desktop computer, use its visible Chromium
         session. In the guest, check for `/opt/noodle-browser/index.cjs`; older images
         need the user to choose Update in Computer, and Shell images do not provide
-        this feature. The desktop opens Browser automatically. If the user
-        closed it, run `chromium` in a guest terminal to reopen the same profile.
+        this feature. The desktop starts Browser automatically, without a window;
+        when it has no tabs, `browser.newPage()` opens one on the desktop. If
+        connecting fails, run `chromium` in a guest terminal to reopen the same profile.
         Upload a .cjs script to /workspace and run it with the guest's `node`:
         ```js
         const { connect } = require('/opt/noodle-browser');
