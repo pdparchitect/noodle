@@ -148,8 +148,22 @@ try:
         expected = tuple((wallpaper[panel['Y']][px] >> shift) & 255 for shift in (16, 8, 0))
         assert max(abs(a - b) for a, b in zip(pixel(px, panel['Y']), expected)) <= 8, \
             'Panel corner must reveal the wallpaper, not a square black corner'
-    # A terminal that never drew shows the wallpaper here; its log says why.
-    assert max(middle) < 10, f'Terminal background must be black, found {middle}:\n' + open(log.name).read()
+    if max(middle) >= 10:
+        # A terminal that never drew shows the wallpaper here. Report every window and its state, and a quarter-size
+        # screenshot (a base64 PNG) of what the screen shows, beside the terminal's log.
+        windows = sp.run("xwininfo -root -tree | head -80; for w in $(xdotool search --name 'Noodle Theme Verification'); "
+                         "do xwininfo -id $w | grep -E 'Window id|Absolute|Width|Height|Map State|Depth'; done",
+                         shell=True, capture_output=True, text=True)
+        small = b''.join(b'\x00' + bytes(channel for px in range(0, 1024, 4) for channel in pixel(px, py))
+                         for py in range(0, 768, 4))
+        def chunk(kind, data):
+            return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
+        screenshot = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', 256, 192, 8, 2, 0, 0, 0)) +
+                      chunk(b'IDAT', zlib.compress(small, 9)) + chunk(b'IEND', b''))
+        import base64
+        raise AssertionError(f'Terminal background must be black, found {middle} at {terminal}.\n'
+                             f'{windows.stdout}{windows.stderr}\nTerminal log:\n' + open(log.name).read() +
+                             '\nScreenshot:\n' + base64.b64encode(screenshot).decode())
     # Include Openbox decorations: the client rectangle alone misses the frame.
     extents = sp.check_output(['xprop', '-id', str(terminal['WINDOW']), '_NET_FRAME_EXTENTS'], text=True)
     left, right, top, bottom = map(int, extents.split('=')[1].split(','))
