@@ -37,6 +37,18 @@ class RegistryTests(unittest.TestCase):
             with self.assertRaises(HTTPError):
                 self.client.get('manifests/1.2.3')
 
+    def test_refused_anonymous_token_means_unpublished_only_for_preflight(self):
+        # GHCR refuses an anonymous token for a package that does not exist yet, as on a first publish.
+        refused = HTTPError('fixture', 403, '', {}, None)
+        with patch.object(registry, 'urlopen', side_effect=refused):
+            client = registry.Registry('shell', missing_ok=True)
+            self.assertIsNone(client.image('1.2.3', missing_ok=True))
+            with self.assertRaises(HTTPError):
+                registry.Registry('shell')
+        with patch.object(registry, 'urlopen', side_effect=HTTPError('fixture', 500, '', {}, None)):
+            with self.assertRaises(HTTPError):
+                registry.Registry('shell', missing_ok=True)
+
     def test_public_manifest_selects_arm64_and_verifies_config(self):
         config = {'os': 'linux', 'architecture': 'arm64', 'config': {'Labels': labels()}}
         manifest = {'config': {'digest': 'sha256:config'}}
@@ -74,7 +86,7 @@ class RegistryTests(unittest.TestCase):
             local = [{'Id': local_id, 'Config': {'Labels': labels()}}]
             with patch.object(registry, 'ROOT', root), patch.object(registry.sys, 'argv', ['registry', command]), \
                  patch.dict(os.environ, {'GITHUB_SHA': 'checked-commit'}), \
-                 patch.object(registry.Registry, '__init__', lambda self, kind: setattr(self, 'repo', kind)), \
+                 patch.object(registry.Registry, '__init__', lambda self, kind, missing_ok=False: setattr(self, 'repo', kind)), \
                  patch.object(registry.Registry, 'image', side_effect=images), \
                  patch.object(registry.subprocess, 'check_output', return_value=json.dumps(local)), \
                  contextlib.redirect_stdout(io.StringIO()):
