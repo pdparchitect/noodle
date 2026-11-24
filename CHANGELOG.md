@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.95.0] - 2026-11-24
+
 ### Added
 
 - Help › License opens Noodle's licence.

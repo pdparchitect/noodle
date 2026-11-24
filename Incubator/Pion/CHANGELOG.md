@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-24
+
 ### Added
 
 - Microsoft Defender XDR Containment, a tool of its own beside Microsoft Defender XDR Audit with an OAuth sign-in of its own to the Defender for Endpoint API, as an admin of its own with only the Defender permissions its Setup Steps list: agents can isolate a device, Full or Selective, or release it, restrict it to Microsoft-signed apps or lift that, stop and quarantine a file by its SHA1, run a Quick or Full antivirus scan and collect an investigation package, each only once you approve it, with a comment Defender records, and each saying what recovering from it involves. It refuses a malformed device ID, a device it cannot find, one not onboarded or not active, an action of the same kind or its opposite already pending, any action while not every pending action of the device could be read, and isolating a device whose last observed isolation action isolated it or releasing one whose last action released it, while a state it cannot confirm blocks nothing and is said in the result; every result gives the machine action's ID and where it stands after a short wait, saying plainly that Pending is not done and saying done only once Defender names the device, the action and the scope asked for, and `action-status` reads it again. `device`, `machine-actions`, which lists who asked for what on which device, and `check-access` read without changing anything.
