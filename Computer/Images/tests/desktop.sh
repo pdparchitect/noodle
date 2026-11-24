@@ -148,39 +148,8 @@ try:
         expected = tuple((wallpaper[panel['Y']][px] >> shift) & 255 for shift in (16, 8, 0))
         assert max(abs(a - b) for a, b in zip(pixel(px, panel['Y']), expected)) <= 8, \
             'Panel corner must reveal the wallpaper, not a square black corner'
-    if max(middle) >= 10:
-        # Separate the two suspects: the same terminal with the software renderer named while the compositor runs (A),
-        # then with the desktop's usual settings once the compositor is stopped (B).
-        def read(drawable, px, py):
-            image = x.XGetImage(display, drawable, px, py, 1, 1, c.c_ulong(-1), 2)
-            if not image:
-                return None
-            value = x.XGetPixel(image, 0, 0)
-            x.XDestroyImage(image)
-            return tuple((value >> shift) & 255 for shift in (16, 8, 0))
-        def trial(title, environment, drawable):
-            processes.append(sp.Popen(['kitty', '--config', '/etc/xdg/kitty/theme.conf', '--title', title,
-                                       '-o', 'initial_window_width=640', '-o', 'initial_window_height=420',
-                                       '/bin/sh', '-c', 'sleep 60'],
-                                      env={**os.environ, **environment}, stdout=log, stderr=log))
-            seen = None
-            for attempt in range(20):
-                time.sleep(0.5)
-                try:
-                    window = geometry('^' + title + '$')
-                except sp.CalledProcessError:
-                    continue
-                seen = read(drawable, window['X'] + window['WIDTH'] // 2, window['Y'] + window['HEIGHT'] // 2)
-                if seen and max(seen) < 10:
-                    break
-            return seen
-        a = trial('Noodle Kitty A', {'LIBGL_ALWAYS_SOFTWARE': '1', 'GALLIUM_DRIVER': 'llvmpipe'}, overlay)
-        compositor.terminate()
-        compositor.wait(timeout=5)
-        b = trial('Noodle Kitty B', {'LIBGL_ALWAYS_SOFTWARE': '1'}, x.XDefaultRootWindow(display))
-        versions = sp.run('kitty --version; picom --version', shell=True, capture_output=True, text=True)
-        raise AssertionError(f'Terminal background must be black, found {middle}. With llvmpipe named and the compositor '
-                             f'running: {a}. Without the compositor: {b}.\n{versions.stdout}' + open(log.name).read())
+    # A terminal that never drew shows the wallpaper here; its log says why.
+    assert max(middle) < 10, f'Terminal background must be black, found {middle}:\n' + open(log.name).read()
     # Include Openbox decorations: the client rectangle alone misses the frame.
     extents = sp.check_output(['xprop', '-id', str(terminal['WINDOW']), '_NET_FRAME_EXTENTS'], text=True)
     left, right, top, bottom = map(int, extents.split('=')[1].split(','))

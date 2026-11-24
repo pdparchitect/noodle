@@ -96,10 +96,13 @@ RUN chmod 0755 /init /usr/local/bin/desktop-* /usr/local/bin/chromium /usr/local
     mkdir -p /usr/share/xsessions && \
     printf '[Desktop Entry]\nName=Openbox\nExec=openbox-session\nType=Application\n' > /usr/share/xsessions/openbox.desktop && \
     chown -R agent:agent /home/agent /workspace /var/log/desktop
+# The desktop always renders in software. Name llvmpipe: newer Mesa, as Kali's, picks no working software
+# renderer on its own, and kitty then never draws.
 ENV HOME=/home/agent TERM=xterm-256color LANG=C.UTF-8 \
     ENV=/etc/noodle/interactive-shell.sh BROWSER=chromium DISPLAY=:1 GTK_THEME=Desktop \
     G_RESOURCE_OVERLAYS=/org/gtk/libgtk=/usr/share/desktop/gtk-overlay \
-    XAUTHORITY=/run/desktop/Xauthority DESKTOP_DEFAULT_TITLE="${DESKTOP_BRAND}"
+    XAUTHORITY=/run/desktop/Xauthority DESKTOP_DEFAULT_TITLE="${DESKTOP_BRAND}" \
+    GALLIUM_DRIVER=llvmpipe
 RUN sh /usr/local/lib/noodle-image-check desktop
 WORKDIR /workspace
 USER agent
