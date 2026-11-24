@@ -61,7 +61,8 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
     ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 # Keep the desktop identity stable for saved homes, file transfers and sudo. A base without Ubuntu's account gets one
-# from an empty skeleton, so a base's own prompt, such as Kali's, never replaces the desktop's.
+# from an empty skeleton, so a base's own prompt, such as Kali's, never replaces the desktop's. Kali has no input
+# group either; Xorg's evdev input needs it.
 RUN if id ubuntu >/dev/null 2>&1; then \
       usermod -l agent -d /home/agent -m ubuntu && groupmod -n agent ubuntu; \
     else mkdir -p /tmp/empty-skeleton && groupadd --gid 1000 agent && \

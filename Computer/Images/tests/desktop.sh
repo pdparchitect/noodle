@@ -50,7 +50,6 @@ xprop -root _XROOTPMAP_ID | grep -q 'PIXMAP'
 # the isolated guest framebuffer; it never captures the user's host desktop.
 python3 - <<'PY'
 import ctypes as c
-import os
 import struct
 import subprocess as sp
 import time
@@ -111,13 +110,13 @@ try:
     compositor = sp.Popen(['/etc/desktop/session.d/noodle-compositor'], stdout=log, stderr=log)
     processes.append(compositor)
     processes.append(sp.Popen(['tint2', '-c', '/etc/xdg/tint2/tint2rc'], stdout=log, stderr=log))
-    # --debug-rendering logs the OpenGL renderer kitty got, for a terminal that does not draw.
+    # With the image's own environment, as a session starts it. --debug-rendering logs the OpenGL renderer kitty got.
     processes.append(sp.Popen(['kitty', '--debug-rendering', '--config', '/etc/xdg/kitty/theme.conf',
                               '--title', 'Noodle Theme Verification',
                               '-o', 'initial_window_width=640', '-o', 'initial_window_height=420',
                               '-o', 'window_padding_width=8', '-o', 'cursor_blink_interval=0',
                               '/bin/sh', '-c', 'printf "Noodle Computer\\nBlack terminal. Rounded windows.\\n"; sleep 60'],
-                             env={**os.environ, 'LIBGL_ALWAYS_SOFTWARE': '1'}, stdout=log, stderr=log))
+                             stdout=log, stderr=log))
     for attempt in range(30):
         try:
             panel, terminal = geometry('^tint2$'), geometry('^Noodle Theme Verification$')
@@ -137,6 +136,13 @@ try:
     def pixel(px, py):
         value = x.XGetPixel(snapshot, px, py)
         return tuple((value >> shift) & 255 for shift in (16, 8, 0))
+    def png(width, height, step=1):
+        rows = b''.join(b'\x00' + bytes(channel for px in range(0, width * step, step) for channel in pixel(px, py))
+                        for py in range(0, height * step, step))
+        def chunk(kind, data):
+            return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
+        return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', width, height, 8, 2, 0, 0, 0)) +
+                chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
     # Software rendering can take a while to draw a terminal's first frame; until then its window shows the wallpaper.
     for attempt in range(20):
         snapshot = x.XGetImage(display, overlay, 0, 0, 1024, 768, c.c_ulong(-1), 2)
@@ -152,52 +158,15 @@ try:
         assert max(abs(a - b) for a, b in zip(pixel(px, panel['Y']), expected)) <= 8, \
             'Panel corner must reveal the wallpaper, not a square black corner'
     if max(middle) >= 10:
-        # A terminal that never drew shows the wallpaper here. Report every window and its state, and a quarter-size
-        # screenshot (a base64 PNG) of what the screen shows, beside the terminal's log.
-        # Name every visible top-level window over the point checked: what it is and which process owns it.
-        import re
-        cx, cy = terminal['X'] + terminal['WIDTH'] // 2, terminal['Y'] + terminal['HEIGHT'] // 2
-        covering = ''
-        for line in sp.run(['xwininfo', '-root', '-children'], capture_output=True, text=True).stdout.splitlines():
-            found = re.match(r'\s+(0x[0-9a-f]+)', line)
-            if not found:
-                continue
-            info = sp.run(['xwininfo', '-id', found[1]], capture_output=True, text=True).stdout
-            box = dict(re.findall(r'(Absolute upper-left X|Absolute upper-left Y|Width|Height):\s+(-?\d+)', info))
-            if 'IsViewable' not in info or len(box) < 4:
-                continue
-            left, top = int(box['Absolute upper-left X']), int(box['Absolute upper-left Y'])
-            if left <= cx < left + int(box['Width']) and top <= cy < top + int(box['Height']):
-                covering += f"{line.strip()}\n" + sp.run(
-                    f"xprop -id {found[1]} WM_CLASS WM_NAME _NET_WM_NAME _NET_WM_PID WM_COMMAND _NET_WM_WINDOW_TYPE "
-                    f"_NET_WM_STATE; xprop -id {found[1]} -notype | grep -E 'PID|CLIENT' ; "
-                    f"for p in $(xprop -id {found[1]} _NET_WM_PID | grep -oE '[0-9]+$'); do ps -o pid,args -p $p; done",
-                    shell=True, capture_output=True, text=True).stdout + '\n'
-        windows = sp.run('ps -eo pid,ppid,args', shell=True, capture_output=True, text=True)
-        # Unnamed windows say nothing of their owner: stop the session's processes one at a time, youngest picom
-        # first, and note which one takes each covering window with it.
-        stray = re.findall(r'^(0x[0-9a-f]+) ', covering, re.M)
-        owners = ''
-        for name in ['picom', 'dunst', 'dbus-launch', 'tint2', 'openbox']:
-            pids = sp.run(['pgrep', '-x', name], capture_output=True, text=True).stdout.split()
-            for pid in sorted(pids, key=int, reverse=True):
-                sp.run(['kill', pid])
-                time.sleep(1)
-                gone = [w for w in stray if sp.run(['xwininfo', '-id', w], capture_output=True).returncode != 0]
-                owners += f'stopped {name} ({pid}): gone {gone}\n'
-                stray = [w for w in stray if w not in gone]
-        windows.stdout = (f'Windows over ({cx}, {cy}), as xwininfo lists them:\n{covering}\nOwners:\n{owners}\n'
-                          f'Processes:\n{windows.stdout}')
-        small = b''.join(b'\x00' + bytes(channel for px in range(0, 1024, 4) for channel in pixel(px, py))
-                         for py in range(0, 768, 4))
-        def chunk(kind, data):
-            return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
-        screenshot = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', 256, 192, 8, 2, 0, 0, 0)) +
-                      chunk(b'IDAT', zlib.compress(small, 9)) + chunk(b'IEND', b''))
+        # A terminal that never drew shows the wallpaper here; so does one hidden by another window, such as a
+        # compositor's warning box. Report the windows stacked at that point, the processes, the log and a
+        # quarter-size screenshot as a base64 PNG.
         import base64
+        windows = sp.run(['xwininfo', '-root', '-children'], capture_output=True, text=True).stdout
+        processes_now = sp.run(['ps', '-eo', 'pid,ppid,args'], capture_output=True, text=True).stdout
         raise AssertionError(f'Terminal background must be black, found {middle} at {terminal}.\n'
-                             f'{windows.stdout}{windows.stderr}\nTerminal log:\n' + open(log.name).read() +
-                             '\nScreenshot:\n' + base64.b64encode(screenshot).decode())
+                             f'Windows:\n{windows}\nProcesses:\n{processes_now}\nLog:\n' + open(log.name).read() +
+                             '\nScreenshot:\n' + base64.b64encode(png(256, 192, step=4)).decode())
     # Include Openbox decorations: the client rectangle alone misses the frame.
     extents = sp.check_output(['xprop', '-id', str(terminal['WINDOW']), '_NET_FRAME_EXTENTS'], text=True)
     left, right, top, bottom = map(int, extents.split('=')[1].split(','))
@@ -210,13 +179,8 @@ try:
             assert pixel(px, py) == expected, 'Window corner must reveal the wallpaper'
     assert max(pixel((frame_x + frame_right) // 2, frame_y + 1)) < 30, 'Window titlebar must remain black'
     # Save the guest framebuffer for visual review, without capturing the host.
-    rows = b''.join(b'\x00' + bytes(channel for px in range(1024) for channel in pixel(px, py)) for py in range(768))
-    def chunk(kind, data):
-        return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
-    png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', 1024, 768, 8, 2, 0, 0, 0))
-    png += chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b'')
     with open('/tmp/noodle-desktop-theme.png', 'wb') as output:
-        output.write(png)
+        output.write(png(1024, 768))
     x.XDestroyImage(snapshot)
     x.XCloseDisplay(display)
     print('PASS: real terminal is black, panel corners and all four window corners are rounded')
@@ -289,16 +253,10 @@ try:
                 else:
                     assert max(pixel(cx, cy)) < 50, label + ': edge-to-edge corner must remain square: ' + str((cx, cy, pixel(cx, cy)))
             if save:
-                rows = b''.join(b'\x00' + bytes(channel for px in range(1024) for channel in pixel(px, py)) for py in range(768))
-                png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', 1024, 768, 8, 2, 0, 0, 0))
-                png += chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b'')
-                Path('/tmp/noodle-chromium-theme.png').write_bytes(png)
+                Path('/tmp/noodle-chromium-theme.png').write_bytes(png(1024, 768))
         except AssertionError:
             print(label, current, sp.check_output(['xprop', '-id', str(current['WINDOW']), '_NET_WM_STATE', '_GTK_FRAME_EXTENTS', '_NET_WM_OPAQUE_REGION'], text=True), flush=True)
-            rows = b''.join(b'\x00' + bytes(channel for px in range(1024) for channel in pixel(px, py)) for py in range(768))
-            png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', 1024, 768, 8, 2, 0, 0, 0))
-            png += chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b'')
-            Path('/tmp/noodle-chromium-theme-failure.png').write_bytes(png)
+            Path('/tmp/noodle-chromium-theme-failure.png').write_bytes(png(1024, 768))
             raise
         finally:
             x.XDestroyImage(snapshot)
