@@ -10,10 +10,10 @@ sudo -n -u agent test -w /workspace
 sudo -n -u agent test -w /home/agent
 case "${1:-}" in
   shell)
-    test -f /etc/alpine-release
-    # Network.ext4 currently depends on these Alpine applets.
+    # Every computer's network is set up from the Shell image with these, Alpine's or a Debian-family base's.
     command -v ip >/dev/null
     command -v udhcpc >/dev/null
+    test -x /usr/share/udhcpc/default.script || test -x /etc/udhcpc/default.script
     ;;
   desktop)
     test -x /init

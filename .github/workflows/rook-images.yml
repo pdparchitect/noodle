@@ -1,8 +1,9 @@
 name: Rook computer images
 
-# Rook's Shell and Desktop images are Noodle Computer's, built from Computer/Images with Rook's banner and
-# wallpaper from Incubator/Rook/Images/brand. They are versioned on their own, never with Noodle's images, and
-# run the same checks. A pull request builds and checks them; publishing is started by hand.
+# Rook's Shell and Desktop images are Noodle Computer's on Kali's base, with Rook's banner and wallpaper from
+# Incubator/Rook/Images/brand: the Desktop from Computer/Images, the Shell from Incubator/Rook/Images/shell. They are
+# versioned on their own, never with Noodle's images, and run the same checks. A pull request builds and checks them;
+# publishing is started by hand.
 on:
   pull_request:
     paths:
@@ -28,6 +29,8 @@ concurrency:
 env:
   IMAGE_PREFIX: rook-computer
   IMAGE_VERSION_FILE: Incubator/Rook/Images/VERSION
+  # Kali's rolling base, pinned; both images start from it.
+  KALI_IMAGE: docker.io/kalilinux/kali-rolling@sha256:69a9a33d98a584a537bd0f7144d20c3b6d23f3bafa9ffcf0cadf4c5f186d02ff
 
 jobs:
   build:
@@ -52,12 +55,22 @@ jobs:
         run: |
           set -eu
           for kind in shell desktop; do
+            dockerfile="Computer/Images/$kind/Dockerfile"
+            [ "$kind" = desktop ] || dockerfile="Incubator/Rook/Images/$kind/Dockerfile"
             docker buildx build --platform linux/arm64 --load \
               --build-arg IMAGE_VERSION="$IMAGE_VERSION" --build-arg SOURCE_REVISION="$GITHUB_SHA" \
               --build-arg IMAGE_PRODUCT="Rook" --build-arg DESKTOP_BRAND="Rook" \
+              --build-arg KALI_IMAGE="$KALI_IMAGE" --build-arg BASE_IMAGE="$KALI_IMAGE" \
               --build-context brand=Incubator/Rook/Images/brand \
-              --tag "$IMAGE_PREFIX-$kind-image:check" --file "Computer/Images/$kind/Dockerfile" Computer/Images
+              --tag "$IMAGE_PREFIX-$kind-image:check" --file "$dockerfile" Computer/Images
           done
+      # Computer copies the Shell onto a 256 MB disk to set up every computer's network.
+      - name: Keep the Shell small enough to set up networking
+        run: |
+          set -eu
+          size="$(docker image inspect --format '{{.Size}}' "$IMAGE_PREFIX-shell-image:check")"
+          echo "Shell image: $((size / 1048576)) MB"
+          [ "$size" -lt $((200 * 1048576)) ]
       - name: Verify both image contracts without networking or host mounts
         run: |
           set -eu

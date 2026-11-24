@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1.7
-# Both stages come directly from official upstream images. No Launcher layers.
-ARG UBUNTU_IMAGE=docker.io/library/ubuntu:24.04@sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254
+# Both stages come directly from official upstream images. No Launcher layers. BASE_IMAGE is Ubuntu's; another
+# product may pass its own Debian-family base, as Rook passes Kali's.
+ARG BASE_IMAGE=docker.io/library/ubuntu:24.04@sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254
 ARG NODE_IMAGE=docker.io/library/node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553
 FROM ${NODE_IMAGE} AS node-runtime
-FROM ${UBUNTU_IMAGE} AS surface-build
+FROM ${BASE_IMAGE} AS surface-build
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     gcc libc6-dev libx11-dev libxext-dev libxtst-dev libxcomposite-dev
 COPY desktop/build/desktop-surface.c /tmp/desktop-surface.c
@@ -13,7 +14,7 @@ RUN gcc -O2 -Wall -Werror -o /tmp/desktop-surface /tmp/desktop-surface.c -lX11 -
 FROM scratch AS brand
 COPY shared/noodle-welcome /welcome
 COPY desktop/overlay/usr/share/backgrounds/desktop-wallpaper.png /desktop-wallpaper.png
-FROM ${UBUNTU_IMAGE}
+FROM ${BASE_IMAGE}
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG TARGETARCH
 ARG IMAGE_VERSION=development
@@ -24,7 +25,7 @@ ARG CORTILE_VERSION=2.5.2
 ARG CORTILE_SHA256_ARM64=acebab88ef9e2301a25ce754838b3e8a5f6d800312436e871f2fad73b6f6fc9a
 ARG CORTILE_SHA256_AMD64=dcc104bb2dbdf5596b6de5e578b8988347200759ca5c1134f9d0bec3b19ef3dd
 LABEL org.opencontainers.image.title="${DESKTOP_BRAND}" \
-      org.opencontainers.image.description="Ubuntu desktop with Openbox on the virtual GPU and a shared browser session" \
+      org.opencontainers.image.description="Linux desktop with Openbox on the virtual GPU and a shared browser session" \
       org.opencontainers.image.source="https://github.com/pdparchitect/noodle" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
@@ -59,10 +60,14 @@ COPY --from=surface-build /tmp/desktop-surface /usr/local/bin/desktop-surface
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
     ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
-# Keep the desktop identity stable for saved homes, file transfers and sudo.
+# Keep the desktop identity stable for saved homes, file transfers and sudo. A base without Ubuntu's account gets one
+# from an empty skeleton, so a base's own prompt, such as Kali's, never replaces the desktop's.
 RUN if id ubuntu >/dev/null 2>&1; then \
       usermod -l agent -d /home/agent -m ubuntu && groupmod -n agent ubuntu; \
-    else groupadd --gid 1000 agent && useradd --uid 1000 --gid agent --create-home --home-dir /home/agent --shell /bin/bash agent; fi && \
+    else mkdir -p /tmp/empty-skeleton && groupadd --gid 1000 agent && \
+      useradd --uid 1000 --gid agent --create-home --home-dir /home/agent --skel /tmp/empty-skeleton --shell /bin/bash agent && \
+      rmdir /tmp/empty-skeleton; fi && \
+    { getent group input >/dev/null || groupadd --system input; } && \
     usermod -s /bin/bash -a -G video,input agent && \
     mkdir -p /workspace /etc/desktop/startup.d /etc/desktop/session.d /etc/desktop/conf.d \
       /etc/bash.bashrc.d /etc/sudoers.d /var/log/desktop && \

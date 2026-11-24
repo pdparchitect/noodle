@@ -16,9 +16,14 @@ mkdir -p /usr/share/doc/cortile
 find /tmp/cortile -iname '*license*' -exec cp {} /usr/share/doc/cortile/ \;
 rm -rf /tmp/cortile /tmp/cortile.tar.gz
 
-# Ubuntu Chromium is a Snap launcher. Use Debian's signed native package on
-# ARM64, including security updates, and Google's native Chrome on AMD64.
-if [ "$arch" = amd64 ]; then
+# Ubuntu Chromium is a Snap launcher. There, use Debian's signed native package on
+# ARM64, including security updates, and Google's native Chrome on AMD64. A Debian-family
+# base, such as Kali, has a native package of its own.
+. /etc/os-release
+if [ "$ID" != ubuntu ]; then
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends chromium
+elif [ "$arch" = amd64 ]; then
     curl -fsSL --retry 3 https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o /tmp/browser.deb
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends /tmp/browser.deb
     rm /tmp/browser.deb
