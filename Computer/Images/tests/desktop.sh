@@ -128,6 +128,9 @@ try:
         raise AssertionError('Panel or terminal did not appear')
     time.sleep(2)
     assert compositor.poll() is None, 'Desktop compositor exited: ' + open(log.name).read()
+    # Picom 13 puts a warning box over the middle of the desktop for any deprecated setting.
+    deprecated = [line for line in open(log.name) if ' WARN ' in line and 'deprecated' in line]
+    assert not deprecated, 'Desktop compositor settings are deprecated:\n' + ''.join(deprecated)
     display = x.XOpenDisplay(None)
     # The root drawable contains uncomposited frames. Read the presentation overlay.
     overlay = composite.XCompositeGetOverlayWindow(display, x.XDefaultRootWindow(display))

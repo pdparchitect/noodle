@@ -89,6 +89,7 @@ RUN chmod 0755 /init /usr/local/bin/desktop-* /usr/local/bin/chromium /usr/local
     python3 /tmp/generate-gtk-resource-overlay.py /usr/share/themes/Desktop/openbox-3 /usr/share/desktop/gtk-overlay && \
     rm /tmp/generate-gtk-resource-overlay.py && \
     printf '\nHidden=true\n' >> /etc/xdg/autostart/picom.desktop && \
+    { ! picom --version | grep -Eq '^v(1[3-9]|[2-9][0-9])' || sed -i 's/@\[\*\]:32a/@[*]/g' /etc/xdg/picom.conf; } && \
     printf '\n[ ! -d /etc/bash.bashrc.d ] || for f in /etc/bash.bashrc.d/*.sh; do [ ! -r "$f" ] || . "$f"; done\n' >> /etc/bash.bashrc && \
     ln -s /etc/noodle/interactive-shell.sh /etc/profile.d/noodle-welcome.sh && \
     ln -s /etc/noodle/interactive-shell.sh /etc/bash.bashrc.d/noodle-welcome.sh && \
