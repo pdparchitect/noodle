@@ -23,14 +23,24 @@ ACCEPT = ", ".join([
 
 
 class Registry:
-    def __init__(self, kind):
+    def __init__(self, kind, missing_ok=False):
         self.repo = f"pdparchitect/{PREFIX}-{kind}-image"
         query = urlencode({"service": "ghcr.io", "scope": f"repository:{self.repo}:pull"})
         # This is an anonymous, pull-only registry token, never a saved login.
-        with urlopen(f"https://ghcr.io/token?{query}", timeout=60) as response:
-            self.token = json.load(response)["token"]
+        try:
+            with urlopen(f"https://ghcr.io/token?{query}", timeout=60) as response:
+                self.token = json.load(response)["token"]
+        except HTTPError as error:
+            # GHCR refuses an anonymous token for a package that does not exist yet, or is not yet
+            # public after a first push: nothing of it is published to compare against.
+            if missing_ok and error.code == 403:
+                self.token = None
+            else:
+                raise
 
     def get(self, path, missing_ok=False):
+        if self.token is None:
+            return None
         request = Request(f"https://ghcr.io/v2/{self.repo}/{path}", headers={
             "Authorization": "Bearer " + self.token, "Accept": ACCEPT})
         try:
@@ -76,7 +86,7 @@ def main():
         raise ValueError("Expected preflight, verify or channel")
     version = (ROOT / VERSION_FILE).read_text().strip()
     for kind in ("shell", "desktop"):
-        registry = Registry(kind)
+        registry = Registry(kind, missing_ok=command == "preflight")
         published = registry.image(version, missing_ok=command == "preflight")
         if command == "preflight":
             local = json.loads(subprocess.check_output([
