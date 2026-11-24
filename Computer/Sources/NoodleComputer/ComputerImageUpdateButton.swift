@@ -84,6 +84,7 @@ struct ComputerImageUpgradeSheet: View {
                 ProgressView(value: session.updateProgress)
                 Text(session.updateStatus ?? "Upgrading the computer image…").font(.caption).foregroundStyle(.secondary)
             }
+            Divider()
             HStack {
                 Spacer()
                 if case .finished = upgrade.stage {
