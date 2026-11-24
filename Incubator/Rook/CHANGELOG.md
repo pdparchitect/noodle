@@ -8,6 +8,7 @@
 
 ### Fixed
 
+- A computer that cannot be made, started or upgraded says why, as when the Mac's disk is full. Rook showed nothing, so an upgrade that failed looked as if it had done nothing.
 - Computers offer Upgrade when a newer Rook image is published, as in Noodle Computer: the sidebar says Upgrade available, and Upgrade is in the computer’s context menu and Edit Computer. The upgrade shows its progress in a window of its own. Rook never checked, so computers kept the image they were made with.
 - Rook’s Shell and Desktop computers are called rook-computer, and sudo in them no longer warns “unable to resolve host”.
 - Upgrading a computer from the Ubuntu-based images to the Kali-based ones no longer breaks it, with programs such as nmap missing their libraries. Home folders and /workspace come across; programs you installed need installing again.

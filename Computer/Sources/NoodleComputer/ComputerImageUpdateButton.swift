@@ -43,13 +43,14 @@ private struct ComputerImageUpgradePresenter: ViewModifier {
 
 /// One image upgrade, run apart from its window so nothing closing around it cancels it; only Cancel Upgrade does.
 @MainActor final class ComputerImageUpgrade: ObservableObject {
-    enum Stage: Equatable { case upgrading, finished(String), closed }
+    enum Stage: Equatable { case upgrading, finished(String), failed(String), closed }
     @Published private(set) var stage = Stage.upgrading
     private let session: ComputerSession
-    private let perform: @MainActor () async -> Void
+    /// Runs the upgrade and returns why it failed, if it did.
+    private let perform: @MainActor () async -> String?
     private var started = false
 
-    init(session: ComputerSession, perform: @escaping @MainActor () async -> Void) {
+    init(session: ComputerSession, perform: @escaping @MainActor () async -> String?) {
         self.session = session
         self.perform = perform
     }
@@ -57,9 +58,9 @@ private struct ComputerImageUpgradePresenter: ViewModifier {
     func run() async {
         guard !started else { return }
         started = true
-        await perform()
-        // A failure is reported by the app's own error alert, and a cancelled upgrade needs no result.
-        stage = session.updateResult.map(Stage.finished) ?? .closed
+        let failure = await perform()
+        // A cancelled upgrade ends with neither, and needs nothing more.
+        stage = failure.map(Stage.failed) ?? session.updateResult.map(Stage.finished) ?? .closed
     }
 }
 
@@ -72,24 +73,31 @@ struct ComputerImageUpgradeSheet: View {
     init(store: ComputerStore, session: ComputerSession) {
         self.store = store
         self.session = session
-        _upgrade = StateObject(wrappedValue: ComputerImageUpgrade(session: session) { await store.updateImage(session) })
+        _upgrade = StateObject(wrappedValue: ComputerImageUpgrade(session: session) {
+            await store.updateImage(session)
+            // Shown here, where the upgrade was asked for, and not again by the app.
+            defer { store.error = nil }
+            return store.error
+        })
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Upgrade \(session.computer.name)").font(.headline)
-            if case .finished(let result) = upgrade.stage {
-                Text(result).foregroundStyle(.secondary)
-            } else {
+            switch upgrade.stage {
+            case .finished(let message), .failed(let message):
+                Text(message).foregroundStyle(.secondary).textSelection(.enabled)
+            case .upgrading, .closed:
                 ProgressView(value: session.updateProgress)
                 Text(session.updateStatus ?? "Upgrading the computer image…").font(.caption).foregroundStyle(.secondary)
             }
             Divider()
             HStack {
                 Spacer()
-                if case .finished = upgrade.stage {
+                switch upgrade.stage {
+                case .finished, .failed:
                     Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
-                } else {
+                case .upgrading, .closed:
                     Button("Cancel Upgrade") { store.cancelImageUpdate(session) }
                 }
             }

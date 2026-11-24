@@ -26,6 +26,9 @@ struct MainWindow: View {
                 .background(WelcomeCloseGuard { model.finishWelcome() })
                 .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
                 .onAppear { window.openMain = { openWindow(id: "main") } }
+        } else if let computers {
+            // Noodle Computer's alert: a computer that cannot be made, started or upgraded says why.
+            content.computerErrorAlert(store: computers.store)
         } else {
             content
         }

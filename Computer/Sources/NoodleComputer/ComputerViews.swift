@@ -11,6 +11,34 @@ import Virtualization
 // The views a computer is made, shown and changed in. Noodle Computer's library window uses them, and so do
 // apps that host the engine and compile this file, as Rook does; keep it free of the app's own types.
 
+extension View {
+  /// The computers' errors as an alert, with the way to fix one when there is a way. Every app that runs them shows these.
+  func computerErrorAlert(store: ComputerStore) -> some View { modifier(ComputerErrorAlert(store: store)) }
+}
+
+private struct ComputerErrorAlert: ViewModifier {
+  @ObservedObject var store: ComputerStore
+
+  func body(content: Content) -> some View {
+    content.alert(
+      store.errorRecovery?.title ?? ComputerAppIdentity.name,
+      isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })
+    ) {
+      if let recovery = store.errorRecovery {
+        Button(recovery.actionTitle) {
+          store.error = nil
+          do { try recovery.open() } catch { store.error = error.localizedDescription }
+        }
+        Button("Cancel", role: .cancel) { store.error = nil }
+      } else {
+        Button("OK") { store.error = nil }
+      }
+    } message: {
+      Text(store.error ?? "")
+    }
+  }
+}
+
 struct ComputerDetailView: View {
   @ObservedObject var store: ComputerStore
   @ObservedObject var session: ComputerSession

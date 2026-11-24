@@ -564,22 +564,7 @@ struct ComputerLibraryView: View {
       if !ids.contains(store.selection ?? UUID()) { store.selection = ids.first }
     }
     .task { await store.watchImageUpdates() }
-    .alert(
-      store.errorRecovery?.title ?? ComputerAppIdentity.name,
-      isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })
-    ) {
-      if let recovery = store.errorRecovery {
-        Button(recovery.actionTitle) {
-          store.error = nil
-          do { try recovery.open() } catch { store.error = error.localizedDescription }
-        }
-        Button("Cancel", role: .cancel) { store.error = nil }
-      } else {
-        Button("OK") { store.error = nil }
-      }
-    } message: {
-      Text(store.error ?? "")
-    }
+    .computerErrorAlert(store: store)
   }
 }
 

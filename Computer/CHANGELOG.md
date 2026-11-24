@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Upgrading a computer’s image shows its progress in a window of its own, with Cancel Upgrade, then the result, instead of inside Edit Computer.
+- Upgrading a computer’s image shows its progress in a window of its own, with Cancel Upgrade, then the result or why it failed, instead of inside Edit Computer.
 
 ### Fixed
 
