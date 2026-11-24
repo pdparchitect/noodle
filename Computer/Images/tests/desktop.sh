@@ -111,7 +111,8 @@ try:
     compositor = sp.Popen(['/etc/desktop/session.d/noodle-compositor'], stdout=log, stderr=log)
     processes.append(compositor)
     processes.append(sp.Popen(['tint2', '-c', '/etc/xdg/tint2/tint2rc'], stdout=log, stderr=log))
-    processes.append(sp.Popen(['kitty', '--config', '/etc/xdg/kitty/theme.conf',
+    # --debug-rendering logs the OpenGL renderer kitty got, for a terminal that does not draw.
+    processes.append(sp.Popen(['kitty', '--debug-rendering', '--config', '/etc/xdg/kitty/theme.conf',
                               '--title', 'Noodle Theme Verification',
                               '-o', 'initial_window_width=640', '-o', 'initial_window_height=420',
                               '-o', 'window_padding_width=8', '-o', 'cursor_blink_interval=0',
@@ -130,17 +131,23 @@ try:
     display = x.XOpenDisplay(None)
     # The root drawable contains uncomposited frames. Read the presentation overlay.
     overlay = composite.XCompositeGetOverlayWindow(display, x.XDefaultRootWindow(display))
-    snapshot = x.XGetImage(display, overlay, 0, 0, 1024, 768, c.c_ulong(-1), 2)
     def pixel(px, py):
         value = x.XGetPixel(snapshot, px, py)
         return tuple((value >> shift) & 255 for shift in (16, 8, 0))
+    # Software rendering can take a while to draw a terminal's first frame; until then its window shows the wallpaper.
+    for attempt in range(20):
+        snapshot = x.XGetImage(display, overlay, 0, 0, 1024, 768, c.c_ulong(-1), 2)
+        middle = pixel(terminal['X'] + terminal['WIDTH'] // 2, terminal['Y'] + terminal['HEIGHT'] // 2)
+        if max(middle) < 10 or attempt == 19:
+            break
+        x.XDestroyImage(snapshot)
+        time.sleep(0.5)
     assert max(pixel(panel['X'] + panel['WIDTH'] // 2, panel['Y'] + 18)) < 30, 'Panel must remain black'
     # Compared with the wallpaper itself, so a dark one, such as Rook's, is checked as well as a light one.
     for px in (panel['X'], panel['X'] + panel['WIDTH'] - 1):
         expected = tuple((wallpaper[panel['Y']][px] >> shift) & 255 for shift in (16, 8, 0))
         assert max(abs(a - b) for a, b in zip(pixel(px, panel['Y']), expected)) <= 8, \
             'Panel corner must reveal the wallpaper, not a square black corner'
-    middle = pixel(terminal['X'] + terminal['WIDTH'] // 2, terminal['Y'] + terminal['HEIGHT'] // 2)
     # A terminal that never drew shows the wallpaper here; its log says why.
     assert max(middle) < 10, f'Terminal background must be black, found {middle}:\n' + open(log.name).read()
     # Include Openbox decorations: the client rectangle alone misses the frame.
