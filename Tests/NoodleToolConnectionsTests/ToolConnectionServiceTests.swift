@@ -132,6 +132,8 @@ private final class FixtureState: @unchecked Sendable {
     var mcpNeedsAuthorization = false
     var registrationMissing = false
     var metadataDocumentClients = false
+    /// Whether registration refuses redirects that are not https, as Cloudflare's does.
+    var httpsRedirectsOnly = false
     var tokenRedirects: [String] = []
     var listedIssuer = "https://service.example"
     var reportedIssuer = "https://service.example"
@@ -154,6 +156,10 @@ private final class FixtureState: @unchecked Sendable {
                               "client_id_metadata_document_supported": metadataDocumentClients] as [String: Any?]).compactMapValues { $0 })
             case "/register":
                 registrations += 1
+                let body = (try? JSONSerialization.jsonObject(with: Self.body(request))) as? [String: Any]
+                if httpsRedirectsOnly, (body?["redirect_uris"] as? [String])?.allSatisfy({ $0.hasPrefix("https://") }) != true {
+                    return (400, ["error": "invalid_client_metadata", "error_description": "Redirect URI must use https"])
+                }
                 return (201, ["client_id": "client-\(registrations)", "token_endpoint_auth_method": "none"])
             case "/v3/files/abc":
                 queries[request.url!.path, default: []].append(request.url!.query ?? "")
@@ -1592,6 +1598,37 @@ final class ToolConnectionServiceTests: XCTestCase {
         XCTAssertEqual(FixtureProtocol.state.registrations, 0)
         XCTAssertEqual(FixtureProtocol.state.tokenRedirects, ["https://usenoodle.app/oauth/callback/dev/"])
         XCTAssertEqual(vault.load(record.id)?.accessToken, "private-token")
+    }
+    func testRegistrationRefusingTheAppAddressUsesTheRelay() async throws {
+        FixtureProtocol.state.httpsRedirectsOnly = true
+        let vault = TestVault()
+        let record = try ToolConnection(name: "Test", endpoint: endpoint)
+        try await service(vault: vault).signIn(record, redirectURI: redirect) { url in
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
+            XCTAssertEqual(query.first { $0.name == "client_id" }?.value, "client-2")
+            XCTAssertEqual(query.first { $0.name == "redirect_uri" }?.value, "https://usenoodle.app/oauth/callback/dev/")
+            var callback = URLComponents(url: self.redirect, resolvingAgainstBaseURL: false)!
+            callback.queryItems = [.init(name: "code", value: "one-time-code"), query.first { $0.name == "state" }!]
+            return callback.url!
+        }
+        XCTAssertEqual(FixtureProtocol.state.tokenRedirects, ["https://usenoodle.app/oauth/callback/dev/"])
+        XCTAssertEqual(vault.load(record.id)?.accessToken, "private-token")
+    }
+    func testRegistrationRefusingAnUnknownAppAddressFails() async throws {
+        FixtureProtocol.state.httpsRedirectsOnly = true
+        let vault = TestVault()
+        let record = try ToolConnection(name: "Test", endpoint: endpoint)
+        do {
+            try await service(vault: vault).signIn(record, redirectURI: URL(string: "other-app://mcp/oauth/callback")!, browser: Self.callback)
+            XCTFail("Sign-in without a usable client accepted")
+        } catch {
+            guard case .network(400)? = error as? ToolConnectionServiceError else { return XCTFail("\(error)") }
+        }
+        XCTAssertEqual(FixtureProtocol.state.registrations, 1)
+    }
+    func testPionHasRelays() {
+        XCTAssertEqual(MCPOAuth.relays["pion://mcp/oauth/callback"]?.absoluteString, "https://usenoodle.app/oauth/callback/pion/")
+        XCTAssertEqual(MCPOAuth.relays["pion-dev://mcp/oauth/callback"]?.absoluteString, "https://usenoodle.app/oauth/callback/pion/dev/")
     }
     func testPublishedClientMetadataListsEveryRelay() throws {
         let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../website/oauth/client.json")

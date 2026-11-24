@@ -219,18 +219,31 @@ struct MCPOAuth {
         }
         // Public desktop clients use PKCE, never embedded client secrets.
         await progress("Registering this connection…")
-        let registered = try await request(registration, json: [
-            "client_name": clientName, "redirect_uris": [redirect.absoluteString],
-            "grant_types": ["authorization_code", "refresh_token"],
-            "response_types": ["code"], "token_endpoint_auth_method": "none"
-        ])
+        func register(_ address: URL) async throws -> Object {
+            try await request(registration, json: [
+                "client_name": clientName, "redirect_uris": [address.absoluteString],
+                "grant_types": ["authorization_code", "refresh_token"],
+                "response_types": ["code"], "token_endpoint_auth_method": "none"
+            ])
+        }
+        var relay: URL?
+        let registered: Object
+        do {
+            registered = try await register(redirect)
+        } catch ToolConnectionServiceError.network(400) {
+            // Some services, such as Cloudflare, register only https addresses; the relay page is one
+            // and hands the result on to the app's own address.
+            guard let known = Self.relays[redirect.absoluteString] else { throw ToolConnectionServiceError.network(400) }
+            relay = known
+            registered = try await register(known)
+        }
         guard let clientID = registered["client_id"] as? String, !clientID.isEmpty,
               (registered["token_endpoint_auth_method"] as? String ?? "none") == "none" else {
             throw ToolConnectionServiceError.registrationUnsupported
         }
         return MCPCredentials(endpoint: endpoint, issuer: issuer, authorizationEndpoint: authorization,
                               tokenEndpoint: token, clientID: clientID, redirectURI: redirect,
-                              revocationEndpoint: revocation, resource: resource, scope: scope)
+                              relayURI: relay, revocationEndpoint: revocation, resource: resource, scope: scope)
     }
 
     /// Revokes a sign-in at the service, as RFC 7009 has it: its refresh token, which takes its access tokens with it.
@@ -258,7 +271,9 @@ struct MCPOAuth {
     static let relays: [String: URL] = [
         "noodle://mcp/oauth/callback": URL(string: "https://usenoodle.app/oauth/callback/")!,
         "noodle-dev://mcp/oauth/callback": URL(string: "https://usenoodle.app/oauth/callback/dev/")!,
-        "noodle-mobile://mcp/oauth/callback": URL(string: "https://usenoodle.app/oauth/callback/mobile/")!
+        "noodle-mobile://mcp/oauth/callback": URL(string: "https://usenoodle.app/oauth/callback/mobile/")!,
+        "pion://mcp/oauth/callback": URL(string: "https://usenoodle.app/oauth/callback/pion/")!,
+        "pion-dev://mcp/oauth/callback": URL(string: "https://usenoodle.app/oauth/callback/pion/dev/")!
     ]
 
     /// Metadata must name the issuer it was discovered for. Some servers list it with

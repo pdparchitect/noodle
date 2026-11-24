@@ -6,7 +6,9 @@
   "redirect_uris": [
     "https://usenoodle.app/oauth/callback/",
     "https://usenoodle.app/oauth/callback/dev/",
-    "https://usenoodle.app/oauth/callback/mobile/"
+    "https://usenoodle.app/oauth/callback/mobile/",
+    "https://usenoodle.app/oauth/callback/pion/",
+    "https://usenoodle.app/oauth/callback/pion/dev/"
   ],
   "grant_types": ["authorization_code", "refresh_token"],
   "response_types": ["code"],
