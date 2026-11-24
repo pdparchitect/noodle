@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="2160" viewBox="0 0 3840 2160">
+  <!-- Rook's desktop: its symbol, small and centred, lit by a crimson glow on near-black. Every group marked
+       data-symbol receives the parts of Support/AppSymbol.svg from scripts/generate-wallpaper.sh. -->
+  <defs>
+    <!-- One wide glow, tilted, that fades to near-black in the top-left and bottom-right corners. -->
+    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1"
+                    gradientTransform="translate(2060 1010) rotate(-22) scale(2350 1080)">
+      <stop offset="0" stop-color="#7a1132"/>
+      <stop offset="0.5" stop-color="#480b21"/>
+      <stop offset="1" stop-color="#0f0709"/>
+    </radialGradient>
+    <!-- Rook's crimson, lighter at the top, as if lit from above. -->
+    <linearGradient id="symbol-shade" gradientUnits="userSpaceOnUse" x1="450" y1="300" x2="804" y2="1018">
+      <stop offset="0" stop-color="#e2687f"/>
+      <stop offset="1" stop-color="#a62b47"/>
+    </linearGradient>
+  </defs>
+  <rect width="3840" height="2160" fill="url(#glow)"/>
+  <!-- The symbol's own centre (627, 659) on the desktop's, at half its size. -->
+  <g transform="translate(1920 1080) scale(0.5) translate(-627 -659)">
+    <g data-symbol="" fill="url(#symbol-shade)" fill-rule="evenodd"/>
+  </g>
+</svg>
