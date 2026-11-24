@@ -78,7 +78,6 @@ struct StorageView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 580)
         .fixedSize(horizontal: false, vertical: true)
         .onReceive(Publishers.MergeMany(model.sessions.map { session in
             session.$phase.map { (session.id, $0.busy) }.eraseToAnyPublisher()
