@@ -3,9 +3,16 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// Microsoft Azure: activity, security alerts, resources and access, reached as an app registered in the tenant.
-/// Each account is one subscription. Microsoft Azure Detection only reads; Microsoft Azure Containment, a tool of its own
-/// with an app registration of its own, acts.
+/// Microsoft Azure: activity, security alerts, resources and access, read through Azure Resource Manager as the admin
+/// who signs in. Each account is one subscription. Microsoft Azure Detection only reads; Microsoft Azure Containment, a
+/// tool of its own with a sign-in of its own, acts.
+///
+/// Both sign in as Microsoft Entra ID's tools do: OAuth at the tenant's own address, an authorization code and PKCE,
+/// through a public client app registration made for each tool, with no client secret. The one delegated permission
+/// Azure Resource Manager has, user_impersonation, lets a sign-in do whatever the admin's Azure roles allow, so each
+/// tool's setup gives its admin only the roles the tool needs, which check-access reports.
+///
+/// Both tools' guide is Incubator/Pion/docs/tools/azure.md. Change it with the setup steps, roles or operations here.
 public enum Azure {
     public static let preset = ToolDefinition(
         id: "bb70fbdc-96ea-4c56-91cf-b1b29fe91328", name: "Microsoft Azure Detection",
@@ -37,21 +44,42 @@ public enum Azure {
         Defender for Cloud alerts may also appear in Microsoft Defender XDR (alerts_v2 serviceSource microsoftDefenderForCloud) under a different ID, so match them up.
         """,
         iconName: "azure",
-        configuration: .connection(.init(endpointTemplate: "https://management.azure.com",
-            fields: [ToolField(key: "tenant", title: "Directory (tenant) ID", placeholder: "contoso.onmicrosoft.com", kind: .identifier),
-                     ToolField(key: "subscription", title: "Subscription ID", placeholder: "8a7f3c2e-0000-4000-8000-000000000002", kind: .identifier)],
-            clientCredentials: ClientCredentialsPreset(tokenEndpointTemplate: "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
-                                                       scope: "https://management.azure.com/.default"),
-            adapter: "azure")),
+        configuration: .connection(.init(endpointTemplate: "https://management.azure.com", fields: fields,
+                                         oauth: Entra.oauth(scopes: scopes), oauthClientField: "clientID", oauthPathField: "tenant",
+                                         oauthPathExcludes: Entra.generic, adapter: "azure")),
         setup: setup)
 
-    static let setup = [
-        "In the [Microsoft Entra admin center](https://entra.microsoft.com), open **App registrations** and choose **New registration**. Name it, such as Pion Detection, keep **Single tenant** and leave the redirect URI empty. It needs no API permissions.",
-        "Under **Certificates & secrets**, add a client secret and copy its **Value**, not its Secret ID; it is shown only once.",
-        "In the [Azure portal](https://portal.azure.com), open the subscription, choose **Access control (IAM) › Add role assignment**, and give the app the **Reader** and **Security Reader** roles. Neither can change anything.",
-        "Optionally, to watch for a Global Administrator elevating access, which Azure records only in the directory's own activity log, have a Global Administrator give the app **Monitoring Reader** at the root scope (`/`). Without it the watch says it cannot read that log.",
-        "Copy the **Subscription ID** from the subscription's **Overview**, and the **Directory (tenant) ID** and **Application (client) ID** from the app's **Overview**. Then choose **Add & Connect** and ask an agent to run check-access.",
+    /// Microsoft Entra ID's tenant and client ID, and the subscription the account reads or acts on.
+    static let fields = Entra.fields + [ToolField(key: "subscription", title: "Subscription ID", placeholder: "8a7f3c2e-0000-4000-8000-000000000003", kind: .identifier)]
+
+    /// Azure Resource Manager's resource, which its tokens must name.
+    static let resource = "https://management.azure.com"
+    /// Its one delegated permission, the same for both tools: what a sign-in may do is what the admin's Azure roles allow.
+    static let permission = "user_impersonation"
+    static let scopes = [resource + "/" + permission]
+
+    /// The app registration a tool signs in through, as Microsoft Entra ID's tools make theirs, for an API other than
+    /// Microsoft Graph: `api` says where the app's API permissions list it, and `resource` is what its tokens name.
+    static func appSteps(_ name: String, api: String, permission: String, resource: String) -> [String] {
+        [
+            "In the [Microsoft Entra admin center](https://entra.microsoft.com), open **App registrations** and choose **New registration**. Name it \(name), kept for this tool alone, and keep **Single tenant**. Under **Redirect URI**, choose **Public client/native (mobile & desktop)** and give \(Entra.redirects). Add no client secret or certificate: Pion keeps none and signs in with PKCE.",
+            "Under **API permissions**, choose **Add a permission**, then \(api), choose **Delegated permissions** and add exactly `\(permission)`; remove Microsoft Graph's `User.Read`, which a new app is given. Choose **Grant admin consent**. Pion asks for it, as `\(resource)/\(permission)`, and `offline_access`, and refuses a sign-in that lacks either.",
+            "Under **Enterprise applications**, open the app: in **Properties**, set **Assignment required?** to **Yes**, and under **Users and groups** assign only the admin who will sign in.",
+        ]
+    }
+
+    static let armAPI = "**Azure Service Management** under **Microsoft APIs**"
+
+    static let setup = appSteps("Pion Azure Detection", api: armAPI, permission: permission, resource: resource) + [
+        "Each request acts as the signed-in admin, with their own Azure roles: `user_impersonation` adds no rights of its own. Keep an admin for Pion Azure Detection alone, such as pion-azure-detection@contoso.com. In the [Azure portal](https://portal.azure.com), open the subscription, choose **Access control (IAM) › Add role assignment**, and give that admin only the **Reader** and **Security Reader** roles there. Neither can change anything.",
+        "Optionally, to watch for a Global Administrator elevating access, which Azure records only in the directory's own activity log, have a Global Administrator give that admin **Monitoring Reader** at the root scope (`/`). Without it the watch says it cannot read that log.",
+        "Give the **Directory (tenant) ID** and the app's **Application (client) ID** from its **Overview**, and the **Subscription ID** from the subscription's **Overview**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
+
+    /// A line of check-access naming the app the sign-in went through and what it asked for.
+    static func signInLine(_ service: ServiceClient, scopes: [String]) -> String {
+        "· Signed in through the app \(service.settings["clientID"] ?? "named in Settings › Tools"), asking for \((scopes + ["offline_access"]).joined(separator: ", ")). Every request acts as the signed-in admin, with their own roles, not the app's."
+    }
 
     /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
     static let operations: [any ServiceOperation] = [
@@ -190,11 +218,11 @@ public enum Azure {
         case ServiceError.rejected(let reason):
             let lower = reason?.lowercased() ?? ""
             if lower.contains("invalidauthenticationtokentenant") || lower.contains("wrong issuer") {
-                return "the subscription is not in the directory this connection signs in to: check the Directory (tenant) ID and Subscription ID in Settings › Tools."
+                return "the subscription is not in the tenant this connection signs in to: check the Directory (tenant) ID and Subscription ID in Settings › Tools, and sign in again."
             }
-            return "Azure did not accept the app's sign-in: check the Directory (tenant) ID, Application (client) ID and client secret, which may have expired, in Settings › Tools."
+            return "Microsoft did not accept the sign-in: it expired or was revoked, the admin's account was disabled or their password changed, or a Conditional Access policy now blocks it. Connect the tool again in Settings › Tools."
         case ServiceError.forbidden:
-            return "the app may not read this: give it \(need.role) on \(need.scope) in the Azure portal's Access control (IAM), then allow a few minutes for it to apply."
+            return "the signed-in admin may not read this: give them \(need.role) on \(need.scope) in the Azure portal's Access control (IAM), then allow a few minutes for it to apply."
         case ServiceError.refused(let reason): said = reason
         case ServiceError.status(_, let reason): said = reason ?? ""
         default: return nil
@@ -571,12 +599,12 @@ extension Azure {
     }
 
     /// Tries each thing Microsoft Azure Detection reads once, says what works and what to change for what does not, which
-    /// Defender plans raise alerts, and whether the app could change anything.
+    /// Defender plans raise alerts, whether the signed-in admin could change anything, and what the sign-in asked for.
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
         static let jobs: Set<ToolJob> = [.detection, .audit]
-        static let summary = "Tries each thing this tool reads once and says what works and, for what does not, exactly what to change: a role, the subscription or tenant, or the app's secret; which Defender for Cloud plans are on, as only they raise threat alerts; whether the directory activity log, where elevated access is recorded, can be read; and whether the app could change anything. It changes nothing."
+        static let summary = "Tries each thing this tool reads once and says what works and, for what does not, exactly what to change: the signed-in admin's role, the subscription or tenant, or signing in again; which Defender for Cloud plans are on, as only they raise threat alerts; whether the directory activity log, where elevated access is recorded, can be read; whether the signed-in admin could change anything; and the app and permission it signed in with. It changes nothing."
         static let input = JSONSchema.object([:])
 
         struct Permissions: Decodable { let actions: [String]?, notActions: [String]? }
@@ -628,18 +656,19 @@ extension Azure {
                                            query: ["api-version": Azure.activityVersion, "$filter": hour, "$select": "eventDataId"])
                 lines.append("✓ \(Need.directory.title): readable, so the watch sees a Global Administrator elevating access.")
             } catch {
-                lines.append("· \(Need.directory.title), where Azure records a Global Administrator elevating access to every subscription: not readable, so the watch cannot see that. To read it, have a Global Administrator give the app Monitoring Reader at the root scope (/). It said: \(error.localizedDescription)")
+                lines.append("· \(Need.directory.title), where Azure records a Global Administrator elevating access to every subscription: not readable, so the watch cannot see that. To read it, have a Global Administrator give the signed-in admin Monitoring Reader at the root scope (/). It said: \(error.localizedDescription)")
             }
             do {
                 let held = try await service.get(Azure.path(service, "Microsoft.Authorization", "permissions"),
                                                  query: ["api-version": Azure.authorizationVersion], as: List<Permissions>.self).value
                 let changes = Array(Set(held.flatMap { $0.actions ?? [] }.filter(Self.changes))).sorted()
                 lines.append(changes.isEmpty
-                    ? "✓ The app cannot change the subscription: it holds no write, delete or wildcard action there."
-                    : "⚠ The app can change the subscription: it holds \(changes.prefix(5).joined(separator: ", "))\(changes.count > 5 ? " and more" : ""). Microsoft Azure Detection only reads, so give it only Reader and Security Reader; Microsoft Azure Containment has an app of its own.")
+                    ? "✓ The signed-in admin cannot change the subscription: their roles hold no write, delete or wildcard action there."
+                    : "⚠ The signed-in admin can change the subscription: their roles hold \(changes.prefix(5).joined(separator: ", "))\(changes.count > 5 ? " and more" : ""). Microsoft Azure Detection only reads, but its sign-in may do all the admin may, so keep an admin for it with only Reader and Security Reader; Microsoft Azure Containment signs in as an admin of its own.")
             } catch {
-                lines.append("· Whether the app could change the subscription: not checked: \(error.localizedDescription)")
+                lines.append("· Whether the signed-in admin could change the subscription: not checked: \(error.localizedDescription)")
             }
+            lines.append(Azure.signInLine(service, scopes: Azure.scopes))
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
         }
     }

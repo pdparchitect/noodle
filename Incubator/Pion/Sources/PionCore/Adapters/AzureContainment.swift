@@ -2,10 +2,10 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// Microsoft Azure Containment: acting on one subscription to contain an incident, through an app registration of its
-/// own, kept apart from Microsoft Azure Detection's so the detection app stays read-only. Every resource it acts on must be
-/// inside the account's subscription, and what cuts off access, stops a VM or deletes something waits for the
-/// champion's approval.
+/// Microsoft Azure Containment: acting on one subscription to contain an incident, signed in through an app registration
+/// of its own as an admin of its own whose only role is a custom one with the actions it takes, kept apart from
+/// Microsoft Azure Detection's so the detection sign-in stays read-only. Every resource it acts on must be inside the
+/// account's subscription, and what cuts off access, stops a VM or deletes something waits for the champion's approval.
 extension Azure {
     public static let containment = ToolDefinition(
         id: "116a2a76-6172-4054-bef0-739517b2ecb9", name: "Microsoft Azure Containment",
@@ -29,22 +29,18 @@ extension Azure {
         deallocate-vm, isolate-vm, unisolate-vm, rotate-storage-key, restrict-storage and close-alert are held for the \
         champion's approval: give the exact resource, and in --approval-reason why, the expected effect and how to undo \
         it, with the Investigation as --approval-conversation. Run check-access when something is refused, and tell the \
-        champion exactly what it says to add to the app's role.
+        champion exactly what it says to add to the signed-in admin's role.
         """,
         iconName: "azure",
-        configuration: .connection(.init(endpointTemplate: "https://management.azure.com",
-            fields: [ToolField(key: "tenant", title: "Directory (tenant) ID", placeholder: "contoso.onmicrosoft.com", kind: .identifier),
-                     ToolField(key: "subscription", title: "Subscription ID", placeholder: "8a7f3c2e-0000-4000-8000-000000000002", kind: .identifier)],
-            clientCredentials: ClientCredentialsPreset(tokenEndpointTemplate: "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
-                                                       scope: "https://management.azure.com/.default"),
-            adapter: "azure-containment")),
+        configuration: .connection(.init(endpointTemplate: "https://management.azure.com", fields: fields,
+                                         oauth: Entra.oauth(scopes: scopes), oauthClientField: "clientID", oauthPathField: "tenant",
+                                         oauthPathExcludes: Entra.generic, adapter: "azure-containment")),
         setup: containmentSetup)
 
-    static let containmentSetup = [
-        "In the [Microsoft Entra admin center](https://entra.microsoft.com), open **App registrations** and register a new app for containment alone, such as Pion Containment, apart from Microsoft Azure Detection's. Keep **Single tenant**, leave the redirect URI empty, and add a client secret under **Certificates & secrets**, copying its **Value**.",
+    static let containmentSetup = appSteps("Pion Azure Containment", api: armAPI, permission: permission, resource: resource) + [
         "In the [Azure portal](https://portal.azure.com), open the subscription's **Access control (IAM)** and choose **Add › Add custom role**. Name it Pion Containment and, under **JSON**, give it only these actions: \(containmentActions.map { "`\($0)`" }.joined(separator: ", ")). Leave out any whose action you do not want agents to have.",
-        "Assign that role to the app on the subscription. Never give it Owner or Contributor: its role, not Pion, limits what it can do.",
-        "Copy the **Subscription ID**, and the app's **Directory (tenant) ID** and **Application (client) ID**. Choose **Add & Connect** and ask an agent to run check-access.",
+        "Each request acts as the signed-in admin, with their own Azure roles: `user_impersonation` adds no rights of its own. Keep an admin for Pion Azure Containment alone, such as pion-azure-containment@contoso.com, apart from Pion Azure Detection's, and assign them that role on the subscription, with no other. Never give them Owner or Contributor: their role, not Pion, limits what it can do.",
+        "Give the **Directory (tenant) ID** and the app's **Application (client) ID**, and the **Subscription ID**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
 
     /// Every action the containment operations take, for the custom role its setup makes.
@@ -576,7 +572,7 @@ extension Azure {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
         static let jobs: Set<ToolJob> = [.containment]
-        static let summary = "Reads the app's permissions on the subscription and says which actions its role allows and exactly what to add for those it does not, warning when it allows far more. It changes nothing."
+        static let summary = "Reads the signed-in admin's permissions on the subscription and says which actions their roles allow and exactly what to add for those they do not, warning when they allow far more, and names the app and permission it signed in with. It changes nothing."
         static let input = JSONSchema.object([:])
 
         static let needs: [(operation: String, actions: [String])] = [
@@ -612,16 +608,18 @@ extension Azure {
                                              as: List<Permission>.self).value
             } catch {
                 let fix = Azure.fix(for: error, Need(title: "Permissions", role: "the Pion Containment custom role")) ?? error.localizedDescription
-                return try ServiceResult(text: "✗ The app's permissions could not be read: \(fix)", structured: ["checks": ["✗ permissions: \(fix)"]])
+                let lines = ["✗ The signed-in admin's permissions could not be read: \(fix)", Azure.signInLine(service, scopes: Azure.scopes)]
+                return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
             }
             var lines = Self.needs.map { need -> String in
                 let missing = need.actions.filter { !Self.allows(held, $0) }
-                return missing.isEmpty ? "✓ \(need.operation)" : "✗ \(need.operation): add \(missing.joined(separator: ", ")) to the app's custom role on the subscription."
+                return missing.isEmpty ? "✓ \(need.operation)" : "✗ \(need.operation): add \(missing.joined(separator: ", ")) to the signed-in admin's custom role on the subscription."
             }
             if Self.allows(held, "Microsoft.Resources/subscriptions/resourceGroups/delete") || Self.allows(held, "Microsoft.Authorization/roleAssignments/write") {
-                lines.append("⚠ The app's role allows far more than containment, such as deleting resource groups or granting access: give it only the Pion Containment custom role from Setup Steps, never Owner or Contributor.")
+                lines.append("⚠ The signed-in admin's roles allow far more than containment, such as deleting resource groups or granting access, and the sign-in may do all they allow: give them only the Pion Containment custom role from Setup Steps, never Owner or Contributor.")
             }
-            lines.append("· What it can do is read from its role, not tried: an action can still be refused by a lock, a deny assignment or Azure Policy.")
+            lines.append("· What it can do is read from the admin's roles, not tried: an action can still be refused by a lock, a deny assignment or Azure Policy.")
+            lines.append(Azure.signInLine(service, scopes: Azure.scopes))
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
         }
     }

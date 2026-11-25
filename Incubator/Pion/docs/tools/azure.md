@@ -1,7 +1,7 @@
 # Microsoft Azure
 
-Pion has two Azure tools, each added per subscription with an app registration of
-its own:
+Pion has two Azure tools, each added per subscription and signed in as an admin
+of its own, through an app registration of its own:
 
 - **Microsoft Azure Detection** reads a subscription the way a defender does: who
   did what in the [activity log](https://learn.microsoft.com/azure/azure-monitor/essentials/activity-log),
@@ -18,31 +18,52 @@ its own:
   Defender for Cloud alert. What cuts off access, stops something or closes an
   alert waits for your approval.
 
-Both sign in as an app with a client secret, never as a person. The quick steps
-are under **Setup Steps** in **Settings → Tools**. This guide explains them.
+Both sign in the way Microsoft Entra ID's tools do: in your browser, at your
+tenant's own Microsoft sign-in page, through a public client app registration
+you make for each tool. There is no client secret to make, copy or lose: Pion
+keeps none and signs in with PKCE, and the sign-in renews itself. Each request
+acts as the admin who signed in, with their own Azure roles, never an app's.
+The quick steps are under **Setup Steps** in **Settings → Tools**. This guide
+explains them.
 
 The pages they use:
 
 - [App registrations](https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
-  in the Microsoft Entra admin center, for each tool's app and its secret.
+  and **Enterprise applications** in the Microsoft Entra admin center, for each
+  tool's app and who may sign in through it.
 - The subscription's **Access control (IAM)** in the
-  [Azure portal](https://portal.azure.com), for the roles.
+  [Azure portal](https://portal.azure.com), for the admins' roles.
 - Defender for Cloud's **Environment settings**, to see and turn on its plans.
 
 ## How Azure limits what Pion can do
 
-Each tool signs in as its own app, and Azure checks the app's roles on every
-request. Pion asks only for Azure Resource Manager's token, which on its own
-allows nothing: the roles you give the app are all it can do.
+| Tool | API | Delegated permission | Admin's roles on the subscription |
+| --- | --- | --- | --- |
+| Microsoft Azure Detection | Azure Resource Manager (**Azure Service Management**) | `user_impersonation` | Reader and Security Reader; optionally Monitoring Reader at the root scope |
+| Microsoft Azure Containment | Azure Resource Manager (**Azure Service Management**) | `user_impersonation` | only the Pion Containment custom role, below |
 
-- **Microsoft Azure Detection's app** needs only reading roles, so it cannot change
-  anything, whatever Pion asks for. Keep it that way: **check-access** warns
-  when the app holds anything that writes or deletes.
-- **Microsoft Azure Containment's app** gets a custom role with only the
+Azure Resource Manager has one delegated permission, `user_impersonation`,
+which adds no rights of its own: a sign-in may do exactly what the signed-in
+admin's Azure roles allow. Pion asks for it as
+`https://management.azure.com/user_impersonation`, with `offline_access` so the
+sign-in renews itself; Microsoft never lists `offline_access` among the
+permissions it granted, so Pion does not require it back, and refuses a sign-in
+that lacks the other. So the roles you give each admin are the limit:
+
+- **Microsoft Azure Detection's admin** holds only reading roles, so its
+  sign-in cannot change anything, whatever Pion asks for. Keep it that way:
+  **check-access** warns when the admin holds anything that writes or deletes.
+- **Microsoft Azure Containment's admin** holds only a custom role with the
   actions its operations take. Leave out any you do not want agents to have,
   and never give it Owner or Contributor.
 
-Both reach only `login.microsoftonline.com`, to sign in, and
+Keep each admin for its tool alone, a dedicated account and never a real
+administrator's: Azure Resource Manager has only one delegated permission,
+`user_impersonation`, so the sign-in may do whatever that account may do in
+Azure. Its roles are the only limit.
+
+Both reach only `login.microsoftonline.com`, to sign in at the tenant the
+account names (never `common` or `organizations`, which Pion refuses), and
 `management.azure.com`. Every resource they read or act on must be inside the
 subscription the account names; Pion refuses an ID from any other before
 sending anything. When Azure answers a listing with a link to its next page,
@@ -51,25 +72,38 @@ listing never leads anywhere else.
 
 ## Setting it up with least access
 
-1. **Register an app** for Microsoft Azure Detection, such as Pion Detection, single
-   tenant, with no redirect URI. It needs no API permissions. Add a client
-   secret and copy its **Value**: it is shown only once. Pion keeps it in the
-   keychain and never shows it to agents.
-2. **Give it Reader and Security Reader** on the subscription, in **Access
-   control (IAM) › Add role assignment**. Reader covers the activity log,
-   resources and role assignments; Security Reader covers Defender for Cloud's
-   alerts and plans. Neither can change anything.
-3. **Optionally, let it read the directory activity log.** When a Global
+1. **Register an app** for Microsoft Azure Detection, such as Pion Azure
+   Detection, single tenant. Under **Redirect URI**, choose **Public
+   client/native (mobile & desktop)** and give
+   `com.pdparchitect.pion:/oauth2callback` (and
+   `com.pdparchitect.pion.local:/oauth2callback` for Pion Dev). Add no client
+   secret or certificate.
+2. **Add its one permission.** Under **API permissions › Add a permission ›
+   Microsoft APIs**, choose **Azure Service Management**, then **Delegated
+   permissions**, and add `user_impersonation`. Remove Microsoft Graph's
+   `User.Read`, which a new app is given, and choose **Grant admin consent**.
+3. **Let only its admin sign in.** Under **Enterprise applications**, open the
+   app, set **Assignment required?** to **Yes**, and assign only the admin
+   who will sign in, such as pion-azure-detection@contoso.com, kept for this
+   tool alone.
+4. **Give that admin Reader and Security Reader** on the subscription, in
+   **Access control (IAM) › Add role assignment**, and nothing else. Reader
+   covers the activity log, resources and role assignments; Security Reader
+   covers Defender for Cloud's alerts and plans. Neither can change anything.
+5. **Optionally, let them read the directory activity log.** When a Global
    Administrator elevates their access to manage every subscription, Azure
    records it only in the directory's own activity log, not the
    subscription's. Reading it needs Monitoring Reader at the root scope (`/`),
    which only a Global Administrator who has
    [elevated access](https://learn.microsoft.com/azure/role-based-access-control/elevate-access-global-admin)
    can give. Without it, the watch says it cannot see access being elevated.
-4. **Copy the Subscription ID**, and the app's **Directory (tenant) ID** and
-   **Application (client) ID**. Add one account per subscription.
+6. **Give the Directory (tenant) ID** and the app's **Application (client)
+   ID**, from its **Overview**, and the **Subscription ID**. Add one account
+   per subscription; one app serves them all.
 
-Then choose **Add & Connect** and ask an agent to run **check-access**.
+Then choose **Add & Connect**, sign in as that admin (Pion asks for the
+password every time, so a browser signed in as someone else never answers for
+them), and ask an agent to run **check-access**.
 
 ## Coverage you should know
 
@@ -148,7 +182,7 @@ as Defender for Cloud may list an alert hours after its time:
   - a storage account allowing anonymous public blob access or shared key
     access, or a blob container made public.
 - **The directory activity log**, for a Global Administrator elevating access,
-  when the app may read it.
+  when the signed-in admin may read it.
 
 It wakes the agents with a note naming `security-events`. The note carries only
 how many, and when: nothing Azure wrote, such as an alert's description or ID,
@@ -168,8 +202,8 @@ activity refused, a sign-in failing, more than one check reads, or no Defender
 plan that raises alerts turned on each wake the agents once, and once more
 after Pion relaunches if still so. A failure that passes, such as Azure being
 briefly unavailable, holds the watch back for up to half an hour, reading the
-same window again. The directory activity log needs a role few apps have, so
-not reading it is said in `security-events` rather than woken for.
+same window again. The directory activity log needs a role few admins are
+given, so not reading it is said in `security-events` rather than woken for.
 
 ## When something does not work
 
@@ -179,13 +213,15 @@ Ask an agent to run **check-access**. It changes nothing, and tries once each:
   assignments and deny assignments;
 - which Defender for Cloud plans are on, warning when none raises alerts;
 - the directory activity log;
-- whether the app can change anything, warning when it holds a write, delete
-  or wildcard action.
+- whether the signed-in admin can change anything, warning when their roles
+  hold a write, delete or wildcard action.
 
+It also names the app the sign-in went through and the permission it asked for.
 For what does not work it says what to change, and any refused call says the
-same: the role to give the app on the subscription, a client secret or tenant
-ID to check, a subscription ID Azure does not know, or a resource provider the
-subscription is not registered for.
+same: the role to give the signed-in admin on the subscription, to sign in
+again in **Settings › Tools** when Microsoft no longer accepts the sign-in, a
+tenant ID to check, a subscription ID Azure does not know, or a resource
+provider the subscription is not registered for.
 
 ## Reading results
 
@@ -195,15 +231,20 @@ subscription is not registered for.
   in what it read. For Defender for Cloud, no alerts means unknown unless a
   plan that raises them is on.
 - **A caller is the credential used, not the person.** An event's caller,
-  app ID and IP address name what made the request; a stolen secret or token
-  acts as its owner.
+  app ID and IP address name what made the request; a stolen token acts as its
+  owner. Pion's own requests show the signed-in admin as the caller, through
+  the tool's app.
 
 ## Containing an incident
 
-**Microsoft Azure Containment** is a separate tool, with its own app, so the
-detection app stays read-only.
+**Microsoft Azure Containment** is a separate tool, with its own app and its own
+admin, so the detection sign-in stays read-only.
 
-1. **Register another app**, such as Pion Containment, and add a client secret.
+1. **Register another app**, such as Pion Azure Containment, as in steps 1 to 3
+   above: public client, the same redirect URIs, no secret, Azure Service
+   Management's delegated `user_impersonation` with admin consent, and
+   assignment required, with only its own admin assigned, such as
+   pion-azure-containment@contoso.com.
 2. **Make a custom role** in the subscription's **Access control (IAM) › Add ›
    Add custom role**, with only these actions, leaving out any you do not want:
 
@@ -235,10 +276,13 @@ detection app stays read-only.
    }
    ```
 
-3. **Assign it to the app** on the subscription. Never Owner or Contributor.
-4. Add the account with the same subscription, and ask an agent to run its
-   **check-access**, which reads the app's permissions and says which actions
-   its role allows and what to add for the rest, warning when it allows far more.
+3. **Assign it to that admin** on the subscription, with no other role. Never
+   Owner or Contributor.
+4. Add the account with the same subscription, sign in as that admin, and ask
+   an agent to run its **check-access**, which reads the signed-in admin's
+   permissions on the subscription and says which actions their roles allow
+   and what to add for the rest, warning when they allow far more, and names
+   the app and permission it signed in with.
 
 What agents can do, each by the resource's full ID:
 
@@ -261,3 +305,20 @@ An action Azure runs in the background returns a status path on
 Neither tool follows a redirect, so its sign-in never goes to another host.
 Even an allowed action can still be refused by a lock, a deny assignment or
 Azure Policy.
+
+## What to check on a live account
+
+These have not yet been tried against a live tenant:
+
+- **The scope's form in the token response.** Pion asks for
+  `https://management.azure.com/user_impersonation` and checks the token
+  response lists it the same way. Should Microsoft list it without the
+  resource in front, as `user_impersonation`, every sign-in is refused as
+  lacking it, and Pion needs a change in how it compares them.
+- **A delegated token on a Reader-only admin.** Sign Detection in as an admin
+  holding only Reader and Security Reader, and run **check-access**: every read
+  should pass, and it should say the admin cannot change the subscription.
+- **Containment's admin.** With only the Pion Containment custom role,
+  **check-access** should mark every action allowed and warn of nothing.
+- **The directory activity log** with Monitoring Reader at the root scope, read
+  as a user rather than an app.

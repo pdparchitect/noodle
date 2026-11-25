@@ -7,25 +7,54 @@ import XCTest
 final class AzureTests: XCTestCase {
     private let subscription = "8a7f3c2e-0000-4000-8000-000000000002"
     private var azure: ToolConnection {
-        try! Azure.preset.makeConnection(name: "Azure", values: ["tenant": "contoso.onmicrosoft.com", "subscription": subscription])
+        try! Azure.preset.makeConnection(name: "Azure", values: ["tenant": "contoso.onmicrosoft.com", "clientID": EntraTests.client, "subscription": subscription])
     }
     private var containment: ToolConnection {
-        try! Azure.containment.makeConnection(name: "Azure Containment", values: ["tenant": "contoso.onmicrosoft.com", "subscription": subscription])
+        try! Azure.containment.makeConnection(name: "Azure Containment", values: ["tenant": "contoso.onmicrosoft.com", "clientID": EntraTests.client, "subscription": subscription])
     }
     private var root: String { "/subscriptions/" + subscription + "/providers/" }
     private var activityPath: String { root + "Microsoft.Insights/eventtypes/management/values" }
     private let directoryPath = "/providers/Microsoft.Insights/eventtypes/management/values"
     private var vm: String { "/subscriptions/\(subscription)/resourceGroups/rg-prod/providers/Microsoft.Compute/virtualMachines/vm-one" }
 
-    func testAnAccountIsOneSubscriptionWithTokensForAzure() {
+    func testAnAccountIsOneSubscriptionSignedInAsAnAdminAtItsOwnTenant() throws {
         XCTAssertEqual(azure.endpoint.absoluteString, "https://management.azure.com")
-        XCTAssertEqual(azure.clientCredentials?.tokenEndpoint.absoluteString, "https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/token")
-        XCTAssertEqual(azure.clientCredentials?.scope, "https://management.azure.com/.default")
+        XCTAssertNil(azure.clientCredentials, "no client secret: an admin signs in")
+        XCTAssertNil(azure.tokenHeader)
+        XCTAssertFalse(azure.keepsSecret)
+        XCTAssertEqual(azure.settings?["clientID"], EntraTests.client)
+        XCTAssertEqual(azure.settings?["subscription"], subscription)
+        for tool in [Azure.preset, Azure.containment] {
+            guard case .connection(let configuration) = tool.configuration else { return XCTFail() }
+            XCTAssertNil(configuration.clientCredentials, tool.name)
+            XCTAssertEqual(configuration.fields.map(\.key), ["tenant", "clientID", "subscription"], tool.name)
+            XCTAssertEqual(configuration.oauthClientField, "clientID", tool.name)
+            XCTAssertEqual(configuration.oauthPathField, "tenant", tool.name)
+            XCTAssertEqual(configuration.oauthPathExcludes, Entra.generic, tool.name)
+            let oauth = try XCTUnwrap(configuration.oauth(for: azure.settings), tool.name)
+            XCTAssertEqual(oauth.authorizationEndpoint.absoluteString, "https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/authorize")
+            XCTAssertEqual(oauth.tokenEndpoint.absoluteString, "https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/token")
+            XCTAssertFalse(oauth.usesResourceIndicator, "Microsoft's v2.0 endpoint refuses resource")
+            XCTAssertEqual(oauth.authorizationParameters, ["prompt": "login"])
+            XCTAssertEqual(oauth.unlistedScopes, ["offline_access"], "asked for, but Microsoft never lists it as granted")
+            XCTAssertEqual(oauth.scopes, ["https://management.azure.com/user_impersonation"], "Azure Resource Manager's one delegated permission, with its resource in front")
+            XCTAssertNil(configuration.oauth(for: ["tenant": "common", "clientID": EntraTests.client, "subscription": subscription]), tool.name)
+            XCTAssertThrowsError(try tool.makeConnection(name: "Any", values: ["tenant": "organizations", "clientID": EntraTests.client, "subscription": subscription]))
+        }
+        for setup in [Azure.setup, Azure.containmentSetup] {
+            XCTAssertTrue(setup.contains { $0.contains("com.pdparchitect.pion:/oauth2callback") && $0.contains("Public client") })
+            XCTAssertTrue(setup.contains { $0.contains("**Azure Service Management**") && $0.contains("`user_impersonation`") && $0.contains("Grant admin consent") })
+            XCTAssertFalse(setup.contains { $0.contains("Certificates & secrets") }, "no secret to keep")
+        }
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use(PionCatalogue.entries)
+        XCTAssertTrue(ToolConnectionService.signsInThroughBrowser(azure))
+        XCTAssertTrue(ToolConnectionService.signsInThroughBrowser(containment))
         XCTAssertEqual(Azure.preset.name, "Microsoft Azure Detection")
         XCTAssertNotNil(PionAdapters.all["azure"])
         XCTAssertEqual(Azure.adapter.watchedTool, "security-events")
         XCTAssertEqual(Azure.adapter.alertLookBack, 6 * 3_600)
-        XCTAssertTrue(Azure.setup.contains { $0.contains("**Reader** and **Security Reader**") })
+        XCTAssertTrue(Azure.setup.contains { $0.contains("give that admin only the **Reader** and **Security Reader** roles") })
     }
 
     // MARK: Activity log
@@ -269,17 +298,21 @@ final class AzureTests: XCTestCase {
         let found = try await callTool(Azure.adapter, "check-access", "{}", on: service, in: azure)
         XCTAssertFalse(found.isError, found.text)
         XCTAssertTrue(found.text.contains("✓ Activity log"), found.text)
-        XCTAssertTrue(found.text.contains("✗ Defender for Cloud alerts: the app may not read this: give it Security Reader"), found.text)
+        XCTAssertTrue(found.text.contains("✗ Defender for Cloud alerts: the signed-in admin may not read this: give them Security Reader"), found.text)
         XCTAssertTrue(found.text.contains("⚠ No Defender for Cloud plan that raises threat alerts is on"), found.text)
         XCTAssertTrue(found.text.contains("✓ Resource Graph"), found.text)
         XCTAssertTrue(found.text.contains("· Directory activity log"), found.text)
-        XCTAssertTrue(found.text.contains("⚠ The app can change the subscription: it holds Microsoft.Compute/*"), found.text)
+        XCTAssertTrue(found.text.contains("⚠ The signed-in admin can change the subscription: their roles hold Microsoft.Compute/*"), found.text)
+        XCTAssertTrue(found.text.contains("· Signed in through the app \(EntraTests.client), asking for https://management.azure.com/user_impersonation, offline_access."), found.text)
         XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" || $0.url?.path == "/providers/Microsoft.ResourceGraph/resources" })
         service.answers[root + "Microsoft.Security/pricings"] = (200, #"{"value":[{"name":"VirtualMachines","properties":{"pricingTier":"Standard","subPlan":"P2"}},{"name":"StorageAccounts","properties":{"pricingTier":"Free"}}]}"#)
         service.answers[root + "Microsoft.Authorization/permissions"] = (200, #"{"value":[{"actions":["*/read","Microsoft.Security/*/read"]}]}"#)
         let good = try await callTool(Azure.adapter, "check-access", "{}", on: service, in: azure)
         XCTAssertTrue(good.text.contains("✓ Defender for Cloud plans on, which raise alerts: VirtualMachines (P2). Off, so silent: StorageAccounts."), good.text)
-        XCTAssertTrue(good.text.contains("✓ The app cannot change the subscription"), good.text)
+        XCTAssertTrue(good.text.contains("✓ The signed-in admin cannot change the subscription"), good.text)
+        service.answers[root + "Microsoft.Security/alerts"] = (401, #"{"error":{"code":"ExpiredAuthenticationToken","message":"expired"}}"#)
+        let expired = try await callTool(Azure.adapter, "check-access", "{}", on: service, in: azure)
+        XCTAssertTrue(expired.text.contains("✗ Defender for Cloud alerts: Microsoft did not accept the sign-in") && expired.text.contains("Connect the tool again in Settings › Tools"), expired.text)
     }
 
     // MARK: The watch
@@ -547,7 +580,7 @@ final class AzureTests: XCTestCase {
             XCTAssertTrue(found.isError, "\(tool): \(found.text)")
             XCTAssertTrue(service.requests.isEmpty, "\(tool) \(arguments)")
         }
-        let bad = try Azure.preset.makeConnection(name: "Bad", values: ["tenant": "contoso.onmicrosoft.com", "subscription": "not-a-guid"])
+        let bad = try Azure.preset.makeConnection(name: "Bad", values: ["tenant": "contoso.onmicrosoft.com", "clientID": EntraTests.client, "subscription": "not-a-guid"])
         for (tool, arguments) in [("activity-log", "{}"), ("defender-alerts", "{}"), ("resource-graph", #"{"query":"Resources | take 1"}"#), ("role-assignments", "{}"),
                                   ("security-events", "{}"), ("check-access", "{}")] {
             let service = FakeService()
@@ -614,12 +647,13 @@ final class AzureTests: XCTestCase {
         XCTAssertNotNil(PionAdapters.all["azure-containment"])
         XCTAssertNil(Azure.containmentAdapter.watchedTool)
         XCTAssertEqual(containment.endpoint.absoluteString, "https://management.azure.com")
-        XCTAssertEqual(containment.clientCredentials?.tokenEndpoint.absoluteString, "https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/token")
+        XCTAssertNil(containment.clientCredentials)
         XCTAssertTrue(PionCatalogue.entries.contains { $0.id == Azure.containment.id })
         XCTAssertTrue(Azure.containmentSetup.contains { $0.contains("custom role") && $0.contains("Microsoft.Compute/virtualMachines/deallocate/action") })
         // Azure's locks take no write condition, which add-lock says rather than promising a concurrent lock is kept.
         XCTAssertTrue(Azure.AddLock.summary.contains("take no write condition"))
-        XCTAssertThrowsError(try Azure.containment.makeConnection(name: "Bad", values: ["tenant": "contoso/../evil", "subscription": subscription]))
+        XCTAssertTrue(Azure.containmentSetup.contains { $0.contains("assign them that role on the subscription, with no other") })
+        XCTAssertThrowsError(try Azure.containment.makeConnection(name: "Bad", values: ["tenant": "contoso/../evil", "clientID": EntraTests.client, "subscription": subscription]))
     }
 
     func testContainmentActionsCutOffAccessOnlyWithApproval() async throws {
@@ -939,10 +973,11 @@ final class AzureTests: XCTestCase {
         XCTAssertFalse(found.isError, found.text)
         XCTAssertTrue(found.text.contains("✓ deallocate-vm"), found.text)
         XCTAssertTrue(found.text.contains("✗ remove-role-assignment: add Microsoft.Authorization/roleAssignments/delete"), found.text)
+        XCTAssertTrue(found.text.contains("· Signed in through the app \(EntraTests.client), asking for https://management.azure.com/user_impersonation, offline_access."), found.text)
         XCTAssertFalse(found.text.contains("⚠"), found.text)
         service.answers[root + "Microsoft.Authorization/permissions"] = (200, #"{"value":[{"actions":["*"],"notActions":[]}]}"#)
         let broad = try await callTool(Azure.containmentAdapter, "check-access", "{}", on: service, in: containment)
-        XCTAssertTrue(broad.text.contains("⚠ The app's role allows far more than containment"), broad.text)
+        XCTAssertTrue(broad.text.contains("⚠ The signed-in admin's roles allow far more than containment"), broad.text)
         XCTAssertTrue(Azure.ContainmentCheckAccess.needs.flatMap(\.actions).allSatisfy { action in
             Azure.ContainmentCheckAccess.allows([.init(actions: Azure.containmentActions, notActions: nil)], action)
         }, "the setup's role covers every action")

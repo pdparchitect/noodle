@@ -137,8 +137,9 @@ each tool with a sign-in of its own, so only Google Cloud Containment holds Goog
 scope and a custom role limits it to the actions it takes; GitHub signs in with a
 code, through an OAuth app your organisation registers, and Sentry and Self-Hosted Sentry likewise, through a
 public API application you register, with scopes that only read and only the organisation you choose. Microsoft Azure Detection and Microsoft Azure Containment each use an app
-registration's client ID and secret, one subscription per account: the detection app only reads, and
-the containment app holds a custom role with only the actions it takes. Okta Detection and Okta Containment
+registration of their own, through which each signs in as an admin of their own with no client secret, one
+subscription per account: the detection admin holds only Reader and Security Reader, and the containment admin
+only a custom role with the actions it takes. Okta Detection and Okta Containment
 each sign in as an Okta admin of their own through OAuth, with a native app your org makes for each:
 the detection sign-in's scopes only read, and the containment admin holds a custom role with only the
 permissions its actions take. Microsoft Entra ID Detection and Microsoft Entra ID Containment likewise each
@@ -148,6 +149,8 @@ holds only the roles its actions take. Microsoft Defender XDR Detection and Micr
 sign in the same way: Audit reads alerts, incidents, advanced hunting and devices through Microsoft Graph
 with read-only permissions, and Containment isolates, restricts, quarantines, scans and collects through
 the Defender for Endpoint API with an admin whose Defender role covers only those actions and device groups.
+Microsoft Sentinel signs in the same way, through the Log Analytics API with `Data.Read`, as an admin who holds
+only Log Analytics Reader on the workspace.
 CrowdStrike Falcon Detection and CrowdStrike Falcon Containment each use an API client of their own, its
 client ID and secret, as Falcon has no sign-in for an admin: the detection client holds only Read scopes,
 and the containment client only the scopes its actions take, never Real Time Response's admin commands.
