@@ -135,7 +135,8 @@ also reads Identity Center's assignments, AWS Config's history, S3 exposure, Ins
 Detection, Google Cloud Containment and both Google Workspace tools sign in with your Google account,
 each tool with a sign-in of its own, so only Google Cloud Containment holds Google Cloud's full
 scope and a custom role limits it to the actions it takes; GitHub signs in with a
-code, through an OAuth app your organisation registers. Microsoft Azure Detection and Microsoft Azure Containment each use an app
+code, through an OAuth app your organisation registers, and Sentry and Self-Hosted Sentry likewise, through a
+public API application you register, with scopes that only read and only the organisation you choose. Microsoft Azure Detection and Microsoft Azure Containment each use an app
 registration's client ID and secret, one subscription per account: the detection app only reads, and
 the containment app holds a custom role with only the actions it takes. Okta Detection and Okta Containment
 each sign in as an Okta admin of their own through OAuth, with a native app your org makes for each:

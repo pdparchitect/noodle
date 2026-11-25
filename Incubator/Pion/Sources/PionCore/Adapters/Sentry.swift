@@ -2,15 +2,24 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// Sentry, read through its web API with a personal or internal integration token: an organisation's projects, its issues and
-/// the latest event behind one. Sentry's own service and a self-hosted Sentry are two entries over the same operations.
+/// Sentry, read through its web API as the person who signs in: an organisation's projects, its issues and the latest
+/// event behind one. Sentry's own service and a self-hosted Sentry are two entries over the same operations.
+///
+/// Both sign in with a code, OAuth's device flow, through a public API application the person registers under their own
+/// Sentry account, which keeps no client secret: Sentry takes only http and https redirects, which cannot send a Mac app
+/// back, and its device flow needs none. The sign-in reaches only the organisation chosen when approving the code, with
+/// read scopes alone, and lasts 30 days, renewed with a refresh token Sentry replaces each time. A self-hosted Sentry
+/// signs in at its own host, over https on the default port, and needs 26.2.0 or later. check-access tries each read
+/// once.
+///
+/// Both tools' guide is Incubator/Pion/docs/tools/sentry.md. Change it with the setup steps, scopes or operations here.
 public enum Sentry {
     static let instructions = """
         Use Sentry to see what errors the organisation's services raised around the incident: list projects, search \
         issues by query, project and period, and read an issue's latest event, with its exception, the frames in the \
         service's own code, the request, the user and its tags. Record each issue and event as evidence, citing the \
-        project, the issue's short ID and the period. These tools only read: recommend resolving or ignoring an issue to \
-        the champion.
+        project, the issue's short ID and the period. When a tool is refused, run check-access and tell the champion \
+        exactly what it says to change. These tools only read: recommend resolving or ignoring an issue to the champion.
         """
 
     public static let cloud = ToolDefinition(
@@ -19,35 +28,56 @@ public enum Sentry {
         configuration: .connection(.init(endpointTemplate: "https://{region}/api/0/organizations/{org}",
             fields: [ToolField(key: "region", title: "Region", placeholder: "sentry.io", kind: .choice([
                          .init(value: "sentry.io", title: "United States"), .init(value: "de.sentry.io", title: "European Union")])),
-                     ToolField(key: "org", title: "Organisation", placeholder: "kestrel-labs", kind: .identifier)],
-            tokenHeader: "Authorization", adapter: "sentry")),
+                     ToolField(key: "org", title: "Organisation", placeholder: "kestrel-labs", kind: .identifier), clientField],
+            oauth: oauth(at: "sentry.io"), oauthClientField: "clientID", adapter: "sentry")),
         setup: cloudSetup)
 
     public static let server = ToolDefinition(
         id: "c1d64a3e-2f9b-4c7a-8e15-6b0f4d2a9e73", name: "Self-Hosted Sentry", summary: "A self-hosted Sentry: projects, issues and the events behind them, read-only.",
         defaultInstructions: instructions, iconName: "sentry",
-        configuration: .connection(.init(endpointTemplate: "{address}/api/0/organizations/{org}",
-            fields: [ToolField(key: "address", title: "Sentry address", placeholder: "http://sentry.example.lan:9000", kind: .address),
-                     ToolField(key: "org", title: "Organisation", placeholder: "sentry", kind: .identifier)],
-            tokenHeader: "Authorization", adapter: "sentry")),
+        configuration: .connection(.init(endpointTemplate: "https://{host}/api/0/organizations/{org}",
+            fields: [ToolField(key: "host", title: "Sentry host", placeholder: "sentry.example.com", kind: .host),
+                     ToolField(key: "org", title: "Organisation", placeholder: "sentry", kind: .identifier), clientField],
+            oauth: oauth(at: "sentry.invalid"), oauthClientField: "clientID", oauthHostField: "host", adapter: "sentry")),
         setup: serverSetup)
 
-    static let token = [
-        "In Sentry, open **User Settings › Personal Tokens**, at `/settings/account/api/auth-tokens/`, and choose **Create New Token**. Name it, such as Pion.",
-        "Give it **Read** for **Project**, **Issue & Event** and **Organization** (`project:read`, `event:read` and `org:read`), and nothing else. Organization starts at No Access; without it, Sentry refuses every request.",
-        "Copy the token at once, since Sentry shows it only then, and paste it here. It reads only what your own account may see.",
-        "For a Sentry a team shares, an organisation owner or manager can instead make an internal integration, under **Settings › Developer Settings › Custom Integrations**, with the same permissions, so access does not depend on one person's account.",
+    static let clientField = ToolField(key: "clientID", title: "Client ID", placeholder: "3f9c2a7e5b1d4c8f0a6e9b2d7c4f1a8e5b3d0c6f9a2e7b4d1c8f5a0e3b6d9c2f", kind: .identifier)
+
+    /// Only reading scopes: events and issues, the organisation, which lists its projects, and projects.
+    static let scopes = ["event:read", "org:read"]
+
+    /// The sign-in at `host`, Sentry's own or, for a self-hosted Sentry, a stand-in each account's host takes the place
+    /// of; .invalid, so it can never be reached as it is. Sentry's addresses end in a slash, and it redirects those that
+    /// do not. It documents no way to revoke a sign-in through OAuth, so none is given.
+    static func oauth(at host: String) -> MCPOAuthConfiguration {
+        MCPOAuthConfiguration(issuer: URL(string: "https://\(host)")!,
+                              authorizationEndpoint: URL(string: "https://\(host)/oauth/authorize/")!,
+                              tokenEndpoint: URL(string: "https://\(host)/oauth/token/")!, clients: [],
+                              scopes: scopes, usesResourceIndicator: false,
+                              deviceAuthorizationEndpoint: URL(string: "https://\(host)/oauth/device/code/")!)
+    }
+
+    static let application = [
+        "In Sentry, open **User Settings › API Applications**, at `/settings/account/api/applications/`, and choose **Create New Application**. Name it Pion, kept for this tool alone. It belongs to your own Sentry account, not the organisation: if your account is removed, the application goes with it and the tool must be set up again.",
+        "Make it a **Public** application, the type for CLIs and native apps that cannot keep a secret: Pion signs in with a code and keeps no client secret. Leave **Authorized Redirect URIs** empty, or give the organisation's own website if Sentry asks for one; Sentry takes only http and https redirects, so Pion does not use one. Save it and copy its **Client ID** here.",
     ]
 
-    static let cloudSetup = token + [
+    /// The last step of each tool's setup: the code, the organisation chosen with it and the scopes approved.
+    static let connectStep = "Choose **Add & Connect**: Pion shows a code and opens Sentry, where you enter it, choose this organisation and approve reading its events, organisation and projects (\(scopes.map { "`\($0)`" }.joined(separator: ", "))). The sign-in reaches only that organisation, and only what your role and teams there may see. Then ask an agent to run check-access."
+
+    static let cloudSetup = application + [
         "For the organisation, give its slug, from the address you open Sentry at: `kestrel-labs` in `kestrel-labs.sentry.io`. Choose the region your organisation is in.",
+        connectStep,
     ]
 
-    static let serverSetup = token + [
-        "For the address, give the one you open Sentry at, such as `http://sentry.example.lan:9000`; plain `http` works only on this Mac or the local network. For the organisation, give its slug, from the address of any Sentry page: `kestrel-labs` in `/organizations/kestrel-labs/` or `/settings/kestrel-labs/`.",
+    static let serverSetup = [
+        "This needs Sentry 26.2.0 or later, released in February 2026, the first to sign a public application in with a code: upgrade an older server first.",
+    ] + application + [
+        "For the host, give the name you open Sentry at, such as `sentry.example.com`: Pion reaches it, and signs in at it, only over https on the default port. For the organisation, give its slug, from the address of any Sentry page: `kestrel-labs` in `/organizations/kestrel-labs/` or `/settings/kestrel-labs/`.",
+        connectStep,
     ]
 
-    public static let adapter = OperationAdapter(operations: [Projects(), Issues(), IssueEvent()])
+    public static let adapter = OperationAdapter(operations: [Projects(), Issues(), IssueEvent(), CheckAccess()])
 
     /// A period as Sentry takes it: a number and h, d or w, such as 24h or 14d.
     static func period(_ value: String?) throws -> String {
@@ -56,6 +86,59 @@ public enum Sentry {
             throw ServiceError.input("Give the period as hours, days or weeks, such as 24h, 14d or 2w.")
         }
         return value
+    }
+
+    // MARK: Refusals
+
+    /// What one thing the tool reads needs: the sign-in's scope.
+    struct Need: Sendable {
+        let title: String
+        let scope: String
+    }
+
+    static let projectsNeed = Need(title: "Projects", scope: "org:read")
+    static let issuesNeed = Need(title: "Issues", scope: "event:read")
+    static let eventsNeed = Need(title: "Issue events", scope: "event:read")
+
+    /// What to change when Sentry refused, or nil when it did not.
+    static func fix(for error: Error, _ need: Need) -> String? {
+        switch error {
+        case ServiceError.rejected:
+            return "Sentry did not accept the sign-in: it expired or was revoked, or the API application was deleted, as it is with the account that registered it. Sign in again in Settings › Tools."
+        case ServiceError.forbidden:
+            // Sentry does not say which: a scope the sign-in lacks, another organisation chosen, or the person's role or teams.
+            return "the sign-in lacks the scope \(need.scope), or it was approved for another organisation, or the signed-in person's role or teams do not allow this. Sign in again in Settings › Tools, choosing this organisation; otherwise give the person a role or team in Sentry that allows it."
+        default: return nil
+        }
+    }
+
+    /// A request, with a refusal said as what to change.
+    static func read<Result>(_ need: Need, _ body: () async throws -> Result) async throws -> Result {
+        do { return try await body() } catch {
+            guard let fix = fix(for: error, need) else { throw error }
+            let said: String? = switch error {
+            case ServiceError.forbidden(let reason), ServiceError.rejected(let reason): reason
+            default: nil
+            }
+            throw ServiceError.input("Sentry refused \(need.title.lowercased())\(said.map { " (it said: \($0))" } ?? ""): \(fix) Running check-access shows what the sign-in reaches.")
+        }
+    }
+
+    /// Tries a read once, and says whether it works.
+    static func probe(_ need: Need, _ body: () async throws -> Void) async -> String {
+        do {
+            try await body()
+            return "✓ \(need.title) (\(need.scope))"
+        } catch {
+            return "✗ \(need.title): " + (fix(for: error, need) ?? error.localizedDescription)
+        }
+    }
+
+    /// The scopes a sign-in holds, as a line of check-access: those the tool asks for, as Pion refuses a sign-in Sentry
+    /// grants fewer, and the application they are granted to.
+    static func scopesLine(_ service: ServiceClient) -> String {
+        let client = service.settings["clientID"].map { " to the Sentry API application \($0)" } ?? ""
+        return "· The sign-in holds the scopes \(scopes.joined(separator: ", ")), granted\(client); Pion refuses a sign-in that lacks any. Sentry allows a request only when the signed-in person's role and teams allow it too, and only in the organisation chosen when approving the code."
     }
 }
 
@@ -69,7 +152,7 @@ extension Sentry {
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             struct Project: Codable { let id: String?; let slug: String?; let name: String?; let platform: String? }
-            let projects = try await service.get(["projects"], trailingSlash: true, as: [Project].self)
+            let projects = try await Sentry.read(Sentry.projectsNeed) { try await service.get(["projects"], trailingSlash: true, as: [Project].self) }
             let text = projects.isEmpty ? "The organisation has no projects." : projects.map {
                 "\($0.name ?? $0.slug ?? "?") (\($0.slug ?? "?"), ID \($0.id ?? "?"))\($0.platform.map { ", \($0)" } ?? "")"
             }.joined(separator: "\n")
@@ -102,11 +185,12 @@ extension Sentry {
                 let id: String?, shortId: String?, title: String?, culprit: String?, level: String?, status: String?
                 let count: String?, userCount: Int?, firstSeen: String?, lastSeen: String?, permalink: String?, project: Project?
             }
-            let issues = try await service.get(["issues"], query: [
+            let query: [String: String?] = [
                 "query": try ServiceInput.query(input.query ?? "is:unresolved", limit: 1_000), "statsPeriod": try Sentry.period(input.period),
                 "project": input.project, "sort": try input.sort.map { try ServiceInput.oneOf($0, ["date", "new", "freq", "user"], "sort") },
                 "limit": String(limit),
-            ], trailingSlash: true, as: [Issue].self)
+            ]
+            let issues = try await Sentry.read(Sentry.issuesNeed) { try await service.get(["issues"], query: query, trailingSlash: true, as: [Issue].self) }
             let text = issues.isEmpty ? "No issues match." : issues.map { issue in
                 "\(issue.shortId ?? issue.id ?? "?") [\(issue.level ?? "?"), \(issue.status ?? "?")] \(issue.title ?? "")"
                     + " — \(issue.count ?? "?") events, \(issue.userCount ?? 0) users, last seen \(issue.lastSeen ?? "?")"
@@ -139,7 +223,7 @@ extension Sentry {
             struct Event: Decodable {
                 let eventID: String?, title: String?, dateCreated: String?, entries: [Entry]?, tags: [Tag]?, user: User?
             }
-            let event = try await service.get(["issues", issue, "events", "latest"], trailingSlash: true, as: Event.self)
+            let event = try await Sentry.read(Sentry.eventsNeed) { try await service.get(["issues", issue, "events", "latest"], trailingSlash: true, as: Event.self) }
             let exceptions = (event.entries ?? []).filter { $0.type == "exception" }.flatMap { $0.data?.values ?? [] }
             let request = (event.entries ?? []).first { $0.type == "request" }?.data
             // The service's own frames, innermost last as Sentry lists them; the rest are libraries.
@@ -165,6 +249,37 @@ extension Sentry {
                 event: event.eventID, title: event.title, date: event.dateCreated,
                 exceptions: exceptions.map { KeptException(type: $0.type, value: $0.value, frames: ownFrames($0)) },
                 request: request.flatMap { request in request.url.map { "\(request.method ?? "") \($0)" } }, user: event.user, tags: event.tags ?? []))
+        }
+    }
+
+    /// Tries each thing the tool reads once and says what works and what to change, and which scopes the sign-in holds.
+    /// It sends only reads. Sentry documents no way for an OAuth token to verify itself, so none is tried.
+    struct CheckAccess: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
+        static let summary = "Tries each thing this tool reads once, projects, issues and an issue's latest event, and says what works and, for what does not, what to change, in the sign-in or the person's role; and which scopes the sign-in holds. It sends only reads."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            struct Item: Decodable { let id: String? }
+            var lines = ["· Organisation \(try service.setting("org")), reached at \(service.base.absoluteString)."]
+            lines.append(await Sentry.probe(Sentry.projectsNeed) {
+                _ = try await service.get(["projects"], trailingSlash: true, as: [Item].self)
+            })
+            var issue: String?
+            lines.append(await Sentry.probe(Sentry.issuesNeed) {
+                issue = try await service.get(["issues"], query: ["statsPeriod": "14d", "limit": "1"], trailingSlash: true, as: [Item].self).first?.id
+            })
+            if let issue, !issue.isEmpty, issue.allSatisfy(\.isNumber) {
+                lines.append(await Sentry.probe(Sentry.eventsNeed) {
+                    _ = try await service.get(["issues", issue, "events", "latest"], trailingSlash: true, as: Item.self)
+                })
+            } else {
+                lines.append("· \(Sentry.eventsNeed.title): no issue in the last 14 days to try them on; they take \(Sentry.eventsNeed.scope), as issues do.")
+            }
+            lines.append(Sentry.scopesLine(service))
+            return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
         }
     }
 }
