@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Desktop no longer leaves `~/.local` owned by root, which stopped tools from creating folders in it; computers that have it are repaired the next time they start.
+
 ## [0.5.0] - 2026-11-24
 
 ### Changed

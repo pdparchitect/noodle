@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Desktop no longer leaves `~/.local` owned by root, which stopped tools such as nuclei from installing into it; computers that have it are repaired the next time they start.
+
 ## [0.2.2] - 2026-11-24
 
 ### Fixed

@@ -18,7 +18,9 @@ usermod -a -G video,input agent
 
 install -d -m 1777 /tmp/.X11-unix
 install -d -m 0700 -o agent -g agent "$XDG_RUNTIME_DIR"
-install -d -o agent -g agent /run/desktop /var/log/desktop "$HOME/.cache" "$HOME/.config" "$HOME/.local/share" /workspace
+# install -d gives the owner only to the directories it names; a missing parent
+# would stay root's, so .local is named too, which also repairs a home it left so.
+install -d -o agent -g agent /run/desktop /var/log/desktop "$HOME/.cache" "$HOME/.config" "$HOME/.local" "$HOME/.local/share" /workspace
 # Refuse to become root merely because a mounted workspace cannot be written.
 runuser -u agent -- test -w /workspace
 : > /run/desktop/dbus-session-address

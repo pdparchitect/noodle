@@ -91,7 +91,8 @@ runuser -u agent -- test -w /workspace/.example
 test "$(stat -c '%U %a' "$XAUTHORITY")" = 'agent 600'
 # The root display server must not leave its caches in the desktop user's home.
 test "$(stat -c %U /home/agent/.cache)" = agent
-! find /home/agent -user root | grep -q .
+# Not `! find … | grep`: set -e ignores a pipeline negated with `!`, so that check never failed.
+test -z "$(find /home/agent -user root)"
 pgrep -x Xorg >/dev/null
 pgrep -u agent -f desktop-resize >/dev/null
 ! pgrep -u agent -x chromium >/dev/null
