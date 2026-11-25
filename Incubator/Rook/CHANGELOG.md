@@ -7,6 +7,8 @@
 - A Mission has a Scope: one rule per line, such as `*.example.com`, `example.com`, `203.0.113.0/24` or an address, with `deny` in front of anything out of scope. Its agents are told the scope with the objective, again whenever it changes, and when they read the Mission. Only the champion sets it, and the audit log keeps each version.
 - A Mission's Linux computers reach the network only through a gateway of its own, which lets through its scope, the services opened under Exceptions and package sources such as Kali's, and stops everything else. Every kind of scan crosses it as it would without one. What it stops goes in the Mission's audit log, once per address, as do addresses that a name in scope and a denied one share. A computer added to a Mission, or taken out, moves at once; one in no Mission uses the network as before. A Mission's gateway holds up to three running computers.
 - Exceptions, under Scope in a Mission, open services beyond the scope, such as lookup sites. They are never targets, and the agents are told only that there are some.
+- A Mission keeps its gateway's logs in its folder, and so in its export: `network.log` with every connection and probe its computers made, allowed or stopped, named after the lookup that found it, and `dns.log` with every lookup and its answers.
+- The Scope and Exceptions editors say under the text what a line may be.
 
 ## [0.7.0] - 2026-11-25
 

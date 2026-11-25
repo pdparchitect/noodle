@@ -83,7 +83,8 @@ and a case record. One agent leads it; you own it. The scope lists what its agen
 target, one rule per line (`*.example.com`, `example.com`, `203.0.113.0/24`, or `deny` in
 front of anything out of scope); they are told it with the objective. The Mission's Linux
 computers reach only that scope, the services you open under **Exceptions** and package sources;
-everything else is stopped and noted in the Audit Log. It starts unassessed until the lead sets its
+everything else is stopped and noted in the Audit Log. Every connection and lookup they make
+is kept in the Mission's `network.log` and `dns.log`, which its export includes. It starts unassessed until the lead sets its
 severity from the evidence. The lead can bring in agents it already works with in another
 group or Mission, and take out those whose part is done; the Audit Log says who it added or
 removed. The status menu in the toolbar moves it between open, active

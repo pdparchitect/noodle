@@ -29,7 +29,7 @@ public actor ComputerGateway {
     // TODO: Build our own gateway image with these packages instead of installing them on first start, once the
     // images workflow can change without breaking pending release tags.
     static let imageReference = "docker.io/library/alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40"
-    static let packages = ["nftables", "dnsmasq-dnssec-nftset"]
+    static let packages = ["nftables", "dnsmasq-dnssec-nftset", "ulogd", "ulogd-json"]
     /// Virtualization cannot add a card to a running machine, so the gateway starts with every slot cabled; it allows
     /// four cards in all, and the gateway's own way out takes one.
     // TODO: A Mission cannot hold more than three running computers behind its gateway; a frame switch in this
@@ -45,6 +45,9 @@ public actor ComputerGateway {
     private var occupants: [Int: UUID] = [:]
     private var upstream = ""
     private var reportedConflicts: Set<String> = []
+    /// How far each log has been read, and the name each address was last looked up as.
+    private var offsets: [String: Int] = [:]
+    private var names: [String: String] = [:]
 
     /// `directory` keeps the gateway's disk, so its packages are installed once; `cache` holds the startup disk and images.
     public init(id: UUID, directory: URL, cache: URL, kernel: URL) {
@@ -118,9 +121,21 @@ public actor ComputerGateway {
                               failure: "The gateway could not install its packages")
             let outside = try GatewayAddresses.shared.claim(Self.slotCount, network: address, owner: id)
             slots = outside.enumerated().map { GatewaySlot(index: $0.offset + 1, outsideAddress: $0.element) }
-            // Each computer's address on NAT's network answers on the gateway's own card.
-            _ = try await run(slots.map { "ip address add \($0.outsideAddress)/32 dev eth0" }.joined(separator: "\n"),
-                              failure: "The gateway could not take its computers' addresses")
+            // Fresh logs each start, so nothing is read twice.
+            // TODO: What was logged in the seconds before the app quit, and not yet read, is lost at the next start.
+            _ = try await run("""
+                printf '%s' "$1" > /etc/ulogd.conf
+                : > \(GatewayConfiguration.firewallLog); : > \(GatewayConfiguration.dnsLog)
+                pkill -x ulogd; ulogd -d
+                """, arguments: [GatewayConfiguration.ulogd], failure: "The gateway could not start its log")
+            offsets = [:]
+            names = [:]
+            // Each computer's address on NAT's network answers on the gateway's own card. Announced at once: the Mac
+            // remembers which machine had an address for minutes, and a gateway started again is a new machine.
+            _ = try await run(slots.map { """
+                ip address add \($0.outsideAddress)/32 dev eth0
+                arping -U -c 2 -w 3 -I eth0 -s \($0.outsideAddress) \($0.outsideAddress) >/dev/null 2>&1 || true
+                """ }.joined(separator: "\n"), failure: "The gateway could not take its computers' addresses")
             try await apply(policy)
         } catch {
             await stop()
@@ -163,20 +178,55 @@ public actor ComputerGateway {
             """, arguments: [ruleset, dns], failure: "The gateway could not load its rules")
     }
 
-    /// What it stopped since the last call, and addresses newly shared by a denied and an allowed name.
-    public func events() async throws -> [GatewayEvent] {
-        guard pod != nil else { return [] }
-        let log = try await run("dmesg -c 2>/dev/null; echo '--sets--'; nft list set inet gateway allowed4; echo '--denied--'; nft list set inet gateway denied4")
-        let parts = log.components(separatedBy: "--sets--")
-        var events = GatewayEvent.parse(kernelLog: parts.first ?? "", slots: slots)
-        let sets = (parts.count > 1 ? parts[1] : "").components(separatedBy: "--denied--")
+    /// What its logs gained since the last call, and addresses newly shared by a denied and an allowed name.
+    public func records() async throws -> GatewayRecords {
+        guard pod != nil else { return GatewayRecords() }
+        var records = GatewayRecords()
+        let dns = try await read(GatewayConfiguration.dnsLog)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let parsed = GatewayLookup.parse(dns.text, slots: slots, year: calendar.component(.year, from: Date()))
+        if names.count > 100_000 { names = [:] }
+        names.merge(parsed.names) { _, latest in latest }
+        records.lookups = parsed.lookups
+        let firewall = try await read(GatewayConfiguration.firewallLog)
+        records.firewall = GatewayFirewallEntry.parse(firewall.text, slots: slots).map { entry in
+            var named = entry
+            named.name = names[entry.destination]
+            return named
+        }
+        records.more = dns.more || firewall.more
+        let sets = try await run("nft list set inet gateway allowed4; echo '--denied--'; nft list set inet gateway denied4")
+            .components(separatedBy: "--denied--")
         if sets.count == 2 {
             let shared = Self.addresses(in: sets[0]).intersection(Self.addresses(in: sets[1])).subtracting(reportedConflicts)
             reportedConflicts.formUnion(shared)
-            events += shared.sorted().map { .conflict(address: $0) }
+            records.conflicts = shared.sorted()
         }
-        return events
+        return records
     }
+
+    /// The whole lines a log gained since it was last read, up to a piece that fits one command's output.
+    private func read(_ file: String) async throws -> (text: String, more: Bool) {
+        let output = try await run("""
+            size=$(stat -c %s "$1" 2>/dev/null || echo 0); offset=$2
+            [ "$size" -ge "$offset" ] || offset=0
+            echo "SIZE=$size OFFSET=$offset"
+            tail -c +$((offset + 1)) "$1" 2>/dev/null | head -c "$3"
+            """, arguments: [file, String(offsets[file] ?? 0), "200000"])
+        guard let newline = output.firstIndex(of: "\n") else { return ("", false) }
+        let header = output[..<newline].split(separator: " ")
+        let field = { (key: String) in header.first { $0.hasPrefix(key + "=") }.flatMap { Int($0.dropFirst(key.count + 1)) } ?? 0 }
+        let (text, bytes) = LogChunk.wholeLines(String(output[output.index(after: newline)...]))
+        let reached = field("OFFSET") + bytes
+        offsets[file] = reached
+        return (text, reached < field("SIZE"))
+    }
+
+    #if NOODLE_DEV_HOOKS
+    /// Runs a shell command in the gateway, for the development lab only.
+    public func developmentRun(_ script: String) async throws -> String { try await run(script) }
+    #endif
 
     public func stop() async {
         if let pod {
@@ -189,6 +239,8 @@ public actor ComputerGateway {
         links = []
         computerEnds = [:]
         reportedConflicts = []
+        offsets = [:]
+        names = [:]
         GatewayAddresses.shared.release(owner: id)
     }
 

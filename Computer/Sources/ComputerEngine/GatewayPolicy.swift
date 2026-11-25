@@ -54,8 +54,10 @@ public struct GatewaySlot: Equatable, Sendable {
 
 /// The gateway's nftables ruleset and dnsmasq configuration for a policy.
 public enum GatewayConfiguration {
-    /// Log prefixes, which `GatewayEvent.parse` reads back.
-    static let dropped = "gateway-drop ", denied = "gateway-deny "
+    /// Log prefixes, which `GatewayFirewallEntry.parse` reads back as verdicts.
+    static let allowed = "gateway-allow ", dropped = "gateway-drop ", denied = "gateway-deny "
+    /// Where ulogd writes every logged connection, one JSON object a line, and dnsmasq every lookup.
+    public static let firewallLog = "/var/log/gateway.json", dnsLog = "/var/log/dnsmasq.log"
 
     public static func ruleset(_ policy: GatewayPolicy, slots: [GatewaySlot]) -> String {
         func networks(_ rules: [GatewayPolicy.Rule]) -> [String] {
@@ -107,16 +109,41 @@ public enum GatewayConfiguration {
             "    iifname != \"eth0\" oifname != \"eth0\" accept",
             // TODO: IPv6 is dropped whatever the policy says; the computers get no IPv6 address behind a gateway.
             "    meta nfproto ipv6 drop",
-            "    ip daddr @deniedNetworks4 log prefix \"\(denied)\" drop",
-            "    ip daddr @denied4 log prefix \"\(denied)\" drop",
-            "    ip daddr @allowedNetworks4 accept",
-            "    ip daddr @allowed4 accept",
-            "    log prefix \"\(dropped)\" drop",
+            // Every verdict goes to ulogd, which keeps up with a scan where the kernel's own log drops lines.
+            "    ip daddr @deniedNetworks4 log group 1 prefix \"\(denied)\" drop",
+            "    ip daddr @denied4 log group 1 prefix \"\(denied)\" drop",
+            "    ip daddr @allowedNetworks4 jump allow",
+            "    ip daddr @allowed4 jump allow",
+            "    log group 1 prefix \"\(dropped)\" drop",
+            "  }",
+            // Each connection is logged as it opens, and each probe that opens none; not every packet of it.
+            "  chain allow {",
+            "    ct state new,invalid,untracked log group 1 prefix \"\(allowed)\"",
+            "    accept",
             "  }",
             "}",
         ]
         return lines.joined(separator: "\n") + "\n"
     }
+
+    /// ulogd, writing what the ruleset logs as JSON lines.
+    static let ulogd = """
+        [global]
+        logfile="/var/log/ulogd.log"
+        loglevel=3
+        plugin="/usr/lib/ulogd/ulogd_inppkt_NFLOG.so"
+        plugin="/usr/lib/ulogd/ulogd_raw2packet_BASE.so"
+        plugin="/usr/lib/ulogd/ulogd_filter_IFINDEX.so"
+        plugin="/usr/lib/ulogd/ulogd_filter_IP2STR.so"
+        plugin="/usr/lib/ulogd/ulogd_output_JSON.so"
+        stack=log1:NFLOG,base1:BASE,ifi1:IFINDEX,ip2str1:IP2STR,json1:JSON
+        [log1]
+        group=1
+        [json1]
+        sync=1
+        file="\(firewallLog)"
+
+        """
 
     /// The network an address and prefix name, as nftables wants it: 10.0.0.5/8 is 10.0.0.0/8.
     static func network(_ address: String, prefix: Int) -> String? {
@@ -145,7 +172,7 @@ public enum GatewayConfiguration {
             // TODO: Every name is answered, so a computer can still make lookups of names outside the policy; a strict
             // mode would answer only names it allows.
             "log-queries",
-            "log-facility=/var/log/dnsmasq.log",
+            "log-facility=\(dnsLog)",
         ]
         lines += domains(policy.allowed).map { "nftset=/\($0)/4#inet#gateway#allowed4" }
         lines += domains(policy.denied).map { "nftset=/\($0)/4#inet#gateway#denied4" }
@@ -153,26 +180,113 @@ public enum GatewayConfiguration {
     }
 }
 
-/// What a gateway reports back: traffic it stopped, and addresses that a denied and an allowed name share.
-public enum GatewayEvent: Equatable, Sendable {
-    /// `denied` when a deny rule stopped it, rather than nothing allowing it.
-    case blocked(slot: Int?, destination: String, port: Int?, protocol: String, denied: Bool)
-    case conflict(address: String)
+/// A connection the gateway let through or stopped, or a probe that opened none.
+public struct GatewayFirewallEntry: Equatable, Sendable {
+    public enum Verdict: String, Sendable {
+        case allowed
+        /// Nothing in the policy allows it.
+        case outsideScope = "outside-scope"
+        /// A deny rule stopped it.
+        case denied
+    }
 
-    /// Reads the kernel's log lines for dropped packets.
-    static func parse(kernelLog: String, slots: [GatewaySlot]) -> [GatewayEvent] {
-        kernelLog.split(separator: "\n").compactMap { line in
-            let denied = line.contains(GatewayConfiguration.denied)
-            guard denied || line.contains(GatewayConfiguration.dropped) else { return nil }
-            var fields: [String: String] = [:]
-            for word in line.split(separator: " ") {
-                let parts = word.split(separator: "=", maxSplits: 1)
-                if parts.count == 2 { fields[String(parts[0])] = String(parts[1]) }
+    public let time: Date
+    /// The slot whose computer sent it; nil for anything else.
+    public let slot: Int?
+    public let verdict: Verdict
+    public let source: String
+    public let destination: String
+    /// The name the destination was last looked up as, when a computer reached it by name.
+    public var name: String?
+    public let port: Int?
+    /// TCP, UDP, ICMP or the protocol's number.
+    public let `protocol`: String
+    /// The TCP flags set, such as SYN or FIN.
+    public let flags: [String]
+
+    /// Reads ulogd's JSON lines; anything else is skipped.
+    static func parse(_ lines: String, slots: [GatewaySlot]) -> [GatewayFirewallEntry] {
+        lines.split(separator: "\n").compactMap { line in
+            guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                  let prefix = object["oob.prefix"] as? String, let source = object["src_ip"] as? String,
+                  let destination = object["dest_ip"] as? String else { return nil }
+            let verdict: Verdict
+            switch prefix {
+            case GatewayConfiguration.allowed: verdict = .allowed
+            case GatewayConfiguration.denied: verdict = .denied
+            case GatewayConfiguration.dropped: verdict = .outsideScope
+            default: return nil
             }
-            guard let destination = fields["DST"], let proto = fields["PROTO"] else { return nil }
-            let slot = slots.first { $0.computerAddress == fields["SRC"] }?.index
-            return .blocked(slot: slot, destination: destination, port: fields["DPT"].flatMap { Int($0) },
-                            protocol: proto, denied: denied)
+            let seconds = (object["oob.time.sec"] as? Double) ?? Date().timeIntervalSince1970
+            let micro = (object["oob.time.usec"] as? Double) ?? 0
+            let number = object["ip.protocol"] as? Int
+            let proto = switch number { case 6: "TCP"; case 17: "UDP"; case 1: "ICMP"; default: number.map(String.init) ?? "IP" }
+            let flags = ["syn", "ack", "fin", "rst", "psh", "urg"].filter { (object["tcp.\($0)"] as? Int) == 1 }.map { $0.uppercased() }
+            return GatewayFirewallEntry(time: Date(timeIntervalSince1970: seconds + micro / 1_000_000),
+                                        slot: slots.first { $0.computerAddress == source }?.index, verdict: verdict,
+                                        source: source, destination: destination, name: nil,
+                                        port: object["dest_port"] as? Int, protocol: proto, flags: flags)
         }
+    }
+}
+
+/// A name a computer looked up through the gateway, and what it was told.
+public struct GatewayLookup: Equatable, Sendable {
+    public let time: Date
+    public let slot: Int?
+    public let name: String
+    /// A, AAAA and so on.
+    public let type: String
+    /// Addresses and CNAMEs as dnsmasq gave them, or what it said instead, such as NXDOMAIN.
+    public var answers: [String]
+
+    /// Reads dnsmasq's log: each query, with the answers that follow it. `year` places its dates, which have none.
+    static func parse(_ lines: String, slots: [GatewaySlot], year: Int) -> (lookups: [GatewayLookup], names: [String: String]) {
+        var lookups: [GatewayLookup] = []
+        var names: [String: String] = [:]
+        let dates = DateFormatter()
+        dates.locale = Locale(identifier: "en_US_POSIX")
+        dates.timeZone = TimeZone(identifier: "UTC")
+        dates.dateFormat = "yyyy MMM d HH:mm:ss"
+        for line in lines.split(separator: "\n") {
+            // Nov 25 14:42:14 dnsmasq[45]: query[A] example.com from 10.66.0.2
+            guard let colon = line.range(of: "]: ") else { continue }
+            let stamp = line[..<colon.lowerBound].split(separator: " ").prefix(3).joined(separator: " ")
+            let time = dates.date(from: "\(year) \(stamp)") ?? Date()
+            let words = line[colon.upperBound...].split(separator: " ").map(String.init)
+            guard words.count >= 3 else { continue }
+            if words[0].hasPrefix("query["), words.count >= 4, words[2] == "from" {
+                let type = String(words[0].dropFirst("query[".count).dropLast())
+                lookups.append(GatewayLookup(time: time, slot: slots.first { $0.computerAddress == words[3] }?.index,
+                                             name: words[1], type: type, answers: []))
+            } else if ["reply", "cached", "config"].contains(words[0]), words.count >= 4, words[2] == "is" {
+                let answer = words[3...].joined(separator: " ")
+                // A and AAAA are asked together, before either is answered: an address goes to the query of its kind.
+                let kind: String? = answer.first?.isHexDigit == true && answer.contains(":") ? "AAAA"
+                    : answer.first?.isNumber == true ? "A" : nil
+                if let index = lookups.lastIndex(where: { $0.name == words[1] && (kind == nil || $0.type == kind) })
+                    ?? lookups.lastIndex(where: { $0.name == words[1] }) { lookups[index].answers.append(answer) }
+                if answer.first?.isNumber == true, !answer.contains(":") { names[answer] = words[1] }
+            }
+        }
+        return (lookups, names)
+    }
+}
+
+/// What a gateway's logs gained since it was last asked, and addresses newly shared by a denied and an allowed name.
+public struct GatewayRecords: Sendable {
+    public var firewall: [GatewayFirewallEntry] = []
+    public var lookups: [GatewayLookup] = []
+    public var conflicts: [String] = []
+    /// More was waiting than one call reads; ask again.
+    public var more = false
+}
+
+/// Reading a log in pieces: what a piece holds up to its last whole line, and how many bytes that is.
+enum LogChunk {
+    static func wholeLines(_ text: String) -> (text: String, bytes: Int) {
+        guard let end = text.lastIndex(of: "\n") else { return ("", 0) }
+        let kept = String(text[...end])
+        return (kept, kept.utf8.count)
     }
 }

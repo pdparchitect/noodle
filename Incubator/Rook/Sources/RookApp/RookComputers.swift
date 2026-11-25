@@ -204,7 +204,8 @@ extension RookComputers {
         }
     }
 
-    /// Reads what each gateway stopped, into its Mission's audit log, while any runs.
+    /// Copies each gateway's firewall and DNS logs into its Mission's folder, and what it stopped into the audit log,
+    /// while any runs.
     private func watchGateways() {
         guard gatewayWatch == nil else { return }
         gatewayWatch = Task { [weak self] in
@@ -214,36 +215,61 @@ extension RookComputers {
                 // Computers that stopped free their slots, and a gateway none uses stops.
                 self.reconcile()
                 for (id, gateway) in self.gateways {
-                    guard let events = try? await gateway.events() else { continue }
-                    for event in events { await self.record(event, of: gateway, in: id) }
+                    // A busy scan can log more than one read takes; a few more reads catch up.
+                    for _ in 0..<20 {
+                        guard let records = try? await gateway.records() else { break }
+                        await self.keep(records, of: gateway, in: id)
+                        if !records.more { break }
+                    }
                 }
             }
         }
     }
 
-    private func record(_ event: GatewayEvent, of gateway: ComputerGateway, in mission: UUID) async {
-        let detail: String
-        switch event {
-        case .blocked(let slot, let destination, let port, let proto, let denied):
-            let key = "\(destination) \(port ?? 0) \(proto)"
-            guard reported[mission, default: []].insert(key).inserted else { return }
-            let computer = await slot.asyncMap { await gateway.occupant(ofSlot: $0) }.flatMap { self.session($0)?.computer.name } ?? "A computer"
-            // TODO: Name the address from the gateway's DNS log, as most are reached by name.
-            detail = "The gateway stopped \(computer) reaching \(destination)\(port.map { " port \($0)" } ?? "") (\(proto)): "
-                + (denied ? "the scope denies it." : "it is outside the scope.")
-        case .conflict(let address):
-            detail = "\(address) answers for names both in and out of scope, so the gateway keeps it closed."
+    private func keep(_ records: GatewayRecords, of gateway: ComputerGateway, in mission: UUID) async {
+        var computers: [Int: (id: UUID, name: String)] = [:]
+        for slot in Set(records.firewall.compactMap(\.slot) + records.lookups.compactMap(\.slot)) {
+            guard let id = await gateway.occupant(ofSlot: slot) else { continue }
+            computers[slot] = (id, session(id)?.computer.name ?? "A computer")
         }
-        // TODO: Gateway lines are audited in the champion's name; the audit log has no actor for Rook itself.
-        do { try model.store.record("network", detail: detail, in: mission, by: .champion(model.champion)) }
-        catch { model.problem = error.localizedDescription }
-    }
-}
-
-private extension Optional {
-    func asyncMap<T>(_ transform: (Wrapped) async -> T?) async -> T? {
-        guard let self else { return nil }
-        return await transform(self)
+        let time = ISO8601DateFormatter()
+        time.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        func line(_ fields: [String: Any?]) -> String? {
+            let present = fields.compactMapValues { $0 }
+            guard let data = try? JSONSerialization.data(withJSONObject: present, options: [.sortedKeys, .withoutEscapingSlashes]) else { return nil }
+            return String(decoding: data, as: UTF8.self)
+        }
+        let network = records.firewall.compactMap { entry in
+            line(["time": time.string(from: entry.time), "computer": entry.slot.flatMap { computers[$0]?.name },
+                  "computerID": entry.slot.flatMap { computers[$0]?.id.uuidString }, "verdict": entry.verdict.rawValue,
+                  "source": entry.source, "destination": entry.destination, "name": entry.name, "port": entry.port,
+                  "protocol": entry.protocol, "flags": entry.flags.isEmpty ? nil : entry.flags])
+        }
+        let dns = records.lookups.compactMap { lookup in
+            line(["time": time.string(from: lookup.time), "computer": lookup.slot.flatMap { computers[$0]?.name },
+                  "computerID": lookup.slot.flatMap { computers[$0]?.id.uuidString }, "name": lookup.name,
+                  "type": lookup.type, "answers": lookup.answers])
+        }
+        do {
+            try model.store.appendLog(network, to: "network.log", in: mission)
+            try model.store.appendLog(dns, to: "dns.log", in: mission)
+        } catch { model.problem = "Could not keep the gateway's log: \(error.localizedDescription)" }
+        // The audit log says once per address what the gateway stopped; the network log has every attempt.
+        var details: [String] = []
+        for entry in records.firewall where entry.verdict != .allowed {
+            let key = "\(entry.destination) \(entry.port ?? 0) \(entry.protocol)"
+            guard reported[mission, default: []].insert(key).inserted else { continue }
+            let computer = entry.slot.flatMap { computers[$0]?.name } ?? "A computer"
+            let destination = entry.destination + (entry.name.map { " (\($0))" } ?? "")
+            details.append("The gateway stopped \(computer) reaching \(destination)\(entry.port.map { " port \($0)" } ?? "") (\(entry.protocol)): "
+                           + (entry.verdict == .denied ? "the scope denies it." : "it is outside the scope."))
+        }
+        details += records.conflicts.map { "\($0) answers for names both in and out of scope, so the gateway keeps it closed." }
+        for detail in details {
+            // TODO: Gateway lines are audited in the champion's name; the audit log has no actor for Rook itself.
+            do { try model.store.record("network", detail: detail, in: mission, by: .champion(model.champion)) }
+            catch { model.problem = error.localizedDescription }
+        }
     }
 }
 

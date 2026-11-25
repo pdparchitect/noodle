@@ -134,3 +134,19 @@ final class MissionExceptionsTests: XCTestCase {
         XCTAssertEqual(MissionScope.groupDescription(objective: "Get in", scope: [], exceptions: []), "Get in")
     }
 }
+
+final class MissionLogTests: XCTestCase {
+    /// Gateway logs land in the Mission's own folder, so its export carries them; only plain file names are taken.
+    func testLogsAppendToTheMissionFolder() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("MissionLogTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = RookStore(root: root)
+        let mission = try store.open(id: UUID(), title: "External test", objective: "Get in", champion: "Avery")
+        try store.appendLog(["{\"a\":1}", "{\"a\":2}"], to: "network.log", in: mission.id)
+        try store.appendLog(["{\"a\":3}"], to: "network.log", in: mission.id)
+        try store.appendLog([], to: "dns.log", in: mission.id)
+        let text = try String(contentsOf: store.folder(mission.id).appendingPathComponent("network.log"), encoding: .utf8)
+        XCTAssertEqual(text, "{\"a\":1}\n{\"a\":2}\n{\"a\":3}\n")
+        XCTAssertThrowsError(try store.appendLog(["x"], to: "../escape.log", in: mission.id))
+    }
+}

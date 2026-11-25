@@ -189,10 +189,11 @@ private enum MissionRules {
             : "Services this Mission's computers may reach beyond its scope, such as lookup sites. They are never targets, and the agents are not told which."
     }
     var placeholder: String { self == .scope ? "*.example.com\n203.0.113.0/24\ndeny payments.example.com" : "crt.sh\napi.shodan.io" }
-    var editorHelp: String {
+    /// Shown under the editor: what a line may be.
+    var syntax: String {
         self == .scope
-            ? "One rule per line: a domain, *.domain for every name under it, an address or a network. deny in front takes a rule out of scope, even where another covers it."
-            : "One service per line: a domain, *.domain for every name under it, an address or a network."
+            ? "One per line: a domain (example.com), its subdomains (*.example.com), an address (203.0.113.7) or a network (203.0.113.0/24). Put deny in front of one to take it out of scope; deny wins."
+            : "One per line: a domain (crt.sh), its subdomains (*.example.com), an address (203.0.113.7) or a network (203.0.113.0/24)."
     }
     /// What is open behind every gateway whatever the lists say.
     var builtIn: [String] {
@@ -270,9 +271,10 @@ private struct MissionRulesSheet: View {
                         }
                     }
                     .roundedBorderEditor()
-                    .help(kind.editorHelp)
                 if case .failure(let error) = parsed {
                     Text(error.localizedDescription).foregroundStyle(.red).font(.callout)
+                } else {
+                    Text(kind.syntax).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(20)

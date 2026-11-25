@@ -157,6 +157,22 @@ public final class RookStore: @unchecked Sendable {
         onChange?()
     }
 
+    /// Appends lines, such as its gateway's JSON log entries, to a log file in the Mission's folder, which its export carries.
+    public func appendLog(_ lines: [String], to name: String, in id: UUID) throws {
+        guard !name.isEmpty, !name.contains("/"), !name.hasPrefix(".") else { throw CaseError("A Mission's log needs a plain file name.") }
+        guard !lines.isEmpty else { return }
+        try lock.withLock {
+            let url = folder(id).appendingPathComponent(name)
+            if !FileManager.default.fileExists(atPath: url.path) {
+                guard FileManager.default.createFile(atPath: url.path, contents: nil) else { throw CaseError("Could not create \(name).") }
+            }
+            let handle = try FileHandle(forWritingTo: url)
+            defer { try? handle.close() }
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data(lines.map { $0 + "\n" }.joined().utf8))
+        }
+    }
+
     /// Takes a deleted computer out of every Mission that had it.
     public func forgetComputer(_ computer: UUID, named name: String, by actor: CaseActor, now: Date = Date()) throws {
         for mission in missions() where mission.computers.contains(computer) {

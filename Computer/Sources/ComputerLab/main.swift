@@ -6,7 +6,7 @@
 //   computer-lab exec POD [--timeout S] -- COMMAND
 //   computer-lab plug POD CARD nat|link|none
 //   computer-lab policy POLICY.json      loads a new policy into the engine's gateway
-//   computer-lab events                  what the gateway blocked since last asked
+//   computer-lab events                  what the gateway logged since last asked
 //   computer-lab down
 import ComputerCore
 import ComputerEngine
@@ -190,6 +190,9 @@ actor Lab {
     }
 
     func exec(_ name: String, _ command: String, timeout: Int) async throws -> Reply {
+        if name == "gateway", pods[name] == nil, let gateway {
+            return Reply(ok: true, output: try await gateway.developmentRun(command), exitCode: 0)
+        }
         guard let pod = pods[name] else { throw LabError("No pod called \(name).") }
         let output = ComputerOutput()
         let environment = environments[name] ?? []
@@ -242,7 +245,11 @@ actor Lab {
 
     func events() async throws -> String {
         guard let gateway else { throw LabError("This lab has no gateway.") }
-        return try await gateway.events().map { "\($0)" }.joined(separator: "\n")
+        let records = try await gateway.records()
+        return (records.lookups.map { "dns \($0.name) \($0.type) → \($0.answers.joined(separator: ", "))" }
+            + records.firewall.map { "fw \($0.verdict.rawValue) \($0.destination)\($0.name.map { " (\($0))" } ?? "")\($0.port.map { ":\($0)" } ?? "") \($0.protocol) \($0.flags.joined(separator: ","))" }
+            + records.conflicts.map { "conflict \($0)" }
+            + (records.more ? ["(more waiting)"] : [])).joined(separator: "\n")
     }
 
     func down() async {
