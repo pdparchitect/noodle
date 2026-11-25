@@ -312,6 +312,7 @@ struct RookCommands: Commands {
             Button("\(rookAppName) Help") {
                 NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/tree/main/Incubator/Rook")!)
             }
+            Divider()
             // Each release publishes the guides, built from the docs folder, and keeps copies at these fixed addresses.
             Button("Setup Guide") {
                 NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/releases/download/rook-latest/Rook-Setup-Guide.pdf")!)
@@ -319,6 +320,7 @@ struct RookCommands: Commands {
             Button("User Guide") {
                 NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/releases/download/rook-latest/Rook-User-Guide.pdf")!)
             }
+            Divider()
             Button("License") {
                 NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/blob/main/Incubator/Rook/LICENSE.md")!)
             }
