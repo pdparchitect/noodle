@@ -26,8 +26,10 @@ guide explains them.
 The pages they use:
 
 - [Admin SDK API](https://console.cloud.google.com/apis/library/admin.googleapis.com),
-  to enable in the Google Cloud project. Enable it first: Data Access takes a
-  scope only once its API is enabled.
+  to enable in the Google Cloud project, and for Google Workspace Detection the
+  [Cloud Identity API](https://console.cloud.google.com/apis/library/cloudidentity.googleapis.com)
+  too. Enable them first: Data Access takes a scope only once its API is
+  enabled.
 - [Google Auth Platform](https://console.cloud.google.com/auth/overview), its
   [Data Access](https://console.cloud.google.com/auth/scopes) scopes and its
   [Clients](https://console.cloud.google.com/auth/clients).
@@ -60,7 +62,9 @@ role is missing.
 ## Google Workspace Detection
 
 Pion asks only for read-only access: to audit reports, and to users, admin
-roles, groups, mobile devices and domains. With it agents can investigate an account:
+roles, groups, mobile devices and domains; and through Cloud Identity, to the
+organisation's current settings. With it agents can investigate an account
+and assess how the organisation is set up:
 
 - **Its activity**, and what admins did to it, in one timeline across every
   report it appears in: sign-ins, password, recovery and 2-step verification
@@ -86,6 +90,17 @@ roles, groups, mobile devices and domains. With it agents can investigate an acc
   synced for a number of days. Google does not say whether a device is
   personal or company-owned; its type says how it syncs, and for Android
   whether the account is in a work profile.
+- **The organisation's current settings:** whether 2-step verification is
+  enforced and with which methods, less secure apps, how long web sessions
+  last, the password policy, account recovery, who Drive files can be shared
+  with outside the organisation and how new files are shared by default,
+  automatic mail forwarding, Chat and Meet with people outside, and which apps
+  may reach the organisation's data, each for the organisational unit or group
+  it applies to, said plainly; every other setting Google gives is listed as
+  it gives it. Google lists only settings with a value set, so agents say
+  which of these it did not list. Google lets only a super admin read them,
+  so with the least-access role below they are refused and agents ask you for
+  those Admin console pages instead.
 - **OAuth apps:** every app people granted access in the last six months, by
   client ID and scopes, with who granted and revoked it, and what each app
   pulled through its API calls and how much data. Apps an admin gave
@@ -171,15 +186,17 @@ Containment.
 **Reports**, **Users › Read**, **Groups › Read**, and read access to admin roles,
 mobile devices and domains. Its Google Cloud project needs the
 [Admin SDK API](https://console.cloud.google.com/apis/library/admin.googleapis.com)
-enabled. A super admin works too, but gives a lost sign-in far more
-reach than reading needs.
+and the [Cloud Identity API](https://console.cloud.google.com/apis/library/cloudidentity.googleapis.com)
+enabled. A super admin works too, and is the only admin Google lets read the
+organisation's current settings, but gives a lost sign-in far more reach than
+reading needs.
 
 Google does not say which Admin console privileges let a role read admin roles,
 mobile devices and domains. If agents are told something cannot be read, add the
 privilege for it to the role and try again; audit reports keep working
-meanwhile. Laptops, desktops and company-owned devices are not listed: Google
-lets only a service account with domain-wide delegation read them, which Pion
-does not use. The mobile audit report's events still cover laptops and desktops
+meanwhile. Laptops, desktops and company-owned devices are not listed: the
+access Google's device list takes is not among those Google lists for a
+sign-in like Pion's. The mobile audit report's events still cover laptops and desktops
 enrolled through endpoint verification, as device types `DESKTOP_CHROME`,
 `MAC`, `WINDOWS` and `LINUX`. A connection made before this
 access was asked for needs to sign in again.
@@ -305,16 +322,17 @@ change an account, and says instead what each needs.
   of 30 days at most, so a longer timeline reads Gmail for its last 30 days.
 - **What these tools cannot see:** current mail forwarding addresses, filters
   and delegates, a list of laptops and desktops, and Google's own Alert Center.
-  Google shows those only to a service account with domain-wide delegation,
-  which Pion does not use. The mobile report's events do include laptops and
-  desktops enrolled through endpoint verification. Connect Proofpoint or Microsoft Defender for mail, and
+  Google shows mail settings and the Alert Center only to a service account
+  with domain-wide delegation, which Pion does not use. The mobile report's
+  events do include laptops and desktops enrolled through endpoint
+  verification. Connect Proofpoint or Microsoft Defender for mail, and
   CrowdStrike or Defender for endpoints.
-- **Settings are seen only when they change.** The Admin console's current
-  settings, such as password and session rules, sharing limits and which apps
-  may be granted access, cannot be read; the admin events show every change to
-  them. Google's API for current settings is documented only for a service
-  account with domain-wide delegation. When a setting matters, agents ask you
-  for that Admin console page.
+- **Without a super admin, settings are seen only when they change.** Google
+  lets only a super admin read the organisation's current settings, such as
+  password and session rules, sharing limits and which apps may be granted
+  access. With the least-access role the admin events show every change to
+  them, and when a setting matters, agents ask you for that Admin console
+  page.
 - **Containment cannot act on admins.** User Security Management never covers
   admins, and only a super admin can act on a super admin, so agents hand a
   compromised admin to a super admin with exactly what to do in the Admin

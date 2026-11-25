@@ -17,8 +17,8 @@ final class ToolJobTests: XCTestCase {
 
     private static let services = [
         Service(name: "GoogleWorkspace", operations: GoogleWorkspace.operations, detection: GoogleWorkspace.adapter, containment: GoogleWorkspace.containmentAdapter,
-                detectionTools: ["activity", "security-events", "admin-roles", "users", "user-groups", "user-devices", "all-devices", "group-members",
-                                 "oauth-apps", "app-activity", "user-timeline", "ip-activity", "link-clicks", "domains", "check-access", "drive-exposure",
+                detectionTools: ["activity", "security-events", "admin-roles", "users", "user-groups", "user-devices", "all-devices", "policy-settings",
+                                 "group-members", "oauth-apps", "app-activity", "user-timeline", "ip-activity", "link-clicks", "domains", "check-access", "drive-exposure",
                                  "mail-trace", "client-activity"],
                 containmentTools: ["user", "tokens", "apps", "app-passwords", "devices", "check-access", "sign-out", "reset-password", "remove-recovery",
                                    "revoke-token", "delete-app-password", "invalidate-backup-codes", "device-block", "suspend", "unsuspend"],
@@ -206,12 +206,17 @@ final class ToolJobTests: XCTestCase {
     }
 
     /// The scopes, any one of which Google's Admin SDK reference says allows a read: the audit reports, users,
-    /// their sessions, apps and app passwords, admin roles, groups, mobile devices and domains. None for any other.
+    /// their sessions, apps and app passwords, admin roles, groups, mobile devices and domains; and Cloud Identity's
+    /// reference, its policies. None for any other.
     private static func workspaceScopes(allowing request: URLRequest) -> Set<String> {
         let auth = "https://www.googleapis.com/auth/"
         let parts = (request.url?.path ?? "").split(separator: "/").map(String.init)
         func either(_ scope: String) -> Set<String> { [auth + scope, auth + scope + ".readonly"] }
         guard request.httpMethod == "GET" else { return [] }
+        if request.url?.host == "cloudidentity.googleapis.com" {
+            if parts == ["v1", "policies"] { return either("cloud-identity.policies") }
+            return []
+        }
         if parts.starts(with: ["admin", "reports", "v1"]) { return [auth + "admin.reports.audit.readonly"] }
         guard parts.starts(with: ["admin", "directory", "v1"]) else { return [] }
         if parts.contains("tokens") || parts.contains("asps") { return [auth + "admin.directory.user.security"] }

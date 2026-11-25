@@ -40,8 +40,10 @@ public enum GoogleWorkspace {
         admin-roles lists the super admins and every admin role with what it allows and who holds it. For a breach's \
         scope, users finds accounts by search, such as isEnrolledIn2Sv=false; user-groups and user-devices show what a user \
         reaches through groups and which phones hold their data; all-devices lists every phone and tablet in the domain, \
-        longest unsynced first, with whose it is, to find one sold or lost but still allowed in; and the takeout and vault \
-        reports show what was exported. \
+        longest unsynced first, with whose it is, to find one sold or lost but still allowed in; policy-settings reads \
+        the organisation's current settings, such as 2-step verification enforcement, Drive sharing outside and default \
+        link sharing, less secure apps and session length, which Google gives only to a super admin; and the takeout \
+        and vault reports show what was exported. \
         To investigate an account, start with user-timeline, everything it and admins did to it in one list; to follow an \
         address, ip-activity; for a deleted account, users with deleted true gives the profile ID to read its history by. \
         activity filters on an event's details, such as doc_id== for who opened a file or client_id== for an app. In a \
@@ -61,11 +63,11 @@ public enum GoogleWorkspace {
         events only in windows of 30 days; results say what was cut short or could not be read. A wake whose window \
         holds no events but a report that could not be read means the alert watch cannot read that report: run \
         check-access and tell the champion what it says. This tool cannot see \
-        current mail forwarding addresses, filters or delegates, a list of laptops and desktops, Google's Alert Center, or \
-        the Admin console's current settings, such as password, session, sharing and app access rules, only changes to \
-        them in the admin events. The mobile report's events do cover laptops and desktops enrolled through endpoint \
-        verification, as device types DESKTOP_CHROME, MAC, WINDOWS and LINUX. Use Proofpoint or Microsoft Defender for \
-        mail and CrowdStrike or Defender for endpoints, ask \
+        current mail forwarding addresses, filters or delegates, a list of laptops and desktops, or Google's Alert \
+        Center; when policy-settings is refused, the Admin console's current settings, such as password, session, \
+        sharing and app access rules, show only as changes in the admin events. The mobile report's events do cover \
+        laptops and desktops enrolled through endpoint verification, as device types DESKTOP_CHROME, MAC, WINDOWS and \
+        LINUX. Use Proofpoint or Microsoft Defender for mail and CrowdStrike or Defender for endpoints, ask \
         the champion for an Admin console page when a setting matters, and say what you could not check. domains lists \
         the organisation's domains; their SPF, DKIM and DMARC are public DNS, which a DNS tool checks. \
         Record each finding as evidence, citing the application, user \
@@ -78,28 +80,30 @@ public enum GoogleWorkspace {
         iconName: "google-workspace",
         configuration: .connection(.init(endpointTemplate: "https://admin.googleapis.com",
             fields: [ToolField(key: "clientID", title: "Client ID", placeholder: "1234-abc.apps.googleusercontent.com", kind: .identifier)],
-            // Read-only, as the tool only reads: audit reports, users, their admin roles, groups, mobile devices and domains. Laptops and
-            // desktops are in Cloud Identity's device API, which takes only a service account with domain-wide delegation.
+            // Read-only, as the tool only reads: audit reports, users, their admin roles, groups, mobile devices and domains, and
+            // from Cloud Identity the organisation's current settings. Laptops and desktops are in Cloud Identity's device API,
+            // whose read-only scope is not on Google's list of scopes a sign-in may request, so it could fail the whole sign-in.
             oauth: .google(scopes: ["https://www.googleapis.com/auth/admin.reports.audit.readonly",
                                     "https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly",
                                     "https://www.googleapis.com/auth/admin.directory.user.readonly",
                                     "https://www.googleapis.com/auth/admin.directory.group.readonly",
                                     "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly",
-                                    "https://www.googleapis.com/auth/admin.directory.domain.readonly"], clients: []),
+                                    "https://www.googleapis.com/auth/admin.directory.domain.readonly",
+                                    "https://www.googleapis.com/auth/cloud-identity.policies.readonly"], clients: []),
             oauthClientField: "clientID", adapter: "google-workspace")),
         setup: setup)
 
     static let setup = [
-        "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation, and enable the [Admin SDK API](https://console.cloud.google.com/apis/library/admin.googleapis.com) in it.",
-        "Set up [Google Auth Platform](https://console.cloud.google.com/auth/overview) with the audience **Internal**, and under [Data Access](https://console.cloud.google.com/auth/scopes) add the scopes `https://www.googleapis.com/auth/admin.reports.audit.readonly`, `https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly`, `https://www.googleapis.com/auth/admin.directory.user.readonly`, `https://www.googleapis.com/auth/admin.directory.group.readonly`, `https://www.googleapis.com/auth/admin.directory.device.mobile.readonly` and `https://www.googleapis.com/auth/admin.directory.domain.readonly`. Data Access takes a scope only once its API is enabled.",
+        "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation, and enable the [Admin SDK API](https://console.cloud.google.com/apis/library/admin.googleapis.com) and the [Cloud Identity API](https://console.cloud.google.com/apis/library/cloudidentity.googleapis.com) in it.",
+        "Set up [Google Auth Platform](https://console.cloud.google.com/auth/overview) with the audience **Internal**, and under [Data Access](https://console.cloud.google.com/auth/scopes) add the scopes `https://www.googleapis.com/auth/admin.reports.audit.readonly`, `https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly`, `https://www.googleapis.com/auth/admin.directory.user.readonly`, `https://www.googleapis.com/auth/admin.directory.group.readonly`, `https://www.googleapis.com/auth/admin.directory.device.mobile.readonly`, `https://www.googleapis.com/auth/admin.directory.domain.readonly` and `https://www.googleapis.com/auth/cloud-identity.policies.readonly`. Data Access takes a scope only once its API is enabled.",
         "Under [Clients](https://console.cloud.google.com/auth/clients), choose **Create client** of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev), and copy its **Client ID** here.",
-        "In the Admin console's [Admin roles](https://admin.google.com/ac/roles), create a role such as **Pion Detection** with only **Reports**, **Users › Read**, **Groups › Read**, read access to admin roles, devices and domains, and assign it to an admin account kept for Pion, never a super admin.",
+        "In the Admin console's [Admin roles](https://admin.google.com/ac/roles), create a role such as **Pion Detection** with only **Reports**, **Users › Read**, **Groups › Read**, read access to admin roles, devices and domains, and assign it to an admin account kept for Pion, never a super admin. Google lets only a super admin read the organisation's current settings, so with this role policy-settings is refused and agents ask you for those Admin console pages instead.",
         "Choose **Add & Connect** and sign in as that admin.",
     ]
 
     /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
     static let operations: [any ServiceOperation] = [
-        Activity(), SecurityEvents(), AdminRoles(), Users(), UserGroups(), UserDevices(), AllDevices(), GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(),
+        Activity(), SecurityEvents(), AdminRoles(), Users(), UserGroups(), UserDevices(), AllDevices(), PolicySettings(), GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(),
         IPActivity(), LinkClicks(), Domains(), CheckAccess(), DriveExposure(), MailTrace(), ClientActivity(),
         UserState(), Tokens(), Apps(), AppPasswords(), ContainmentDevices(), ContainmentCheckAccess(), SignOut(), ResetPassword(), RemoveRecovery(),
         RevokeToken(), DeleteAppPassword(), InvalidateBackupCodes(), DeviceBlock(), Suspend(), Unsuspend(),
@@ -1670,6 +1674,8 @@ extension GoogleWorkspace {
     /// What one thing the tools read needs from the setup, to say exactly what to change when Google refuses it.
     struct Need: Sendable {
         let title: String, api: String, apiID: String, scope: String, privilege: String
+        /// What to change when the admin's role is refused, where adding a privilege is not the answer.
+        var forbidden: String? = nil
 
         static let reports = Need(title: "Audit reports", api: "Admin SDK API", apiID: "admin.googleapis.com",
                                   scope: "https://www.googleapis.com/auth/admin.reports.audit.readonly", privilege: "Reports")
@@ -1684,6 +1690,11 @@ extension GoogleWorkspace {
                                  scope: "https://www.googleapis.com/auth/admin.directory.group.readonly", privilege: "Groups › Read")
         static let mobileDevices = Need(title: "Mobile devices", api: "Admin SDK API", apiID: "admin.googleapis.com",
                                         scope: "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly", privilege: "read access to devices")
+        /// Google's Policy API overview says only a super admin can use it.
+        static let policies = Need(title: "Organisation settings", api: "Cloud Identity API", apiID: "cloudidentity.googleapis.com",
+                                   scope: "https://www.googleapis.com/auth/cloud-identity.policies.readonly", privilege: "super admin",
+                                   forbidden: "Google lets only a super admin read the organisation's current settings, and the setup keeps this tool's admin from being one: "
+                                       + "ask the champion for the Admin console pages for the settings that matter, and say what you could not check.")
         static let domains = Need(title: "Domains", api: "Admin SDK API", apiID: "admin.googleapis.com",
                                   scope: "https://www.googleapis.com/auth/admin.directory.domain.readonly", privilege: "read access to domains")
         static let containmentUsers = Need(title: "Users", api: "Admin SDK API", apiID: "admin.googleapis.com",
@@ -1727,6 +1738,7 @@ extension GoogleWorkspace {
             return "the \(need.api) is turned off in the tool's Google Cloud project: enable it at \(link ?? "https://console.cloud.google.com/apis/library/" + need.apiID), then try again."
         }
         if case ServiceError.forbidden = error {
+            if let forbidden = need.forbidden { return forbidden }
             return "the admin this tool signs in as may not do this: add \(need.privilege) to its role in the Admin console, or check the role is assigned to them."
         }
         return nil
@@ -1760,7 +1772,7 @@ extension GoogleWorkspace {
         static let input = JSONSchema.object([:])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let admin = try service.at(host: "admin.googleapis.com")
+            let admin = try service.at(host: "admin.googleapis.com"), identity = try service.at(host: "cloudidentity.googleapis.com")
             let directory = ["admin", "directory", "v1"]
             let lines = await GoogleWorkspace.check([
                 (.reports, { _ = try await admin.data(["admin", "reports", "v1", "activity", "users", "all", "applications", "login"],
@@ -1770,6 +1782,7 @@ extension GoogleWorkspace {
                 (.groups, { _ = try await admin.data(directory + ["groups"], query: ["customer": "my_customer", "maxResults": "1"]) }),
                 (.mobileDevices, { _ = try await admin.data(directory + ["customer", "my_customer", "devices", "mobile"], query: ["maxResults": "1"]) }),
                 (.domains, { _ = try await admin.data(directory + ["customer", "my_customer", "domains"]) }),
+                (.policies, { _ = try await identity.data(["v1", "policies"], query: ["pageSize": "1"]) }),
                 // A working sign-in report does not prove the others: Gmail's needs a window, and some editions lack it.
                 (Need.report("Takeout report"), { _ = try await admin.data(["admin", "reports", "v1", "activity", "users", "all", "applications", "takeout"],
                                                                        query: ["startTime": ServiceInput.daysAgo(1), "maxResults": "1"]) }),

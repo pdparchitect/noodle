@@ -32,7 +32,8 @@ final class GoogleTests: XCTestCase {
                                                            "https://www.googleapis.com/auth/admin.directory.user.readonly",
                                                            "https://www.googleapis.com/auth/admin.directory.group.readonly",
                                                            "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly",
-                                                   "https://www.googleapis.com/auth/admin.directory.domain.readonly"]),
+                                                           "https://www.googleapis.com/auth/admin.directory.domain.readonly",
+                                                           "https://www.googleapis.com/auth/cloud-identity.policies.readonly"]),
                       (GoogleCloud.preset, cloud, ["https://www.googleapis.com/auth/logging.read", "https://www.googleapis.com/auth/cloudasset",
                                                    "https://www.googleapis.com/auth/securitycenter"])]
         defer { ToolCatalog.use(ToolCatalog.noodle) }
@@ -563,6 +564,84 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(wrong.isError && wrong.text.contains("APPROVED"), wrong.text)
     }
 
+    /// The organisation's current settings, read page after page: those an assessment asks about first, said plainly
+    /// and in Google's order where several apply, then the rest as Google gives them, and which it asks about were not
+    /// listed at all.
+    func testPolicySettingsSayTheSettingsAnAssessmentChecksFirst() async throws {
+        let path = "/v1/policies"
+        let first = #"{"policies":[{"name":"policies/a","customer":"customers/C01","type":"ADMIN","policyQuery":{"orgUnit":"orgUnits/root1","sortOrder":1},"setting":{"type":"settings/security.two_step_verification_enforcement","value":{"enforcedFrom":"2025-01-01T00:00:00Z"}}},{"name":"policies/b","type":"ADMIN","policyQuery":{"orgUnit":"orgUnits/eng","group":"groups/contractors","sortOrder":2},"setting":{"type":"settings/security.two_step_verification_enforcement","value":{"enforcedFrom":"2099-01-01T00:00:00Z"}}},{"name":"policies/c","type":"ADMIN","policyQuery":{"orgUnit":"orgUnits/root1","sortOrder":1},"setting":{"type":"settings/drive_and_docs.external_sharing","value":{"externalSharingMode":"ALLOWED","allowPublishingFiles":true,"warnForExternalSharing":false}}}],"nextPageToken":"p2"}"#
+        let second = #"{"policies":[{"name":"policies/d","type":"SYSTEM","policyQuery":{"orgUnit":"orgUnits/root1"},"setting":{"type":"settings/security.less_secure_apps","value":{"allowLessSecureApps":true}}},{"name":"policies/e","type":"ADMIN","policyQuery":{"orgUnit":"orgUnits/root1"},"setting":{"type":"settings/gmail.mail_delegation","value":{"enableMailDelegation":false}}},{"name":"policies/f","type":"ADMIN","policyQuery":{"orgUnit":"orgUnits/root1"},"setting":{"type":"settings/drive_and_docs.general_access_default","value":{"default_file_access":"PRIMARY_AUDIENCE_WITH_LINK"}}}]}"#
+        let service = FakeService()
+        service.sequences[path] = [(200, first), (200, second)]
+        let all = try await callTool(GoogleWorkspace.adapter, "policy-settings", "{}", on: service, in: workspace)
+        XCTAssertFalse(all.isError, all.text)
+        XCTAssertEqual(service.requests.count, 2, "the second page was not read")
+        XCTAssertTrue(service.requests.allSatisfy { $0.url?.host == "cloudidentity.googleapis.com" })
+        XCTAssertEqual(queryItems(service.requests.first)["pageSize"], "100")
+        XCTAssertNil(queryItems(service.requests.first)["filter"])
+        XCTAssertEqual(queryItems(service.requests.last)["pageToken"], "p2")
+        let lines = all.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines.first?.hasPrefix("6 settings of 5 kinds.") == true, all.text)
+        XCTAssertEqual(lines.dropFirst().first, "Settings an assessment checks first:")
+        let enforcement = "2-step verification enforcement (security.two_step_verification_enforcement), "
+        XCTAssertEqual(Array(lines[2...6]), [
+            enforcement + "group groups/contractors: not enforced yet: enforced from 2099-01-01T00:00:00Z",
+            enforcement + "org unit orgUnits/root1: enforced since 2025-01-01T00:00:00Z",
+            "Less secure apps (security.less_secure_apps), org unit orgUnits/root1 (Google's default): allowed: apps may sign in with a password alone, without 2-step verification",
+            "Drive sharing outside the organisation (drive_and_docs.external_sharing), org unit orgUnits/root1: files may be shared outside the organisation; "
+                + "files may be published on the web; no warning before sharing outside",
+            "Drive default link sharing (drive_and_docs.general_access_default), org unit orgUnits/root1: new files open to the organisation to anyone with the link",
+        ], all.text)
+        XCTAssertEqual(lines[7], "Other settings:")
+        XCTAssertEqual(lines[8], "gmail.mail_delegation, org unit orgUnits/root1: {enableMailDelegation=false}")
+        XCTAssertTrue(lines.last?.hasPrefix("Not listed, so at Google's default or not in this edition: 2-step verification enrollment,") == true
+                      && lines.last?.contains("Web session length") == true && lines.last?.contains("Less secure apps") == false, all.text)
+        XCTAssertEqual(all.structured?["matched"] as? Int, 6)
+        XCTAssertEqual(all.structured?["incomplete"] as? Bool, false)
+        let settings = try XCTUnwrap(all.structured?["settings"] as? [[String: Any]])
+        XCTAssertEqual(settings.first?["group"] as? String, "groups/contractors")
+        XCTAssertEqual((settings.first?["value"] as? [String: Any])?["enforcedFrom"] as? String, "2099-01-01T00:00:00Z")
+
+        // A type is asked of Google by its start, and an organisational unit kept here, by its ID however it is given.
+        service.sequences[path] = [(200, first), (200, second)]
+        let twoStep = try await callTool(GoogleWorkspace.adapter, "policy-settings", #"{"settingType":"settings/security.two_step","orgUnit":"orgUnits/root1"}"#,
+                                         on: service, in: workspace)
+        XCTAssertEqual(queryItems(service.requests.last)["filter"], #"setting.type.matches('^settings/security\\.two_step')"#)
+        let twoStepLines = twoStep.text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(twoStepLines.first?.hasPrefix("1 setting of 1 kind for type security.two_step and org unit root1.") == true, twoStep.text)
+        XCTAssertFalse(twoStep.text.contains("drive_and_docs"), "a setting Google let through anyway is not listed")
+        XCTAssertFalse(twoStep.text.contains("groups/contractors"), twoStep.text)
+        XCTAssertTrue(twoStepLines.last?.contains("2-step verification methods") == true && twoStepLines.last?.contains("Web session length") == false, twoStep.text)
+
+        service.answers[path] = (200, #"{"policies":[{"name":"policies/a","type":"ADMIN","policyQuery":{"orgUnit":"orgUnits/root1"},"setting":{"type":"settings/drive_and_docs.external_sharing","value":{}}}],"nextPageToken":"more"}"#)
+        let cut = try await callTool(GoogleWorkspace.adapter, "policy-settings", #"{"limit":1}"#, on: service, in: workspace)
+        XCTAssertTrue(cut.text.contains("incomplete") && cut.text.contains("more matched than are listed"), cut.text)
+        XCTAssertEqual(cut.structured?["incomplete"] as? Bool, true)
+
+        service.answers[path] = (200, "{}")
+        let none = try await callTool(GoogleWorkspace.adapter, "policy-settings", "{}", on: service, in: workspace)
+        XCTAssertFalse(none.isError, none.text)
+        XCTAssertTrue(none.text.hasPrefix("Google's Policy API gave no settings.") && none.text.contains("Admin console"), none.text)
+
+        let wrong = try await callTool(GoogleWorkspace.adapter, "policy-settings", #"{"settingType":"x') || true || ('"}"#, on: service, in: workspace)
+        XCTAssertTrue(wrong.isError && wrong.text.contains("letters, digits"), wrong.text)
+    }
+
+    /// Google lets only a super admin read the settings, so a refusal says that rather than a privilege to add; a plan
+    /// without the Policy API says it may not be in the edition.
+    func testPolicySettingsSayWhyTheyCouldNotBeRead() async throws {
+        let service = FakeService()
+        service.answers["/v1/policies"] = (403, Self.notAuthorized)
+        let refused = try await callTool(GoogleWorkspace.adapter, "policy-settings", "{}", on: service, in: workspace)
+        XCTAssertTrue(refused.isError && refused.text.contains("only a super admin") && refused.text.contains("Admin console pages"), refused.text)
+        service.answers["/v1/policies"] = (403, Self.scopeMissing)
+        let scope = try await callTool(GoogleWorkspace.adapter, "policy-settings", "{}", on: service, in: workspace)
+        XCTAssertTrue(scope.isError && scope.text.contains("cloud-identity.policies.readonly"), scope.text)
+        service.answers["/v1/policies"] = (400, #"{"error":{"code":400,"message":"Request contains an invalid argument.","status":"FAILED_PRECONDITION"}}"#)
+        let unavailable = try await callTool(GoogleWorkspace.adapter, "policy-settings", "{}", on: service, in: workspace)
+        XCTAssertTrue(unavailable.isError && unavailable.text.contains("edition") && unavailable.text.contains("invalid argument"), unavailable.text)
+    }
+
     // MARK: Investigation
 
     /// An account's 2-step verification enforcement, and recovery details an attacker would change, flagged when they
@@ -681,6 +760,7 @@ final class GoogleTests: XCTestCase {
         service.answers["/admin/directory/v1/customer/my_customer/roles"] = (403, Self.scopeMissing)
         service.answers["/admin/directory/v1/groups"] = (403, Self.notAuthorized)
         service.answers["/admin/directory/v1/customer/my_customer/devices/mobile"] = (403, Self.apiDisabled)
+        service.answers["/v1/policies"] = (403, Self.notAuthorized)
         let check = try await callTool(GoogleWorkspace.adapter, "check-access", "{}", on: service, in: workspace)
         XCTAssertFalse(check.isError, check.text)
         let lines = check.text.split(separator: "\n").map(String.init)
@@ -690,7 +770,8 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(lines.contains { $0.hasPrefix("✗ Groups") && $0.contains("Groups › Read") && $0.contains("role") }, check.text)
         XCTAssertTrue(lines.contains { $0.hasPrefix("✗ Mobile devices") && $0.contains("is turned off")
             && $0.contains("https://console.developers.google.com/apis/api/cloudidentity.googleapis.com/overview?project=123456") }, check.text)
-        XCTAssertFalse(service.requests.contains { $0.url?.host == "cloudidentity.googleapis.com" }, "Cloud Identity needs a service account")
+        XCTAssertTrue(lines.contains { $0.hasPrefix("✗ Organisation settings") && $0.contains("only a super admin") && !$0.contains("add super admin") }, check.text)
+        XCTAssertEqual(Set(service.requests.filter { $0.url?.host == "cloudidentity.googleapis.com" }.map { $0.url?.path ?? "" }), ["/v1/policies"])
     }
 
     /// A tool call that fails says the same, so an agent can tell the champion what to change without guessing.
@@ -706,8 +787,13 @@ final class GoogleTests: XCTestCase {
         service.answers["/admin/reports/v1/activity/users/all/applications/login"] = (403, Self.scopeMissing)
         let activity = try await callTool(GoogleWorkspace.adapter, "activity", #"{"application":"login"}"#, on: service, in: workspace)
         XCTAssertTrue(activity.isError && activity.text.contains("admin.reports.audit.readonly"), activity.text)
-        // Cloud Identity's device API takes only a service account, so the admin's sign-in never asks for it.
-        XCTAssertFalse(GoogleWorkspace.setup.joined().contains("cloud-identity"))
+        // Cloud Identity's settings take a scope and an API of their own, which the setup names. Its device scope is not
+        // on Google's list of scopes a sign-in may request, so the sign-in does not ask for it.
+        let setup = GoogleWorkspace.setup.joined()
+        XCTAssertTrue(setup.contains("cloud-identity.policies.readonly") && setup.contains("only a super admin") && !setup.contains("cloud-identity.devices"))
+        service.answers["/v1/policies"] = (403, Self.apiDisabled)
+        let disabled = try await callTool(GoogleWorkspace.adapter, "policy-settings", "{}", on: service, in: workspace)
+        XCTAssertTrue(disabled.isError && disabled.text.contains("Cloud Identity API is turned off"), disabled.text)
     }
 
     /// Containment's check tries reading users and one user's tokens; suspending can only be confirmed by suspending.
@@ -733,6 +819,7 @@ final class GoogleTests: XCTestCase {
     func testSetupStepsLinkEveryPageAndAPITheyName() {
         let links: [(String, [String], [String])] = [
             ("Google Workspace Detection", GoogleWorkspace.setup, ["console.cloud.google.com/apis/library/admin.googleapis.com",
+                                                              "console.cloud.google.com/apis/library/cloudidentity.googleapis.com",
                                                               "console.cloud.google.com/auth/overview", "console.cloud.google.com/auth/scopes",
                                                               "console.cloud.google.com/auth/clients", "admin.google.com/ac/roles"]),
             ("Google Workspace Containment", GoogleWorkspace.containmentSetup, ["admin.google.com/ac/roles", "console.cloud.google.com/apis/library/admin.googleapis.com",
@@ -938,8 +1025,7 @@ final class GoogleTests: XCTestCase {
     // MARK: Scope guard
 
     /// Every Google scope Pion asks for, with where it was checked. A scope can be accepted by an API's method and still
-    /// be refused at sign-in, as Cloud Identity's device scopes are, which take only a service account, and an invalid
-    /// one fails the whole sign-in. So a scope is added here only once it is on Google's list of scopes a sign-in can
+    /// be refused at sign-in, and an invalid one fails the whole sign-in. So a scope is added here only once it is on Google's list of scopes a sign-in can
     /// request (developers.google.com/identity/protocols/oauth2/scopes) and the API's own guide allows an admin's
     /// sign-in, or a live sign-in has taken it.
     static let checkedScopes: [String: String] = [
@@ -949,6 +1035,7 @@ final class GoogleTests: XCTestCase {
         "https://www.googleapis.com/auth/admin.directory.group.readonly": "on Google's scope list; live on the champion's tenant",
         "https://www.googleapis.com/auth/admin.directory.device.mobile.readonly": "on Google's scope list; live on the champion's tenant",
         "https://www.googleapis.com/auth/admin.directory.domain.readonly": "on Google's scope list; Directory API, which takes an admin's own sign-in; domains.list accepts it",
+        "https://www.googleapis.com/auth/cloud-identity.policies.readonly": "on Google's scope list; policies.list accepts it; Google lets only a super admin use the Policy API",
         "https://www.googleapis.com/auth/admin.directory.user": "on Google's scope list",
         "https://www.googleapis.com/auth/admin.directory.user.security": "on Google's scope list",
         "https://www.googleapis.com/auth/admin.directory.device.mobile.action": "on Google's scope list; mobiledevices.list, get and action each accept it",
