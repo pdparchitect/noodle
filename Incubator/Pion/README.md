@@ -121,7 +121,7 @@ to the agents that should use it.
 
 | | |
 | --- | --- |
-| **Reputation and intel** | VirusTotal, Shodan, Censys, GreyNoise, CrowdSec CTI, AbuseIPDB, AlienVault OTX, urlscan.io, Have I Been Pwned, Cloudflare Radar |
+| **Reputation and intel** | VirusTotal, Shodan, Censys, GreyNoise, CrowdSec CTI, AbuseIPDB, AlienVault OTX, urlscan.io, Hunt.io Detection, Hunt.io, Have I Been Pwned, Cloudflare Radar |
 | **Attack surface** | crt.sh, DNS, NVD, cve.now, Tenable |
 | **Identity** | Okta Detection, Okta Containment, Microsoft Entra ID Detection, Microsoft Entra ID Containment, Google Workspace Detection, Google Workspace Containment, Duo Detection, Duo Containment |
 | **Endpoint and email** | CrowdStrike Falcon Detection, CrowdStrike Falcon Containment, Microsoft Defender XDR Detection, Microsoft Defender XDR Containment, SentinelOne Detection, SentinelOne Containment, Proofpoint TAP |

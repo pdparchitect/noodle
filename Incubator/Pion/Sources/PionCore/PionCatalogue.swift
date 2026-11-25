@@ -35,5 +35,6 @@ public enum PionCatalogue {
         Proofpoint.preset, SumoLogic.preset, Tenable.preset, Censys.preset, Grafana.cloud, Grafana.server, Sentry.cloud, Sentry.server,
         GoogleCloud.containment, Vercel.preset, Vercel.containment, Vercel.mcp,
         Duo.preset, Duo.containment,
+        HuntIO.preset, HuntIO.mcp,
     ] + ToolCatalog.noodle.filter { keptFromNoodle.contains($0.id) }
 }

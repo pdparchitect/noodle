@@ -71,6 +71,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | hex.icon (2026-10-06) | https://hex.tech/favicon.svg (rendered to PNG) |
 | higgsfield.icon | https://higgsfield.ai/icon.png |
 | honeycomb.icon (2026-10-06) | https://www.honeycomb.io/favicon.ico |
+| huntio.icon (2026-11-25) | https://framerusercontent.com/images/cgxoyNff7NfT9JoLc1kTqAEXng.png (Hunt.io's apple-touch-icon, linked from hunt.io) |
 | inkbox.icon (2026-10-12) | https://inkbox.ai/static/favicons/logo-inkbox-icon.png |
 | intercom.icon (2026-10-06) | https://www.intercom.com/intercom-marketing-site/favicons/favicon-32x32.png |
 | jam.icon | https://framerusercontent.com/images/PJzGWvCk8HH9Ho4kUWVsQtYI.png |

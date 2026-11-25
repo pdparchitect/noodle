@@ -11,7 +11,7 @@ final class PionCatalogueTests: XCTestCase {
         for security in ["VirusTotal", "Shodan", "Okta Detection", "Okta Containment", "Microsoft Entra ID Detection", "Microsoft Entra ID Containment", "Microsoft Defender XDR Detection", "Microsoft Defender XDR Containment", "CrowdStrike Falcon Detection", "CrowdStrike Falcon Containment", "SentinelOne Detection", "SentinelOne Containment",
                          "Splunk", "Elastic", "Microsoft Sentinel", "Cloudflare Detection", "Cloudflare Containment", "Cloudflare Radar", "Wiz", "AbuseIPDB", "GreyNoise", "CrowdSec CTI", "NVD", "crt.sh", "cve.now", "AWS Detection", "AWS Containment", "Microsoft Azure Detection", "Microsoft Azure Containment",
                          "Google Cloud Detection", "Google Workspace Detection", "Google Workspace Containment", "Grafana Cloud", "Self-Hosted Grafana", "Sentry", "Self-Hosted Sentry",
-                         "Vercel Detection", "Vercel Containment", "Vercel", "Duo Detection", "Duo Containment"] {
+                         "Vercel Detection", "Vercel Containment", "Vercel", "Duo Detection", "Duo Containment", "Hunt.io Detection", "Hunt.io"] {
             XCTAssertTrue(names.contains(security), security)
         }
         // Noodle's own entries, by their icons' names.
