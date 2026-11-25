@@ -222,7 +222,8 @@ final class StorageMaintenanceTests: XCTestCase {
         let store = try ComputerStore(root: library.root)
         let preview = try await StorageMaintenance.inspect(library: library)
         store.storageReport = preview
-        let hosting = NSHostingView(rootView: StorageView(model: store).preferredColorScheme(.dark))
+        // The view takes its width from its host, as Settings gives it.
+        let hosting = NSHostingView(rootView: StorageView(model: store).frame(width: 580).preferredColorScheme(.dark))
         let size = hosting.fittingSize
         XCTAssertEqual(size.width, 580, accuracy: 1)
         XCTAssertGreaterThan(size.height, 200)
