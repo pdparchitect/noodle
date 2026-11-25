@@ -45,7 +45,7 @@ final class OktaTests: XCTestCase {
         XCTAssertFalse(oauth.usesResourceIndicator)
         XCTAssertEqual(oauth.authorizationParameters, ["prompt": "login"], "the admin signs in afresh, never as whoever the browser is signed in as")
         XCTAssertEqual(configuration.oauth?.tokenEndpoint.host, "okta.invalid", "the preset's own host is never reachable")
-        XCTAssertTrue(oauth.scopes.allSatisfy { $0.hasSuffix(".read") || $0.hasSuffix(".read.self") || $0 == "offline_access" }, "Okta Audit only reads")
+        XCTAssertTrue(oauth.scopes.allSatisfy { $0.hasSuffix(".read") || $0.hasSuffix(".read.self") || $0 == "offline_access" }, "Okta Detection only reads")
         XCTAssertEqual(Set(oauth.scopes), ["okta.users.read", "okta.users.read.self", "okta.groups.read", "okta.apps.read", "okta.logs.read",
                                            "okta.roles.read", "okta.apiTokens.read", "offline_access"])
         XCTAssertTrue(Okta.setup.contains { $0.contains("com.pdparchitect.pion:/oauth2callback") }, "the setup names the redirect URI Pion uses")
@@ -58,7 +58,7 @@ final class OktaTests: XCTestCase {
                        "com.pdparchitect.pion:/oauth2callback")
         XCTAssertEqual(ToolConnectionService.configuredRedirectURI(for: contoso, bundleIdentifier: "com.pdparchitect.pion.local")?.absoluteString,
                        "com.pdparchitect.pion.local:/oauth2callback")
-        XCTAssertEqual(Okta.preset.name, "Okta Audit")
+        XCTAssertEqual(Okta.preset.name, "Okta Detection")
         XCTAssertEqual(Okta.preset.id, "bdc65def-9c77-4503-9d57-eac000822cce", "connections made before keep working")
         XCTAssertEqual(Okta.adapter.watchedTool, "security-events")
         XCTAssertNotEqual(acme.id, contoso.id)
@@ -300,13 +300,13 @@ final class OktaTests: XCTestCase {
         for path in ["/api/v1/users", "/api/v1/groups", "/api/v1/apps", "/api/v1/logs"] { service.answers[path] = (200, "[]") }
         service.answers["/api/v1/iam/assignees/users"] = (403, #"{"errorCode":"E0000006","errorSummary":"You do not have permission to perform the requested action"}"#)
         service.answers["/api/v1/api-tokens"] = (200, "[]")
-        service.answers["/api/v1/users/me"] = (200, #"{"id":"00upion","profile":{"login":"pion-audit@acme.example"}}"#)
-        service.answers["/api/v1/users/00upion/roles"] = (200, #"[{"id":"ra1","type":"READ_ONLY_ADMIN","label":"Read Only Administrator"},{"id":"ra2","type":"CUSTOM","label":"Pion Audit","role":"cr0audit"}]"#)
+        service.answers["/api/v1/users/me"] = (200, #"{"id":"00upion","profile":{"login":"pion-detection@acme.example"}}"#)
+        service.answers["/api/v1/users/00upion/roles"] = (200, #"[{"id":"ra1","type":"READ_ONLY_ADMIN","label":"Read Only Administrator"},{"id":"ra2","type":"CUSTOM","label":"Pion Detection","role":"cr0audit"}]"#)
         service.answers["/api/v1/iam/roles/cr0audit/permissions"] = (200, #"{"permissions":[{"label":"okta.iam.read"},{"label":"okta.users.apitokens.read"}]}"#)
         let checked = try await call("check-access", "{}", on: service)
         XCTAssertFalse(checked.isError, checked.text)
         XCTAssertTrue(checked.text.contains("✓ System Log") && checked.text.contains("✗ Admin assignments") && checked.text.contains("okta.iam.read"), checked.text)
-        XCTAssertTrue(checked.text.contains("Signed in as pion-audit@acme.example") && checked.text.contains("✓ The signed-in admin cannot change the org"), checked.text)
+        XCTAssertTrue(checked.text.contains("Signed in as pion-detection@acme.example") && checked.text.contains("✓ The signed-in admin cannot change the org"), checked.text)
         XCTAssertTrue(checked.text.contains("okta.logs.read") && checked.text.contains("offline_access") && checked.text.contains("0oaPionAudit"),
                       "it reports the sign-in's scopes and the app they are granted to: \(checked.text)")
         XCTAssertFalse(service.requests.contains { $0.url!.path.hasSuffix("/current") }, "no API token of its own to read")

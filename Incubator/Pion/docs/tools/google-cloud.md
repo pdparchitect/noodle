@@ -1,6 +1,6 @@
-# Google Cloud Audit
+# Google Cloud Detection
 
-**Google Cloud Audit** reads a Google Cloud organisation, folder or project the
+**Google Cloud Detection** reads a Google Cloud organisation, folder or project the
 way a defender does: who did what in the
 [Cloud Audit Logs](https://docs.cloud.google.com/logging/docs/audit), what
 [Security Command Center](https://docs.cloud.google.com/security-command-center/docs/security-command-center-overview)
@@ -347,8 +347,8 @@ says the same, so an agent can tell you without running the check:
 to contain an incident: it disables a service account or one of its keys,
 removes one member from an IAM role, enforces public access prevention on a
 bucket, and snapshots, stops or isolates a VM. It is a separate tool with a
-sign-in of its own, so Google Cloud Audit's sign-in never holds more than its
-read scopes. Like Audit, it signs in with OAuth as a person, never as a service
+sign-in of its own, so Google Cloud Detection's sign-in never holds more than its
+read scopes. Like Detection, it signs in with OAuth as a person, never as a service
 account.
 
 ### How Google limits what it can do
@@ -372,7 +372,7 @@ group it belongs to.
 
 ### Setting it up with least access
 
-1. **Enable four more APIs** in the project that holds your Google Cloud Audit
+1. **Enable four more APIs** in the project that holds your Google Cloud Detection
    client: the
    [IAM API](https://console.cloud.google.com/apis/library/iam.googleapis.com),
    [Cloud Resource Manager API](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com),
@@ -443,7 +443,7 @@ group it belongs to.
    organisation, folder or project to act on. If a VM's network is a Shared
    VPC, the isolation's firewall rules go in the network's host project, which
    must be inside the scope and where the role is granted too.
-5. **Set Scope and its ID** as for Google Cloud Audit, and **Account that signs
+5. **Set Scope and its ID** as for Google Cloud Detection, and **Account that signs
    in** to that account's email. Choose **Add & Connect**, sign in as that
    account, and ask an agent to run **check-access**, giving it a project to
    check the Compute Engine and Cloud Storage APIs there.
@@ -462,7 +462,7 @@ a deny policy, an organisation policy or VPC Service Controls.
 Each takes the resource's full name, such as
 `projects/kestrel-prod/serviceAccounts/ci@kestrel-prod.iam.gserviceaccount.com/keys/KEY-ID`,
 `projects/kestrel-prod/zones/europe-west1-b/instances/web-1` or a bucket's
-name, as Google Cloud Audit lists them.
+name, as Google Cloud Detection lists them.
 
 | Action | Held for your approval | What it does, and how to undo it |
 | --- | --- | --- |

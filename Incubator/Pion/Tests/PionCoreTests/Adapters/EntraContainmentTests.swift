@@ -74,7 +74,7 @@ final class EntraContainmentTests: XCTestCase {
         XCTAssertEqual(oauth.tokenEndpoint.absoluteString, "https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/token")
         XCTAssertEqual(Set(oauth.scopes), Set(Entra.containmentScopes))
         XCTAssertEqual(oauth.unlistedScopes, ["offline_access"])
-        XCTAssertTrue(Set(oauth.scopes).isDisjoint(with: Set(audit.oauth!.scopes)), "a grant of its own, apart from Audit's read-only one")
+        XCTAssertTrue(Set(oauth.scopes).isDisjoint(with: Set(audit.oauth!.scopes)), "a grant of its own, apart from Detection's read-only one")
         XCTAssertFalse(oauth.scopes.contains { ["Directory.ReadWrite.All", "User.ReadWrite.All", "Directory.AccessAsUser.All"].contains($0) }, "nothing broader than its operations take")
         XCTAssertTrue(Entra.containmentSetup.contains { $0.contains("com.pdparchitect.pion:/oauth2callback") })
         XCTAssertTrue(Entra.containmentScopes.allSatisfy { scope in Entra.containmentSetup.contains { $0.contains("`\(scope)`") } })

@@ -4,6 +4,7 @@
 
 ### Changed
 
+- The ten read-only tools are now named Detection instead of Audit, such as Cloudflare Detection beside Cloudflare Containment, as they watch and read for investigations rather than audit a configuration; their Setup Steps suggest names such as Pion Detection for the token, app or user. A connection you have not renamed shows the new name, and its agents keep calling it as before.
 - A bot's held call now says so in its result's `_meta["noodle/approval"]`, as `{ id, state }`, instead of in `structuredContent`, so a script can tell it from a service's answer; no tool can set that key, so a result carrying it never reached the service.
 
 ### Fixed

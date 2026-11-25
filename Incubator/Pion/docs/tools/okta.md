@@ -2,7 +2,7 @@
 
 Pion has two Okta tools, each added per org with a sign-in of its own:
 
-- **Okta Audit** reads an org the way a defender does: who a user is, their
+- **Okta Detection** reads an org the way a defender does: who a user is, their
   groups, apps, sign-in factors and the apps they let act for them, who holds
   which admin role, every API token, and the
   [System Log](https://developer.okta.com/docs/reference/api/system-log/). It
@@ -41,11 +41,11 @@ Okta allows a request only when **both** of these allow it:
 
 | Tool | Scopes | Admin's role |
 | --- | --- | --- |
-| Okta Audit | `okta.users.read`, `okta.users.read.self`, `okta.groups.read`, `okta.apps.read`, `okta.logs.read`, `okta.roles.read`, `okta.apiTokens.read` | Read-Only Administrator, and a custom role that views admins and API tokens |
+| Okta Detection | `okta.users.read`, `okta.users.read.self`, `okta.groups.read`, `okta.apps.read`, `okta.logs.read`, `okta.roles.read`, `okta.apiTokens.read` | Read-Only Administrator, and a custom role that views admins and API tokens |
 | Okta Containment | `okta.users.manage`, `okta.users.read.self`, `okta.groups.manage`, `okta.roles.manage`, `okta.apiTokens.manage` | a custom role with only the permissions its actions take |
 
 Both also ask for `offline_access`, so the sign-in renews itself without asking
-again. Okta Audit's scopes only read, so it cannot change anything, whatever its
+again. Okta Detection's scopes only read, so it cannot change anything, whatever its
 admin's role allows. Okta Containment's scopes are broad, as Okta has none
 narrower, so its admin's custom role is what limits it: never make that admin a
 super or organization administrator.
@@ -65,20 +65,20 @@ a listing never leads anywhere else.
 
 1. **Create the app.** In **Applications › Applications**, choose **Create App
    Integration**, then **OIDC - OpenID Connect** and **Native Application**.
-   Name it **Pion Audit**.
+   Name it **Pion Detection**.
 2. **Set its sign-in.** Keep the grant type **Authorization Code** and tick
    **Refresh Token**. Give `com.pdparchitect.pion:/oauth2callback` as the
    **Sign-in redirect URI** (`com.pdparchitect.pion.local:/oauth2callback` for
    Pion Dev). Under **Assignments**, allow only the admin who will sign in.
    Keep client authentication as PKCE, a native app's default.
 3. **Grant its scopes.** On the app's **Okta API Scopes** tab, grant exactly
-   Okta Audit's scopes from the table above. Only a super administrator can
+   Okta Detection's scopes from the table above. Only a super administrator can
    grant them.
-4. **Choose its admin.** Keep an admin for Okta Audit alone, such as
-   `pion-audit@example.com`, with the **Read-Only Administrator** role under
+4. **Choose its admin.** Keep an admin for Okta Detection alone, such as
+   `pion-detection@example.com`, with the **Read-Only Administrator** role under
    **Security › Administrators**.
 5. **To audit admins and API tokens too**, create a custom role under
-   **Security › Administrators › Roles**, such as **Pion Audit**, with only
+   **Security › Administrators › Roles**, such as **Pion Detection**, with only
    **View roles, resources, and admin assignments** (`okta.iam.read`) and
    **View API tokens** (`okta.users.apitokens.read`). Assign it to the same
    admin for all users and all Identity and Access Management resources. The
@@ -219,7 +219,7 @@ again.
 ## Containing an incident
 
 **Okta Containment** is a separate tool, with its own app, admin and sign-in, so
-the audit sign-in stays read-only.
+the detection sign-in stays read-only.
 
 1. **Create another app** as in steps 1 to 3 above, named **Pion Containment**,
    and grant it Okta Containment's scopes from the table above.

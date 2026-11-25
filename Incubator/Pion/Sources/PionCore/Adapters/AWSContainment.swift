@@ -4,7 +4,7 @@ import NoodleCore
 import NoodleToolConnections
 
 /// AWS Containment: acting on an organisation's accounts to contain an incident, through a permission set of its own,
-/// kept apart from AWS Audit's so the audit role stays read-only. Every principal, instance, bucket, trail and finding
+/// kept apart from AWS Detection's so the detection role stays read-only. Every principal, instance, bucket, trail and finding
 /// it acts on must be in the account named; what cuts off or restores access, stops an instance, hides a finding or
 /// deletes something waits for the champion's approval. What Pion makes or changes carries its mark, a tag or a name,
 /// so an undo only ever removes Pion's own.
@@ -13,7 +13,7 @@ extension AWS {
         id: "519c7abb-cb08-4f06-8abc-ad64d5497d6f", name: "AWS Containment",
         summary: "Deactivate an access key, quarantine a user or role, isolate, stop or snapshot an instance, block S3 public access, restart logging and archive or close findings, across an organisation's accounts.",
         defaultInstructions: """
-        Use AWS Containment to contain an incident in an organisation's accounts. Find what to act on with AWS Audit \
+        Use AWS Containment to contain an incident in an organisation's accounts. Find what to act on with AWS Detection \
         first, and give each user and role by its ARN, each instance by its ID, with the account it is in. \
         deactivate-access-key turns a user's key off, saying when it was last used; reactivate-access-key undoes only \
         what Pion did. quarantine-principal attaches AWS's AWSDenyAll policy, or AWSCompromisedKeyQuarantineV3, to a \
@@ -49,7 +49,7 @@ extension AWS {
         setup: containmentSetup)
 
     static let containmentSetup = [
-        "In the **IAM Identity Center** console, open **Permission sets** and create a custom permission set for containment alone, named such as `PionContainment`, apart from AWS Audit's. Set its session duration to an hour.",
+        "In the **IAM Identity Center** console, open **Permission sets** and create a custom permission set for containment alone, named such as `PionContainment`, apart from AWS Detection's. Set its session duration to an hour.",
         "Give it this inline policy and nothing else; leave out any statement whose actions you do not want agents to have: `\(compact(containmentPolicy))`",
         "Only if agents should be able to end a role's open sessions with revoke-role-sessions, add this statement to the policy's list too. IAM cannot limit what an inline policy it allows says, so it lets the permission set give any role any permission; it is off unless you add it: `\(compact(revocationStatement))`",
         "Under **AWS accounts**, assign the permission set only to a responder user or group, and only in the accounts where containment is wanted, not the management account. Require MFA for them at your identity provider.",
@@ -237,7 +237,7 @@ extension AWS {
             try await AWS.iam(iam, "ListAccessKeys", ["UserName": user.name, "MaxItems": "100"])
         }
         guard let found = answer.all("member").first(where: { $0.value("AccessKeyId") == id }), let status = found.value("Status") else {
-            throw ServiceError.input("Nothing was changed: \(id) is not one of \(user.name)'s access keys in \(iam.named). access-key in AWS Audit says whose it is.")
+            throw ServiceError.input("Nothing was changed: \(id) is not one of \(user.name)'s access keys in \(iam.named). access-key in AWS Detection says whose it is.")
         }
         return status
     }

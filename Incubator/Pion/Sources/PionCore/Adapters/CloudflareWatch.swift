@@ -3,7 +3,7 @@ import NoodleCore
 import NoodleToolConnections
 import Synchronization
 
-/// Cloudflare Audit's alert watch, and security-events, which reads back what woke the agents, the same way for both:
+/// Cloudflare Detection's alert watch, and security-events, which reads back what woke the agents, the same way for both:
 /// high-risk changes in the account audit log, and bursts of blocked Access logins.
 extension Cloudflare {
     typealias WatchedEvent = GoogleCloud.WatchedEvent

@@ -3,7 +3,7 @@ import NoodleCore
 import NoodleToolConnections
 import Synchronization
 
-/// AWS Audit's alert watch, and security-events, which reads back what woke the agents, the same way for both: high
+/// AWS Detection's alert watch, and security-events, which reads back what woke the agents, the same way for both: high
 /// and critical GuardDuty and Security Hub findings that are not archived, suppressed or resolved, and the CloudTrail
 /// changes that open the way in or hide what follows, in each watched account's default region and, for CloudTrail,
 /// in us-east-1 too, where IAM, STS, Organizations and console sign-ins are logged.

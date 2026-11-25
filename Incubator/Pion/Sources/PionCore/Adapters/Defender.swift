@@ -4,22 +4,22 @@ import NoodleToolConnections
 
 /// Microsoft Defender XDR: its alerts and incidents, advanced hunting across devices, email, identities and apps, and
 /// the devices Defender for Endpoint sees, read through Microsoft Graph as the admin who signs in. Each account is one
-/// tenant. Microsoft Defender XDR Audit only reads; Microsoft Defender XDR Containment, a tool of its own with a sign-in
+/// tenant. Microsoft Defender XDR Detection only reads; Microsoft Defender XDR Containment, a tool of its own with a sign-in
 /// of its own, acts on devices through the Defender for Endpoint API.
 ///
 /// Both sign in as Microsoft Entra ID's tools do: OAuth at the tenant's own address, an authorization code and PKCE,
 /// through a public client app registration made for each tool, with no client secret. One sign-in gets tokens for one
-/// API, so Audit reads Microsoft Graph alone and Containment the Defender for Endpoint API alone. Devices come from
+/// API, so Detection reads Microsoft Graph alone and Containment the Defender for Endpoint API alone. Devices come from
 /// advanced hunting's DeviceInfo: the Defender for Endpoint API reads a device or its machine actions only with
-/// Machine.ReadWrite, which could also change devices' tags, so Audit leaves machine actions to Containment.
+/// Machine.ReadWrite, which could also change devices' tags, so Detection leaves machine actions to Containment.
 ///
 /// Both tools' guide is Incubator/Pion/docs/tools/defender.md. Change it with the setup steps, permissions or operations here.
 public enum Defender {
     public static let preset = ToolDefinition(
-        id: "eef1f5bd-b131-448f-9f37-0a3ba0beb217", name: "Microsoft Defender XDR Audit",
+        id: "eef1f5bd-b131-448f-9f37-0a3ba0beb217", name: "Microsoft Defender XDR Detection",
         summary: "Alerts, incidents, advanced hunting and devices across Microsoft Defender XDR, read-only.",
         defaultInstructions: """
-        Use Microsoft Defender XDR Audit to see what Microsoft's detections found: alerts and incidents by severity, \
+        Use Microsoft Defender XDR Detection to see what Microsoft's detections found: alerts and incidents by severity, \
         status, source and time; alert reads one alert with its evidence, including each device's Defender for Endpoint \
         ID and each file's SHA1, which Microsoft Defender XDR Containment acts on; incident reads one incident with its \
         alerts. hunt runs KQL across the advanced hunting tables, such as DeviceProcessEvents, DeviceNetworkEvents, \
@@ -51,10 +51,10 @@ public enum Defender {
     static let auditScopes = ["SecurityAlert.Read.All", "SecurityIncident.Read.All", "ThreatHunting.Read.All", "User.Read"]
 
     static let setup = [
-        "In the [Microsoft Entra admin center](https://entra.microsoft.com), open **App registrations** and choose **New registration**. Name it Pion Defender Audit, kept for this tool alone, and keep **Single tenant**. Under **Redirect URI**, choose **Public client/native (mobile & desktop)** and give \(Entra.redirects). Add no client secret or certificate: Pion keeps none and signs in with PKCE.",
+        "In the [Microsoft Entra admin center](https://entra.microsoft.com), open **App registrations** and choose **New registration**. Name it Pion Defender Detection, kept for this tool alone, and keep **Single tenant**. Under **Redirect URI**, choose **Public client/native (mobile & desktop)** and give \(Entra.redirects). Add no client secret or certificate: Pion keeps none and signs in with PKCE.",
         "Under **API permissions**, choose **Add a permission › Microsoft Graph › Delegated permissions** and add exactly \(auditScopes.map { "`\($0)`" }.joined(separator: ", ")) (a new app has `User.Read` already). Choose **Grant admin consent**. Pion asks for these and `offline_access`, and refuses a sign-in that lacks any.",
         "Under **Enterprise applications**, open the app: in **Properties**, set **Assignment required?** to **Yes**, and under **Users and groups** assign only the admin who will sign in.",
-        "Microsoft allows a request only when both the app's permissions and the signed-in admin's role allow it. Keep an admin for Pion Defender Audit alone, such as pion-defender-audit@contoso.com, with only the **Security Reader** role, which reads alerts, incidents and advanced hunting and changes nothing. If your tenant uses Microsoft Defender XDR's unified role-based access, give that admin a custom role with only **Security data basics (read)** instead, over every device group it should see.",
+        "Microsoft allows a request only when both the app's permissions and the signed-in admin's role allow it. Keep an admin for Pion Defender Detection alone, such as pion-defender-detection@contoso.com, with only the **Security Reader** role, which reads alerts, incidents and advanced hunting and changes nothing. If your tenant uses Microsoft Defender XDR's unified role-based access, give that admin a custom role with only **Security data basics (read)** instead, over every device group it should see.",
         "Alerts, incidents and advanced hunting need Microsoft Defender XDR, such as Microsoft 365 E5 or a Defender for Endpoint, Office 365, Identity or Cloud Apps plan; each plan fills only its own hunting tables, which check-access lists.",
         "Give the **Directory (tenant) ID** and the app's **Application (client) ID** from its **Overview**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
@@ -78,7 +78,7 @@ public enum Defender {
 
     // MARK: Requests
 
-    /// The hosts a next page may be on: Graph for Audit, the Defender for Endpoint API for Containment.
+    /// The hosts a next page may be on: Graph for Detection, the Defender for Endpoint API for Containment.
     static let hosts: Set<String> = ["graph.microsoft.com", "api.security.microsoft.com"]
 
     /// One request, for the tenant the connection names, to `api`, as said in what it refused: its refusals in its own
@@ -676,7 +676,7 @@ extension Defender {
         ("CloudAppEvents", "Defender for Cloud Apps"),
     ]
 
-    /// Tries each thing Audit reads once, says what works and what to change for what does not, which hunting tables
+    /// Tries each thing Detection reads once, says what works and what to change for what does not, which hunting tables
     /// have data, and who is signed in.
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}

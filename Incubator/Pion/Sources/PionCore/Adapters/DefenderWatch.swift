@@ -3,7 +3,7 @@ import NoodleCore
 import NoodleToolConnections
 import Synchronization
 
-/// Microsoft Defender XDR Audit's alert watch, and security-events, which reads back what woke the agents, the same way
+/// Microsoft Defender XDR Detection's alert watch, and security-events, which reads back what woke the agents, the same way
 /// for both: new high-severity alerts not yet resolved, and high-severity incidents still open.
 extension Defender {
     typealias WatchedEvent = GoogleCloud.WatchedEvent

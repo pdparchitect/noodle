@@ -2,7 +2,7 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// Cloudflare Audit's reads of Zero Trust: Access authentication logs, applications, policies, users and their
+/// Cloudflare Detection's reads of Zero Trust: Access authentication logs, applications, policies, users and their
 /// sessions, Gateway activity, rules and lists, WARP devices and Cloudflare Tunnels.
 extension Cloudflare {
     // MARK: Access authentication logs

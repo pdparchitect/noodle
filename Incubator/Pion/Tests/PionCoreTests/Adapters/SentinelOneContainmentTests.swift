@@ -55,7 +55,7 @@ final class SentinelOneContainmentTests: XCTestCase {
         XCTAssertTrue(PionCatalogue.entries.contains { $0.id == SentinelOne.containment.id })
         let setup = SentinelOne.containmentSetup.joined(separator: "\n")
         for permission in SentinelOne.containmentPermissions { XCTAssertTrue(setup.contains("**\(permission)**"), permission) }
-        XCTAssertTrue(setup.contains("Pion Containment") && setup.contains("apart from Pion Audit's"), setup)
+        XCTAssertTrue(setup.contains("Pion Containment") && setup.contains("apart from Pion Detection's"), setup)
     }
 
     /// Every change but reopening a threat or setting a verdict short of false positive is held for approval and says

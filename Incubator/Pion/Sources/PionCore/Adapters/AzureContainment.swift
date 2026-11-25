@@ -3,7 +3,7 @@ import NoodleCore
 import NoodleToolConnections
 
 /// Microsoft Azure Containment: acting on one subscription to contain an incident, through an app registration of its
-/// own, kept apart from Microsoft Azure Audit's so the audit app stays read-only. Every resource it acts on must be
+/// own, kept apart from Microsoft Azure Detection's so the detection app stays read-only. Every resource it acts on must be
 /// inside the account's subscription, and what cuts off access, stops a VM or deletes something waits for the
 /// champion's approval.
 extension Azure {
@@ -12,7 +12,7 @@ extension Azure {
         summary: "Remove a role assignment, deallocate or isolate a VM, rotate a storage key, close a storage account to public and shared key access, lock a resource, snapshot a disk and set or close a Defender for Cloud alert.",
         defaultInstructions: """
         Use Microsoft Azure Containment to contain an incident in one subscription. Find what to act on with Microsoft \
-        Azure Audit first, and give each resource by its full ID. remove-role-assignment takes away access, saying what \
+        Azure Detection first, and give each resource by its full ID. remove-role-assignment takes away access, saying what \
         the assignment was, so record that as evidence; it cannot remove access inherited from a management group or \
         held through a group's membership. isolate-vm adds deny-all inbound and outbound rules, named after the VM, at \
         priority 100 to the network security group of each of the VM's network interfaces, refusing one shared with \
@@ -41,7 +41,7 @@ extension Azure {
         setup: containmentSetup)
 
     static let containmentSetup = [
-        "In the [Microsoft Entra admin center](https://entra.microsoft.com), open **App registrations** and register a new app for containment alone, such as Pion Containment, apart from Microsoft Azure Audit's. Keep **Single tenant**, leave the redirect URI empty, and add a client secret under **Certificates & secrets**, copying its **Value**.",
+        "In the [Microsoft Entra admin center](https://entra.microsoft.com), open **App registrations** and register a new app for containment alone, such as Pion Containment, apart from Microsoft Azure Detection's. Keep **Single tenant**, leave the redirect URI empty, and add a client secret under **Certificates & secrets**, copying its **Value**.",
         "In the [Azure portal](https://portal.azure.com), open the subscription's **Access control (IAM)** and choose **Add › Add custom role**. Name it Pion Containment and, under **JSON**, give it only these actions: \(containmentActions.map { "`\($0)`" }.joined(separator: ", ")). Leave out any whose action you do not want agents to have.",
         "Assign that role to the app on the subscription. Never give it Owner or Contributor: its role, not Pion, limits what it can do.",
         "Copy the **Subscription ID**, and the app's **Directory (tenant) ID** and **Application (client) ID**. Choose **Add & Connect** and ask an agent to run check-access.",
@@ -486,7 +486,7 @@ extension Azure {
     struct SetAlertStatus: ServiceOperation {
         struct Input: Decodable, Sendable { let alert: String, status: String }
         static let name = "set-alert-status"
-        static let summary = "Mark a Defender for Cloud alert Active or InProgress, by its full ID from Microsoft Azure Audit's defender-alerts. close-alert resolves or dismisses one."
+        static let summary = "Mark a Defender for Cloud alert Active or InProgress, by its full ID from Microsoft Azure Detection's defender-alerts. close-alert resolves or dismisses one."
         static let input = JSONSchema.object([
             "alert": .string("The alert's full ID, such as /subscriptions/…/providers/Microsoft.Security/locations/centralus/alerts/NAME."),
             "status": .string("The status.", oneOf: ["Active", "InProgress"]),
@@ -506,7 +506,7 @@ extension Azure {
     struct CloseAlert: ServiceOperation {
         struct Input: Decodable, Sendable { let alert: String, status: String }
         static let name = "close-alert"
-        static let summary = "Resolve or dismiss a Defender for Cloud alert, by its full ID from Microsoft Azure Audit's defender-alerts, which takes it out of the alert watch and Defender's open alerts. Reopen it with set-alert-status."
+        static let summary = "Resolve or dismiss a Defender for Cloud alert, by its full ID from Microsoft Azure Detection's defender-alerts, which takes it out of the alert watch and Defender's open alerts. Reopen it with set-alert-status."
         static let input = JSONSchema.object([
             "alert": .string("The alert's full ID, such as /subscriptions/…/providers/Microsoft.Security/locations/centralus/alerts/NAME."),
             "status": .string("Resolved, for one dealt with, or Dismissed, for one that was not a threat.", oneOf: ["Resolved", "Dismissed"]),

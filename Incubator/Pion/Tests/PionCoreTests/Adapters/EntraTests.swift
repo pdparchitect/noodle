@@ -16,7 +16,7 @@ final class EntraTests: XCTestCase {
         XCTAssertFalse(contoso.keepsSecret)
         XCTAssertEqual(contoso.settings?["clientID"], Self.client)
         XCTAssertEqual(contoso.adapter, "entra")
-        XCTAssertEqual(Entra.preset.name, "Microsoft Entra ID Audit")
+        XCTAssertEqual(Entra.preset.name, "Microsoft Entra ID Detection")
         guard case .connection(let configuration) = Entra.preset.configuration else { return XCTFail() }
         XCTAssertEqual(configuration.oauthClientField, "clientID")
         XCTAssertEqual(configuration.oauthPathField, "tenant")
@@ -33,7 +33,7 @@ final class EntraTests: XCTestCase {
         XCTAssertEqual(oauth.authorizationParameters, ["prompt": "login"])
         XCTAssertEqual(oauth.unlistedScopes, ["offline_access"], "asked for, but Microsoft never lists it as granted")
         XCTAssertEqual(Set(oauth.scopes), Set(Entra.auditScopes))
-        XCTAssertTrue(oauth.scopes.allSatisfy { $0.contains(".Read.") }, "Audit only reads: \(oauth.scopes)")
+        XCTAssertTrue(oauth.scopes.allSatisfy { $0.contains(".Read.") }, "Detection only reads: \(oauth.scopes)")
         XCTAssertTrue(Entra.setup.contains { $0.contains("com.pdparchitect.pion:/oauth2callback") && $0.contains("Public client") })
         XCTAssertTrue(Entra.auditScopes.allSatisfy { scope in Entra.setup.contains { $0.contains("`\(scope)`") } }, "the setup grants every permission asked for")
         XCTAssertTrue(Entra.setup.contains { $0.contains("Global Reader") })
@@ -288,7 +288,7 @@ final class EntraTests: XCTestCase {
     }
 
     /// check-access tries each read once, names the tenant and the admin's roles, and warns of permissions consented
-    /// beyond what Audit asks for.
+    /// beyond what Detection asks for.
     func testCheckAccessSaysWhatWorksWhatToChangeAndWhatIsBroaderThanNeeded() async throws {
         let service = FakeService()
         let page = #"{"value":[]}"#
@@ -299,10 +299,10 @@ final class EntraTests: XCTestCase {
         service.answers["/v1.0/auditLogs/signIns"] = (403, #"{"error":{"code":"Authentication_RequestFromNonPremiumTenantOrB2CTenant","message":"tenant doesn't have premium license"}}"#)
         service.answers["/v1.0/identityProtection/riskDetections"] = (403, #"{"error":{"code":"Authorization_RequestDenied","message":"Insufficient privileges"}}"#)
         service.answers["/v1.0/organization"] = (200, #"{"value":[{"id":"4f1c2e3d-0000-4000-8000-000000000001","displayName":"Contoso","verifiedDomains":[{"name":"contoso.onmicrosoft.com"}]}]}"#)
-        service.answers["/v1.0/me"] = (200, #"{"id":"0a0a0a0a-0000-4000-8000-00000000000a","userPrincipalName":"pion-audit@contoso.com"}"#)
+        service.answers["/v1.0/me"] = (200, #"{"id":"0a0a0a0a-0000-4000-8000-00000000000a","userPrincipalName":"pion-detection@contoso.com"}"#)
         service.answers["/v1.0/roleManagement/directory/roleDefinitions"] = (200, #"{"value":[{"id":"f2ef992c-3afb-46b9-b7cf-a126ee74c451","displayName":"Global Reader","templateId":"f2ef992c-3afb-46b9-b7cf-a126ee74c451"},{"id":"fe930be7-5e62-47db-91af-98c3a49a38b1","displayName":"User Administrator"}]}"#)
         service.answers[Self.key("/v1.0/roleManagement/directory/roleAssignments", ["$filter": "principalId eq '0a0a0a0a-0000-4000-8000-00000000000a'"])] = (200, #"{"value":[{"id":"ra1","principalId":"0a0a0a0a-0000-4000-8000-00000000000a","roleDefinitionId":"f2ef992c-3afb-46b9-b7cf-a126ee74c451"},{"id":"ra2","principalId":"0a0a0a0a-0000-4000-8000-00000000000a","roleDefinitionId":"fe930be7-5e62-47db-91af-98c3a49a38b1"}]}"#)
-        service.answers[Self.key("/v1.0/servicePrincipals", ["$filter": "appId eq '\(Self.client)'", "$select": "id,appDisplayName"])] = (200, #"{"value":[{"id":"7e7e7e7e-0000-4000-8000-00000000007e","appDisplayName":"Pion Audit"}]}"#)
+        service.answers[Self.key("/v1.0/servicePrincipals", ["$filter": "appId eq '\(Self.client)'", "$select": "id,appDisplayName"])] = (200, #"{"value":[{"id":"7e7e7e7e-0000-4000-8000-00000000007e","appDisplayName":"Pion Detection"}]}"#)
         service.answers[Self.key("/v1.0/servicePrincipals", ["$filter": "appId eq '00000003-0000-0000-c000-000000000000'", "$select": "id"])] = (200, #"{"value":[{"id":"graph-sp"}]}"#)
         service.answers["/v1.0/oauth2PermissionGrants"] = (200, #"{"value":[{"consentType":"AllPrincipals","resourceId":"graph-sp","scope":"\#(Entra.auditScopes.joined(separator: " ")) User.ReadWrite.All"}]}"#)
         service.answers["/v1.0/servicePrincipals/7e7e7e7e-0000-4000-8000-00000000007e/appRoleAssignments"] = (200, page)
@@ -313,7 +313,7 @@ final class EntraTests: XCTestCase {
         XCTAssertTrue(text.contains("✓ Users and groups") && text.contains("✓ Directory audit log"), text)
         XCTAssertTrue(text.contains("✗ Sign-in log: this needs Microsoft Entra ID P1"), text)
         XCTAssertTrue(text.contains("✗ Risk detections: either the app lacks the delegated permission IdentityRiskEvent.Read.All"), text)
-        XCTAssertTrue(text.contains("Signed in as pion-audit@contoso.com, who holds Global Reader, User Administrator"), text)
+        XCTAssertTrue(text.contains("Signed in as pion-detection@contoso.com, who holds Global Reader, User Administrator"), text)
         XCTAssertTrue(text.contains("⚠ The signed-in admin's roles also allow changes: User Administrator"), text)
         XCTAssertTrue(text.contains("⚠ Consented besides what this tool asks for: User.ReadWrite.All") && text.contains("can change the tenant"), text)
         XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" }, "it changes nothing")

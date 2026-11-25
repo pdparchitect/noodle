@@ -22,7 +22,7 @@ final class SentinelOneTests: XCTestCase {
     }
 
     func testAuditKeepsItsIDAndAdapterUnderItsNewNameWithAViewerToken() throws {
-        XCTAssertEqual(SentinelOne.preset.name, "SentinelOne Audit")
+        XCTAssertEqual(SentinelOne.preset.name, "SentinelOne Detection")
         XCTAssertEqual(SentinelOne.preset.id, "9d1c01e9-bb44-4a66-876a-e60b48337ca3")
         XCTAssertEqual(s1.endpoint.absoluteString, "https://usea1-kestrel.sentinelone.net/web/api/v2.1")
         XCTAssertEqual(s1.tokenScheme, "ApiToken")
@@ -212,14 +212,14 @@ final class SentinelOneTests: XCTestCase {
     func testCheckAccessNamesTheTokensUserRoleAndScopeAndSendsOnlyReads() async throws {
         func console(role: String) -> FakeService {
             let service = FakeService()
-            service.answers["\(api)/user"] = (200, #"{"data":{"id":"42","email":"pion-audit@kestrel.example","fullName":"Pion Audit","scope":"account","lowestRole":"\#(role)","scopeRoles":[{"roleName":"\#(role)","name":"Kestrel"}],"apiToken":{"expiresAt":"2027-01-01T00:00:00Z"}}}"#)
+            service.answers["\(api)/user"] = (200, #"{"data":{"id":"42","email":"pion-detection@kestrel.example","fullName":"Pion Detection","scope":"account","lowestRole":"\#(role)","scopeRoles":[{"roleName":"\#(role)","name":"Kestrel"}],"apiToken":{"expiresAt":"2027-01-01T00:00:00Z"}}}"#)
             for path in ["agents", "threats", "activities", "groups", "exclusions"] { service.answers["\(api)/\(path)"] = (200, #"{"data":[],"pagination":{"totalItems":0}}"#) }
             service.answers["\(api)/sites"] = (200, #"{"data":{"sites":[]},"pagination":{"totalItems":0}}"#)
             return service
         }
         let viewer = console(role: "Viewer")
         let ok = try await call("check-access", "{}", viewer)
-        for expected in ["Pion Audit", "scope account", "Viewer in Kestrel", "expires 2027-01-01", "✓ It holds only the Viewer role", "✓ Agents", "✓ Sites", "usea1-kestrel.sentinelone.net"] {
+        for expected in ["Pion Detection", "scope account", "Viewer in Kestrel", "expires 2027-01-01", "✓ It holds only the Viewer role", "✓ Agents", "✓ Sites", "usea1-kestrel.sentinelone.net"] {
             XCTAssertTrue(ok.text.contains(expected), "\(expected): \(ok.text)")
         }
         XCTAssertTrue(viewer.requests.allSatisfy { $0.httpMethod == "GET" })

@@ -8,9 +8,9 @@ import NoodleToolConnections
 /// Workspace is. It never signs in as a service account.
 public enum GoogleCloud {
     public static let preset = ToolDefinition(
-        id: "371912f8-7145-4096-a763-2c3ce3af0e55", name: "Google Cloud Audit", summary: "Audit logs, Security Command Center findings, IAM access and resources, read-only.",
+        id: "371912f8-7145-4096-a763-2c3ce3af0e55", name: "Google Cloud Detection", summary: "Audit logs, Security Command Center findings, IAM access and resources, read-only.",
         defaultInstructions: """
-        Use Google Cloud Audit to investigate an organisation, folder or project: audit-logs searches the Cloud Audit \
+        Use Google Cloud Detection to investigate an organisation, folder or project: audit-logs searches the Cloud Audit \
         Logs of the scope, its folders and its projects, and log views of a central logging bucket when named, by \
         principal, including what they did while impersonating a service account, method, resource, caller IP, \
         outcome, service, log and time, and shows what an IAM change granted or revoked and the request's key fields; \
@@ -1132,7 +1132,7 @@ extension GoogleCloud {
         }
     }
 
-    /// Tries each thing Google Cloud Audit reads once, with the smallest request it takes, and says how to fix what it
+    /// Tries each thing Google Cloud Detection reads once, with the smallest request it takes, and says how to fix what it
     /// cannot. It changes nothing: asking which permissions the sign-in holds changes nothing either.
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}

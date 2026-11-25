@@ -64,7 +64,7 @@ final class DefenderContainmentTests: XCTestCase {
         XCTAssertEqual(oauth.unlistedScopes, ["offline_access"])
         XCTAssertEqual(oauth.scopes, Defender.containmentPermissions.map { "https://api.securitycenter.microsoft.com/" + $0 },
                        "every scope is for the one resource Defender for Endpoint's tokens must name")
-        XCTAssertTrue(Set(oauth.scopes).isDisjoint(with: Set(audit.oauth!.scopes)), "a grant of its own, apart from Audit's read-only one")
+        XCTAssertTrue(Set(oauth.scopes).isDisjoint(with: Set(audit.oauth!.scopes)), "a grant of its own, apart from Detection's read-only one")
         XCTAssertFalse(oauth.scopes.contains { $0.contains("LiveResponse") || $0.contains("Offboard") || $0.hasSuffix(".All") }, "nothing broader than its actions take")
         XCTAssertTrue(Defender.containmentSetup.contains { $0.contains("WindowsDefenderATP") && $0.contains("Delegated permissions") })
         XCTAssertTrue(Defender.containmentPermissions.allSatisfy { permission in Defender.containmentSetup.contains { $0.contains("`\(permission)`") } })

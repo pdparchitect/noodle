@@ -21,7 +21,7 @@ final class AzureTests: XCTestCase {
         XCTAssertEqual(azure.endpoint.absoluteString, "https://management.azure.com")
         XCTAssertEqual(azure.clientCredentials?.tokenEndpoint.absoluteString, "https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/token")
         XCTAssertEqual(azure.clientCredentials?.scope, "https://management.azure.com/.default")
-        XCTAssertEqual(Azure.preset.name, "Microsoft Azure Audit")
+        XCTAssertEqual(Azure.preset.name, "Microsoft Azure Detection")
         XCTAssertNotNil(PionAdapters.all["azure"])
         XCTAssertEqual(Azure.adapter.watchedTool, "security-events")
         XCTAssertEqual(Azure.adapter.alertLookBack, 6 * 3_600)

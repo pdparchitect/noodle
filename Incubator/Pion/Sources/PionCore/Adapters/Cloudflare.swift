@@ -4,7 +4,7 @@ import NoodleToolConnections
 
 /// Cloudflare: one account's edge (its zones and DNS records, firewall events, audit log, members and API tokens) and
 /// its Zero Trust (Access authentication logs, applications, policies, users and their sessions, Gateway activity,
-/// rules and lists, WARP devices with their posture, and Cloudflare Tunnels), read with an API token. Cloudflare Audit
+/// rules and lists, WARP devices with their posture, and Cloudflare Tunnels), read with an API token. Cloudflare Detection
 /// only reads; Cloudflare Containment, a tool of its own with a token of its own, blocks addresses, networks and
 /// countries at the edge, revokes a user's Access sessions, blocks domains and addresses in Gateway, and revokes WARP
 /// devices.
@@ -21,10 +21,10 @@ import NoodleToolConnections
 /// operations here.
 public enum Cloudflare {
     public static let preset = ToolDefinition(
-        id: "a975fdab-e1f0-486c-abf6-d941d667d6f7", name: "Cloudflare Audit",
+        id: "a975fdab-e1f0-486c-abf6-d941d667d6f7", name: "Cloudflare Detection",
         summary: "Zones, DNS, firewall events, the audit log, members and tokens at the edge, and Access logins, apps, users, Gateway activity and rules, WARP devices and tunnels in Zero Trust, read-only.",
         defaultInstructions: """
-        Use Cloudflare Audit to see an account from Cloudflare's side. At the edge: zones and zone-dns list zones and \
+        Use Cloudflare Detection to see an account from Cloudflare's side. At the edge: zones and zone-dns list zones and \
         their DNS records; firewall-events reads what the WAF and firewall did to requests, by client IP, country, \
         path and rule; audit-log reads who changed what in the account and from where; members lists who holds which \
         role and whether they use 2FA; api-tokens lists the account's own tokens. In Zero Trust: access-logs reads who \
@@ -51,7 +51,7 @@ public enum Cloudflare {
         setup: setup)
 
     /// Cloudflare Radar's MCP server: the Internet as Cloudflare's network sees it, through any Cloudflare account's
-    /// sign-in. It knows nothing of the account's own zones, which Cloudflare Audit reads.
+    /// sign-in. It knows nothing of the account's own zones, which Cloudflare Detection reads.
     public static let radar = ToolDefinition(
         id: "1a8b84b4-61cf-489c-9674-7dd239072a2e", name: "Cloudflare Radar",
         summary: "Internet-wide attacks, traffic, BGP routing, outages and domain and IP intelligence.",
@@ -68,14 +68,14 @@ public enum Cloudflare {
     static let accountField = ToolField(key: "account", title: "Account ID", placeholder: "023e105f4ecef8ad9ca31a8372d0c353", kind: .identifier)
     static let accountStep = "The Account ID is on the account's **Overview** page, or in the **API** section of any zone's **Overview** page: 32 hexadecimal characters. Then ask an agent to run check-access."
 
-    /// Audit's token permissions, as the dashboard's Create Custom Token lists them: reads only.
+    /// Detection's token permissions, as the dashboard's Create Custom Token lists them: reads only.
     static let auditPermissions = [
         "Account › Account Settings › Read", "Account › Account API Tokens › Read", "Account › Zero Trust › Read",
         "Account › Account Analytics › Read", "Account › Cloudflare Tunnel › Read", "Zone › Zone › Read", "Zone › DNS › Read", "Zone › Analytics › Read",
     ]
 
     static let setup = [
-        "In the Cloudflare dashboard, open **Manage Account › Account API Tokens** (or **My Profile › API Tokens**) and choose **Create Token › Create Custom Token**. Name it Pion Audit, kept for this tool alone.",
+        "In the Cloudflare dashboard, open **Manage Account › Account API Tokens** (or **My Profile › API Tokens**) and choose **Create Token › Create Custom Token**. Name it Pion Detection, kept for this tool alone.",
         "Give it only these permissions, each **Read**: \(auditPermissions.map { "**\($0)**" }.joined(separator: ", ")). An account that uses only the edge, or only Zero Trust, may leave out the other's; check-access says which parts the token covers. Give it nothing that edits.",
         "Under **Account Resources** include only this account, and under **Zone Resources** only its zones. Optionally limit **Client IP Address Filtering** and set a **TTL**; then create the token and give it here. Cloudflare shows it only once. Pion sends it as `Authorization: Bearer <token>`.",
         accountStep,
@@ -1044,7 +1044,7 @@ extension Cloudflare {
         return "· \(part): only part of it can be read; see above for what to add."
     }
 
-    /// Tries each thing Audit reads once and says what works and what to change, with the token as Cloudflare verifies
+    /// Tries each thing Detection reads once and says what works and what to change, with the token as Cloudflare verifies
     /// it. It sends only reads.
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
@@ -1062,7 +1062,7 @@ extension Cloudflare {
                 if let names = await Cloudflare.ownPermissions(service, token) {
                     let changing = names.filter(Cloudflare.changes)
                     lines.append("· Its own record lists: \(names.joined(separator: ", ")).")
-                    lines.append(changing.isEmpty ? "✓ Every permission it holds only reads." : "⚠ It holds \(changing.joined(separator: ", ")), which change things: Audit's token should hold only Read permissions. Edit it in the Cloudflare dashboard.")
+                    lines.append(changing.isEmpty ? "✓ Every permission it holds only reads." : "⚠ It holds \(changing.joined(separator: ", ")), which change things: Detection's token should hold only Read permissions. Edit it in the Cloudflare dashboard.")
                 } else {
                     lines.append("· Its own permissions could not be read (that needs Account API Tokens › Read for an account's token), so whether it holds more than Read is not verified: check it in the dashboard.")
                 }
@@ -1123,7 +1123,7 @@ extension Cloudflare {
             lines.append(Cloudflare.coverage("The edge", edge))
             lines.append(Cloudflare.coverage("Zero Trust", zeroTrust))
             lines.append("· The alert watch reads the account audit log and the Access logins; what it cannot read it says once, and security-events says why.")
-            lines.append("· Pion Audit's token should hold only: \(Cloudflare.auditPermissions.joined(separator: ", ")).")
+            lines.append("· Pion Detection's token should hold only: \(Cloudflare.auditPermissions.joined(separator: ", ")).")
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
         }
     }

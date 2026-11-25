@@ -3,7 +3,7 @@ import NoodleCore
 import NoodleToolConnections
 
 /// Okta Containment: acting on one org to contain an incident, signed in through an Okta app of its own as an admin of
-/// its own with a custom role of only the permissions its operations take, kept apart from Okta Audit's so the audit
+/// its own with a custom role of only the permissions its operations take, kept apart from Okta Detection's so the detection
 /// sign-in stays read-only. Everything that cuts off or restores access, removes a factor, a group, a role, a grant or a token,
 /// waits for the champion's approval, and each says how it is undone.
 ///
@@ -14,7 +14,7 @@ extension Okta {
         id: "59479ac0-7231-48fb-bb60-91ab2407c575", name: "Okta Containment",
         summary: "Suspend or deactivate a user, clear their sessions and OAuth tokens, reset their sign-in factors, expire their password, remove them from a group, revoke an admin role, their apps' grants or an API token.",
         defaultInstructions: """
-        Use Okta Containment to contain an account in one Okta org. Find the user with Okta Audit first, then read them \
+        Use Okta Containment to contain an account in one Okta org. Find the user with Okta Detection first, then read them \
         here with user, which lists their status, admin roles with each assignment's ID, groups, sign-in factors with \
         their IDs and how many app grants they hold: record it as evidence before acting. Give each user by their full \
         Okta ID (00u…) or full login; Pion never acts on a short name, on the admin signed in to this connection, \
@@ -52,7 +52,7 @@ extension Okta {
     ]
 
     static let containmentSetup = appSteps("Pion Containment", scopes: containmentScopes) + [
-        "Okta allows a request only when both the app's scopes and the signed-in admin's role allow it, so the role is what limits this tool. Keep an admin for Pion Containment alone, such as pion-containment@example.com, apart from Okta Audit's.",
+        "Okta allows a request only when both the app's scopes and the signed-in admin's role allow it, so the role is what limits this tool. Keep an admin for Pion Containment alone, such as pion-containment@example.com, apart from Okta Detection's.",
         "Under **Security › Administrators › Roles**, create a role such as **Pion Containment** with only these permissions: \(containmentPermissions.map { "`\($0.permission)`" }.joined(separator: ", ")). Leave out any whose action you do not want agents to have.",
         "Under **Security › Administrators › Resources**, make a resource set of all users and all groups, and assign the role with it to that admin. Never make it a super or organization administrator. Revoking admin roles and users' app grants has no custom-role permission, so those two are refused unless you choose to give more.",
         "Give your org's domain, such as `acme.okta.com`, and the app's **Client ID**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
@@ -432,7 +432,7 @@ extension Okta {
         struct Input: Decodable, Sendable { let user: String; let grant: String?; let allowSuperAdmin: Bool? }
         static let name = "revoke-app-grants"
         static let recovery = "Recovery: the user must consent to each app again; an admin-granted consent must be granted again by an admin."
-        static let summary = "Revoke every OAuth grant a user gave apps, or one by its ID from Okta Audit's user-grants, so the apps can no longer act for them. \(recovery)"
+        static let summary = "Revoke every OAuth grant a user gave apps, or one by its ID from Okta Detection's user-grants, so the apps can no longer act for them. \(recovery)"
         static let input = JSONSchema.object(["user": Okta.userField, "grant": .string("Only this grant's ID. Every grant when left out."),
                                               "allowSuperAdmin": Okta.superAdminField], required: ["user"])
         static let readOnly = false
@@ -462,7 +462,7 @@ extension Okta {
         struct Input: Decodable, Sendable { let token: String }
         static let name = "revoke-api-token"
         static let recovery = "Recovery: none. A revoked token is gone for good; whatever used it needs a new token made by an admin."
-        static let summary = "Revoke one API token, by its ID from Okta Audit's api-tokens, saying whose it was. This connection signs in through OAuth, not with an API token. \(recovery)"
+        static let summary = "Revoke one API token, by its ID from Okta Detection's api-tokens, saying whose it was. This connection signs in through OAuth, not with an API token. \(recovery)"
         static let input = JSONSchema.object(["token": .string("The API token's ID, 00T….")], required: ["token"])
         static let readOnly = false
         static let destructive = true

@@ -20,7 +20,7 @@ final class DefenderTests: XCTestCase {
     }
 
     func testEachTenantSignsInAsAnAdminAtItsOwnTenantWithReadingPermissionsOnly() throws {
-        XCTAssertEqual(Defender.preset.name, "Microsoft Defender XDR Audit")
+        XCTAssertEqual(Defender.preset.name, "Microsoft Defender XDR Detection")
         XCTAssertEqual(Defender.preset.id, "eef1f5bd-b131-448f-9f37-0a3ba0beb217", "the same entry, renamed")
         XCTAssertEqual(contoso.endpoint.absoluteString, "https://graph.microsoft.com/v1.0")
         XCTAssertEqual(contoso.adapter, "defender")
@@ -35,7 +35,7 @@ final class DefenderTests: XCTestCase {
         XCTAssertFalse(oauth.usesResourceIndicator)
         XCTAssertEqual(oauth.unlistedScopes, ["offline_access"])
         XCTAssertEqual(Set(oauth.scopes), Set(Defender.auditScopes))
-        XCTAssertTrue(oauth.scopes.allSatisfy { $0.contains(".Read") }, "Audit only reads: \(oauth.scopes)")
+        XCTAssertTrue(oauth.scopes.allSatisfy { $0.contains(".Read") }, "Detection only reads: \(oauth.scopes)")
         XCTAssertFalse(oauth.scopes.contains { $0.contains("securitycenter") }, "Graph alone: one sign-in gets tokens for one API")
         XCTAssertTrue(Defender.auditScopes.allSatisfy { scope in Defender.setup.contains { $0.contains("`\(scope)`") } }, "the setup grants every permission asked for")
         XCTAssertTrue(Defender.setup.contains { $0.contains("com.pdparchitect.pion:/oauth2callback") && $0.contains("Public client") })
@@ -244,13 +244,13 @@ final class DefenderTests: XCTestCase {
         service.answers["/v1.0/security/alerts_v2"] = (200, #"{"value":[]}"#)
         service.answers["/v1.0/security/incidents"] = (403, #"{"error":{"code":"Forbidden","message":"Missing role permissions."}}"#)
         service.answers["/v1.0/security/runHuntingQuery"] = (200, #"{"schema":[{"name":"Table"},{"name":"Rows"}],"results":[{"Table":"DeviceInfo","Rows":1200},{"Table":"EmailEvents","Rows":0}]}"#)
-        service.answers["/v1.0/me"] = (200, #"{"id":"22222222-2222-4222-8222-222222222222","userPrincipalName":"pion-defender-audit@contoso.example"}"#)
+        service.answers["/v1.0/me"] = (200, #"{"id":"22222222-2222-4222-8222-222222222222","userPrincipalName":"pion-defender-detection@contoso.example"}"#)
         let checked = try await call("check-access", "{}", service)
         XCTAssertFalse(checked.isError, checked.text)
         for words in ["✓ Signed in to the tenant Contoso", "✓ Alerts", "✗ Incidents: either the app lacks the delegated permission SecurityIncident.Read.All",
                       "✓ Advanced hunting", "Data in the last 7 days from: Defender for Endpoint (DeviceInfo)",
                       "No data in the last 7 days from: Defender for Office 365 (EmailEvents), Defender for Identity (IdentityLogonEvents), Defender for Cloud Apps (CloudAppEvents)",
-                      "Signed in as pion-defender-audit@contoso.example", "offline_access"] {
+                      "Signed in as pion-defender-detection@contoso.example", "offline_access"] {
             XCTAssertTrue(checked.text.contains(words), "\(words): \(checked.text)")
         }
         XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" || $0.url?.path.hasSuffix("runHuntingQuery") == true }, "it changes nothing")

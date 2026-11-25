@@ -5,7 +5,7 @@ Pion has two AWS tools. Each signs in through your organisation's
 with a permission set of its own, and one connection covers every account you
 are assigned:
 
-- **AWS Audit** reads your accounts the way a defender does: who did what in
+- **AWS Detection** reads your accounts the way a defender does: who did what in
   [CloudTrail](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-user-guide.html),
   what [GuardDuty](https://docs.aws.amazon.com/guardduty/latest/ug/what-is-guardduty.html),
   [Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/what-is-securityhub.html)
@@ -53,7 +53,7 @@ as AWS's own command line does, and then takes one role, the permission set's,
 in whichever account a request names. AWS checks that role's policies on every
 request: the permission set is all it can do.
 
-- **AWS Audit's permission set** is AWS's read-only **SecurityAudit** policy
+- **AWS Detection's permission set** is AWS's read-only **SecurityAudit** policy
   with a small inline policy, so it cannot change anything, whatever Pion asks
   for. Keep it that way: **check-access** warns when the role could make
   changes such as creating users or opening security groups.
@@ -76,7 +76,7 @@ sending anything.
 
 ## Setting it up with least access
 
-1. **Make a permission set** for AWS Audit in IAM Identity Center from the
+1. **Make a permission set** for AWS Detection in IAM Identity Center from the
    AWS managed policy **SecurityAudit**, named such as `SecurityAudit`, with a
    session of an hour or so.
 2. **Add an inline policy** to it for the reads SecurityAudit may leave out:
@@ -88,7 +88,7 @@ sending anything.
    and Inspector's and Macie's findings. Every action in it only reads:
 
    ```json
-   {"Version":"2012-10-17","Statement":[{"Sid":"PionAuditReads","Effect":"Allow","Resource":"*","Action":[
+   {"Version":"2012-10-17","Statement":[{"Sid":"PionDetectionReads","Effect":"Allow","Resource":"*","Action":[
     "logs:StartQuery","logs:GetQueryResults","iam:SimulatePrincipalPolicy","iam:GetAccountAuthorizationDetails","iam:GenerateCredentialReport",
     "iam:GetCredentialReport","config:GetResourceConfigHistory","config:DescribeConfigurationRecorders","config:DescribeConfigurationRecorderStatus",
     "s3:ListAllMyBuckets","s3:GetBucketPolicyStatus","s3:GetBucketPolicy","s3:GetBucketAcl","s3:GetBucketOwnershipControls",
@@ -333,7 +333,7 @@ tries again, as AWS's own tools do.
 ## Containing an incident
 
 **AWS Containment** is a separate tool, with its own permission set, so the
-audit role stays read-only.
+detection role stays read-only.
 
 1. **Make a custom permission set** named such as `PionContainment`, with an
    hour's session, and give it only this inline policy, leaving out any

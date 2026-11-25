@@ -4,22 +4,22 @@ import NoodleToolConnections
 
 /// A Microsoft tenant's users, their groups, roles and sign-in methods, its sign-in and audit logs, Identity
 /// Protection's risk, who holds which role and which apps hold which permissions and credentials, read through
-/// Microsoft Graph as the admin who signs in. Each account is one tenant. Microsoft Entra ID Audit only reads; Microsoft
+/// Microsoft Graph as the admin who signs in. Each account is one tenant. Microsoft Entra ID Detection only reads; Microsoft
 /// Entra ID Containment, a tool of its own with a sign-in of its own, acts.
 ///
 /// Both sign in through OAuth at the tenant's own address on Microsoft's sign-in service, with an authorization code
 /// and PKCE, through a public client app registration the organisation made for each tool, which keeps no client
 /// secret. Microsoft allows a delegated request only when both the app's consented permissions and the admin's role
-/// allow it, so Audit's permissions only read, whatever the admin may do, and each tool's setup gives its admin only
+/// allow it, so Detection's permissions only read, whatever the admin may do, and each tool's setup gives its admin only
 /// the roles the tool needs, which check-access reports.
 ///
 /// Both tools' guide is Incubator/Pion/docs/tools/entra.md. Change it with the setup steps, permissions or operations here.
 public enum Entra {
     public static let preset = ToolDefinition(
-        id: "7b419894-4d22-4624-a699-5df62b3ab680", name: "Microsoft Entra ID Audit",
+        id: "7b419894-4d22-4624-a699-5df62b3ab680", name: "Microsoft Entra ID Detection",
         summary: "Users, groups, roles, sign-in methods, sign-in and audit logs, risky users and apps' permissions and credentials of a Microsoft tenant, read-only.",
         defaultInstructions: """
-        Use Microsoft Entra ID Audit to learn who an identity is and what happened to it: find-user, then user-groups \
+        Use Microsoft Entra ID Detection to learn who an identity is and what happened to it: find-user, then user-groups \
         (groups and roles, nested ones marked), user-sign-in-methods, sign-ins (the sign-in log with location, IP \
         address, conditional access and risk) and risky-users. To audit who holds what, role-holders lists each directory \
         role's active and eligible holders, Global Administrator first; app-permissions which apps hold which Microsoft \
@@ -58,7 +58,7 @@ public enum Entra {
                                      authorizationParameters: ["prompt": "login"], usesResourceIndicator: false, unlistedScopes: ["offline_access"])
     }
 
-    /// Only reading permissions, one for each kind of thing Audit reads: the directory, its users, groups, apps and
+    /// Only reading permissions, one for each kind of thing Detection reads: the directory, its users, groups, apps and
     /// grants (sign-in logs need it too); the audit and sign-in logs; users' sign-in methods; risky users; risk
     /// detections; and role assignments with eligibility in Privileged Identity Management.
     static let auditScopes = ["Directory.Read.All", "AuditLog.Read.All", "UserAuthenticationMethod.Read.All", "IdentityRiskyUser.Read.All",
@@ -75,8 +75,8 @@ public enum Entra {
         ]
     }
 
-    static let setup = appSteps("Pion Audit", scopes: auditScopes) + [
-        "Microsoft allows a request only when both the app's permissions and the signed-in admin's role allow it. Keep an admin for Pion Audit alone, such as pion-audit@contoso.com, with only the **Global Reader** role, which reads everything this tool reads and changes nothing.",
+    static let setup = appSteps("Pion Detection", scopes: auditScopes) + [
+        "Microsoft allows a request only when both the app's permissions and the signed-in admin's role allow it. Keep an admin for Pion Detection alone, such as pion-detection@contoso.com, with only the **Global Reader** role, which reads everything this tool reads and changes nothing.",
         "Sign-in logs need Microsoft Entra ID P1; Identity Protection's risky users and risk detections, and roles eligible in Privileged Identity Management, need P2. Without them, what needs them says so.",
         "Give the **Directory (tenant) ID** and the app's **Application (client) ID** from its **Overview**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
@@ -901,7 +901,7 @@ extension Entra {
             if !missing.isEmpty { lines.append("✗ Not consented: \(missing.sorted().joined(separator: ", ")). Add them under the app's API permissions, grant admin consent, and connect again.") }
             if !extra.isEmpty {
                 let writes = extra.filter { $0.contains("Write") || $0.contains("Manage") || $0.contains("Send") || $0.contains("FullControl") }
-                lines.append("⚠ Consented besides what this tool asks for: \(extra.sorted().joined(separator: ", ")). Remove them from the app's API permissions\(reading && !writes.isEmpty ? "; some can change the tenant, which an audit app never needs" : "").")
+                lines.append("⚠ Consented besides what this tool asks for: \(extra.sorted().joined(separator: ", ")). Remove them from the app's API permissions\(reading && !writes.isEmpty ? "; some can change the tenant, which a detection app never needs" : "").")
             }
             if !others.isEmpty { lines.append("⚠ The app is also consented permissions to \(others.count) other API\(others.count == 1 ? "" : "s"), which Pion never uses; remove them.") }
             struct Role: Decodable { let appRoleId: String? }
@@ -914,7 +914,7 @@ extension Entra {
         }
     }
 
-    /// Tries each thing Audit reads once, says what works and what to change for what does not, which permissions the
+    /// Tries each thing Detection reads once, says what works and what to change for what does not, which permissions the
     /// app is consented, and which roles the signed-in admin holds.
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}

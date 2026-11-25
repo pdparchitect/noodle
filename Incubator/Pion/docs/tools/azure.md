@@ -3,7 +3,7 @@
 Pion has two Azure tools, each added per subscription with an app registration of
 its own:
 
-- **Microsoft Azure Audit** reads a subscription the way a defender does: who
+- **Microsoft Azure Detection** reads a subscription the way a defender does: who
   did what in the [activity log](https://learn.microsoft.com/azure/azure-monitor/essentials/activity-log),
   what [Microsoft Defender for Cloud](https://learn.microsoft.com/azure/defender-for-cloud/defender-for-cloud-introduction)
   alerted on, what resources exist through
@@ -35,7 +35,7 @@ Each tool signs in as its own app, and Azure checks the app's roles on every
 request. Pion asks only for Azure Resource Manager's token, which on its own
 allows nothing: the roles you give the app are all it can do.
 
-- **Microsoft Azure Audit's app** needs only reading roles, so it cannot change
+- **Microsoft Azure Detection's app** needs only reading roles, so it cannot change
   anything, whatever Pion asks for. Keep it that way: **check-access** warns
   when the app holds anything that writes or deletes.
 - **Microsoft Azure Containment's app** gets a custom role with only the
@@ -51,7 +51,7 @@ listing never leads anywhere else.
 
 ## Setting it up with least access
 
-1. **Register an app** for Microsoft Azure Audit, such as Pion Audit, single
+1. **Register an app** for Microsoft Azure Detection, such as Pion Detection, single
    tenant, with no redirect URI. It needs no API permissions. Add a client
    secret and copy its **Value**: it is shown only once. Pion keeps it in the
    keychain and never shows it to agents.
@@ -201,7 +201,7 @@ subscription is not registered for.
 ## Containing an incident
 
 **Microsoft Azure Containment** is a separate tool, with its own app, so the
-audit app stays read-only.
+detection app stays read-only.
 
 1. **Register another app**, such as Pion Containment, and add a client secret.
 2. **Make a custom role** in the subscription's **Access control (IAM) › Add ›

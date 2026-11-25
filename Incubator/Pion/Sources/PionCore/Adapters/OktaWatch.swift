@@ -3,7 +3,7 @@ import NoodleCore
 import NoodleToolConnections
 import Synchronization
 
-/// Okta Audit's alert watch, and security-events, which reads back what woke the agents, the same way for both: the
+/// Okta Detection's alert watch, and security-events, which reads back what woke the agents, the same way for both: the
 /// System Log events that hand over the org, open a way in or weaken its defences.
 extension Okta {
     typealias WatchedEvent = GoogleCloud.WatchedEvent

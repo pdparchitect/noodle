@@ -3,7 +3,7 @@ import NoodleCore
 import NoodleToolConnections
 import Synchronization
 
-/// Google Cloud Audit's alert watch, and security-events, which reads back what woke the agents: two feeds read the
+/// Google Cloud Detection's alert watch, and security-events, which reads back what woke the agents: two feeds read the
 /// same way for both. Security Command Center's high and critical findings, for organisations that have it, and the
 /// Admin Activity audit logs of the scope, its folders and its projects, which Google writes for every organisation,
 /// always and for free, for the changes that open the way in, hide what happens next or stay: keys made, powerful or

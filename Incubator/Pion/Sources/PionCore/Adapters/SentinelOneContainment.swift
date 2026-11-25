@@ -4,7 +4,7 @@ import NoodleToolConnections
 import Synchronization
 
 /// SentinelOne Containment: responding on one console's endpoints, with a service user and token of its own whose
-/// custom role holds only the actions it takes, kept apart from Audit's so the audit user stays read-only. Every action
+/// custom role holds only the actions it takes, kept apart from Detection's so the detection user stays read-only. Every action
 /// that cuts an endpoint off, changes or restores a file, hides a threat, blocks a hash or starts a scan waits for the
 /// champion's approval, and each says what recovering from it involves.
 ///
@@ -21,7 +21,7 @@ extension SentinelOne {
         summary: "Disconnect an endpoint from the network or reconnect it, kill, quarantine, release, remediate or roll back a threat, resolve threats or set their verdict, block a hash and remove what it blocked, and start a scan, in SentinelOne.",
         defaultInstructions: """
         Use SentinelOne Containment to respond on endpoints SentinelOne protects. Find the agent or threat with \
-        SentinelOne Audit first, by agents, agent, threats or threat, which give their numeric IDs, then read it here \
+        SentinelOne Detection first, by agents, agent, threats or threat, which give their numeric IDs, then read it here \
         with agent or threat and record it as evidence before acting. disconnect-agent cuts an endpoint off the network, \
         keeping it in touch with the console, until reconnect-agent, which must be asked for explicitly. kill-threat ends \
         a threat's processes; quarantine-threat moves its file to the agent's encrypted quarantine, and \
@@ -56,7 +56,7 @@ extension SentinelOne {
 
     static let containmentSetup = [
         "In the SentinelOne console, open **Settings › Users › Roles** and choose **New Role**. Name it Pion Containment and give it only these permissions: \(containmentPermissions.map { "**\($0)**" }.joined(separator: ", ")). Leave every other permission off, above all users, policies, exclusions, uninstalling agents and Remote Shell.",
-        "Open **Settings › Users › Service Users** and choose **Actions › Create New Service User**. Name it Pion Containment, kept for this tool alone, apart from Pion Audit's, give it an expiration date, and give it the Pion Containment role at the scope agents may act on: the account, or only some sites.",
+        "Open **Settings › Users › Service Users** and choose **Actions › Create New Service User**. Name it Pion Containment, kept for this tool alone, apart from Pion Detection's, give it an expiration date, and give it the Pion Containment role at the scope agents may act on: the account, or only some sites.",
         "Copy the **API token** it shows and give it here; SentinelOne shows it only once. Pion sends it as `Authorization: ApiToken <token>`. SentinelOne offers no way to check a role's actions without trying one, so check the role's page.",
         consoleStep,
     ]
@@ -81,8 +81,8 @@ extension SentinelOne {
     /// How long to wait between reads of something just asked for, before saying where it stands.
     @TaskLocal static var pauses: [Double] = [1, 2, 3, 5]
 
-    static let agentField = JSONSchema.string("The agent's ID, digits only, as SentinelOne Audit's agents, agent or a threat gives it.")
-    static let threatField = JSONSchema.string("The threat's ID, digits only, as SentinelOne Audit's threats gives it.")
+    static let agentField = JSONSchema.string("The agent's ID, digits only, as SentinelOne Detection's agents, agent or a threat gives it.")
+    static let threatField = JSONSchema.string("The threat's ID, digits only, as SentinelOne Detection's threats gives it.")
 
     /// The body of every action: a filter of exact IDs and nothing else, each checked, never a site, group or query.
     static func filterBody(_ ids: [String], data: [String: String] = [:]) throws -> Data {
@@ -130,7 +130,7 @@ extension SentinelOne {
     /// Reads an agent whole through the exact-ID filter an action uses, or refuses: a malformed ID, an agent SentinelOne
     /// does not return, or an answer that shows neither.
     static func targetAgent(_ value: String, _ service: ServiceClient) async throws -> AgentTarget {
-        guard let id = id(value) else { throw ServiceError.input("Nothing was changed: give the agent's ID, digits only, as SentinelOne Audit's agents, agent or a threat gives it.") }
+        guard let id = id(value) else { throw ServiceError.input("Nothing was changed: give the agent's ID, digits only, as SentinelOne Detection's agents, agent or a threat gives it.") }
         switch try await agent(id, service) {
         case .present(let agent): return AgentTarget(agent: agent, readAt: iso(Date()))
         case .absent: throw ServiceError.input("Nothing was changed: SentinelOne has no agent \(id) in this token's scope. It may have been removed, lie outside the service user's sites, or the ID was mistyped.")
@@ -295,7 +295,7 @@ extension SentinelOne {
     }
 
     static func targetThreat(_ value: String, _ service: ServiceClient) async throws -> ThreatTarget {
-        guard let id = id(value) else { throw ServiceError.input("Nothing was changed: give the threat's ID, digits only, as SentinelOne Audit's threats gives it.") }
+        guard let id = id(value) else { throw ServiceError.input("Nothing was changed: give the threat's ID, digits only, as SentinelOne Detection's threats gives it.") }
         switch try await threat(id, service) {
         case .present(let threat): return ThreatTarget(threat: threat, readAt: iso(Date()))
         case .absent: throw ServiceError.input("Nothing was changed: SentinelOne has no threat \(id) in this token's scope. It may have been deleted, lie outside the service user's sites, or the ID was mistyped.")
@@ -732,7 +732,7 @@ extension SentinelOne {
 
     /// One site by its exact ID, read whole, or a refusal.
     static func site(_ value: String, _ service: ServiceClient) async throws -> (id: String, name: String?) {
-        guard let id = id(value) else { throw ServiceError.input("Nothing was changed: give the site's ID, digits only, as SentinelOne Audit's sites lists it.") }
+        guard let id = id(value) else { throw ServiceError.input("Nothing was changed: give the site's ID, digits only, as SentinelOne Detection's sites lists it.") }
         let listing = try await read(sitesNeed) { try await sites(service, query: ["siteIds": id], limit: 10, pages: 1) }
         let named = listing.value.filter { text($0, "id") == id }
         guard listing.complete, named.count == 1, listing.value.count == 1 else {
@@ -749,7 +749,7 @@ extension SentinelOne {
         static let input = JSONSchema.object([
             "hash": .string("The file's SHA1 or SHA256."),
             "osType": .string("The OS it applies to.", oneOf: SentinelOne.osTypes),
-            "siteId": .string("The one site it applies to, by ID, as SentinelOne Audit's sites lists it."),
+            "siteId": .string("The one site it applies to, by ID, as SentinelOne Detection's sites lists it."),
             "description": .string("Why: the reason given in the approval request, with the Investigation."),
         ], required: ["hash", "osType", "siteId", "description"])
         static let readOnly = false

@@ -11,7 +11,7 @@ import Synchronization
 /// are watched instead.
 ///
 /// Containment is a second tool with a sign-in of its own, so only the bots given it can even ask for an action, and
-/// the audit sign-in never carries a scope that can change accounts.
+/// the detection sign-in never carries a scope that can change accounts.
 ///
 /// Why each tool asks for what it does, the least access to set each up with, and their caveats:
 /// Incubator/Pion/docs/tools/google-workspace.md. Change it with the scopes, setup steps or operations here.
@@ -23,9 +23,9 @@ public enum GoogleWorkspace {
                                "data_studio", "keep", "gemini_in_workspace_apps", "admin_data_action"]
 
     public static let preset = ToolDefinition(
-        id: "8b1c8cc5-9be4-4be9-91fc-cb650f05d78c", name: "Google Workspace Audit", summary: "Audit reports: sign-ins, admin actions, OAuth app grants and Drive activity.",
+        id: "8b1c8cc5-9be4-4be9-91fc-cb650f05d78c", name: "Google Workspace Detection", summary: "Audit reports: sign-ins, admin actions, OAuth app grants and Drive activity.",
         defaultInstructions: """
-        Use Google Workspace Audit to see what happened in the domain: sign-ins, including suspicious ones and their IP \
+        Use Google Workspace Detection to see what happened in the domain: sign-ins, including suspicious ones and their IP \
         addresses; admin actions; OAuth tokens granted to apps; Drive sharing and downloads; SAML sign-ins; account changes. \
         Filter by user, event name, IP address and time; security-events lists those that mean an attack, such as \
         suspicious sign-ins, leaked passwords, admin privileges granted and compromised devices, and the alert watch \
@@ -91,7 +91,7 @@ public enum GoogleWorkspace {
         "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation, and enable the [Admin SDK API](https://console.cloud.google.com/apis/library/admin.googleapis.com) in it.",
         "Set up [Google Auth Platform](https://console.cloud.google.com/auth/overview) with the audience **Internal**, and under [Data Access](https://console.cloud.google.com/auth/scopes) add the scopes `https://www.googleapis.com/auth/admin.reports.audit.readonly`, `https://www.googleapis.com/auth/admin.directory.rolemanagement.readonly`, `https://www.googleapis.com/auth/admin.directory.user.readonly`, `https://www.googleapis.com/auth/admin.directory.group.readonly`, `https://www.googleapis.com/auth/admin.directory.device.mobile.readonly` and `https://www.googleapis.com/auth/admin.directory.domain.readonly`. Data Access takes a scope only once its API is enabled.",
         "Under [Clients](https://console.cloud.google.com/auth/clients), choose **Create client** of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev), and copy its **Client ID** here.",
-        "In the Admin console's [Admin roles](https://admin.google.com/ac/roles), create a role such as **Pion Audit** with only **Reports**, **Users › Read**, **Groups › Read**, read access to admin roles, devices and domains, and assign it to an admin account kept for Pion, never a super admin.",
+        "In the Admin console's [Admin roles](https://admin.google.com/ac/roles), create a role such as **Pion Detection** with only **Reports**, **Users › Read**, **Groups › Read**, read access to admin roles, devices and domains, and assign it to an admin account kept for Pion, never a super admin.",
         "Choose **Add & Connect** and sign in as that admin.",
     ]
 
@@ -130,7 +130,7 @@ public enum GoogleWorkspace {
         effect and how to undo it, with the Investigation as --approval-conversation. Restoring is not simply undoing: \
         before unsuspending, recommend the champion resets the password and checks the recovery email and phone, 2-step \
         verification and the apps still granted access. Signing out alone leaves app access and the password working, and \
-        revoking users' tokens leaves an app's domain-wide delegation in place: Google Workspace Audit's oauth-apps lists \
+        revoking users' tokens leaves an app's domain-wide delegation in place: Google Workspace Detection's oauth-apps lists \
         those, and only an admin can remove one in the Admin console.
         """,
         iconName: "google-workspace",
@@ -146,7 +146,7 @@ public enum GoogleWorkspace {
         "In the Admin console's [Admin roles](https://admin.google.com/ac/roles), create a role such as **Pion Containment** with only **Users › Read**, **Users › Update › Suspend users**, **Reset password** and **Force password change**, **Security › User Security Management** and **Services › Mobile Device Management**.",
         "To let agents remove a recovery email or phone too, add **Users › Update** itself: Google names no narrower privilege for recovery details, and it lets the role change any non-admin's profile. Leave it out and Pion's other actions still work.",
         "Assign it to an admin account kept for Pion, never a super admin. Its role, not the sign-in, limits what Pion can do.",
-        "In the Google Cloud project of your Google Workspace Audit client, check the [Admin SDK API](https://console.cloud.google.com/apis/library/admin.googleapis.com) is enabled and add the scopes `https://www.googleapis.com/auth/admin.directory.user`, `https://www.googleapis.com/auth/admin.directory.user.security` and `https://www.googleapis.com/auth/admin.directory.device.mobile.action` under [Data Access](https://console.cloud.google.com/auth/scopes).",
+        "In the Google Cloud project of your Google Workspace Detection client, check the [Admin SDK API](https://console.cloud.google.com/apis/library/admin.googleapis.com) is enabled and add the scopes `https://www.googleapis.com/auth/admin.directory.user`, `https://www.googleapis.com/auth/admin.directory.user.security` and `https://www.googleapis.com/auth/admin.directory.device.mobile.action` under [Data Access](https://console.cloud.google.com/auth/scopes).",
         "Paste that same iOS client's **Client ID** here, or create one under [Clients](https://console.cloud.google.com/auth/clients) of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev).",
         "If your organisation limits API access, mark the client **Trusted** in the Admin console's [API controls](https://admin.google.com/ac/owl).",
         "Choose **Add & Connect** and sign in as the admin with the Pion Containment role.",
@@ -1617,7 +1617,7 @@ extension GoogleWorkspace {
         return lines
     }
 
-    /// Tries each thing Google Workspace Audit reads and says how to fix what it cannot.
+    /// Tries each thing Google Workspace Detection reads and says how to fix what it cannot.
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"

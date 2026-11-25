@@ -103,8 +103,8 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 - **An Audit Log** of every change to the case, only ever added to.
 - **Groups** of agents for the work between incidents.
 - **Tasks** waiting on you, at the top of the sidebar.
-- **Woken by alerts**: new high alerts and incidents in Microsoft Defender XDR Audit, Microsoft Defender for Cloud, Microsoft Sentinel, CrowdStrike Falcon Audit,
-  SentinelOne Audit, Microsoft Entra ID Audit, Proofpoint, Wiz, Google Cloud Audit, Google Workspace Audit, Cloudflare Audit and GitHub, and CVEs joining the top of the
+- **Woken by alerts**: new high alerts and incidents in Microsoft Defender XDR Detection, Microsoft Defender for Cloud, Microsoft Sentinel, CrowdStrike Falcon Detection,
+  SentinelOne Detection, Microsoft Entra ID Detection, Proofpoint, Wiz, Google Cloud Detection, Google Workspace Detection, Cloudflare Detection and GitHub, and CVEs joining the top of the
   cve.now Index, wake the agents those tools are assigned to, who read them and decide how far to look.
 - **Approvals**: agents investigate freely; a change that cuts off access or deletes something
   waits for you, at the top of the sidebar and in a notification, and runs only once you approve it.
@@ -123,38 +123,38 @@ to the agents that should use it.
 | --- | --- |
 | **Reputation and intel** | VirusTotal, Shodan, Censys, GreyNoise, CrowdSec CTI, AbuseIPDB, AlienVault OTX, urlscan.io, Have I Been Pwned, Cloudflare Radar |
 | **Attack surface** | crt.sh, DNS, NVD, cve.now, Tenable |
-| **Identity** | Okta Audit, Okta Containment, Microsoft Entra ID Audit, Microsoft Entra ID Containment, Google Workspace Audit, Google Workspace Containment |
-| **Endpoint and email** | CrowdStrike Falcon Audit, CrowdStrike Falcon Containment, Microsoft Defender XDR Audit, Microsoft Defender XDR Containment, SentinelOne Audit, SentinelOne Containment, Proofpoint TAP |
+| **Identity** | Okta Detection, Okta Containment, Microsoft Entra ID Detection, Microsoft Entra ID Containment, Google Workspace Detection, Google Workspace Containment |
+| **Endpoint and email** | CrowdStrike Falcon Detection, CrowdStrike Falcon Containment, Microsoft Defender XDR Detection, Microsoft Defender XDR Containment, SentinelOne Detection, SentinelOne Containment, Proofpoint TAP |
 | **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |
-| **Cloud and code** | AWS Audit, AWS Containment, Google Cloud Audit, Google Cloud Containment, Microsoft Azure Audit, Microsoft Azure Containment, Cloudflare Audit, Cloudflare Containment, Wiz, GitHub |
+| **Cloud and code** | AWS Detection, AWS Containment, Google Cloud Detection, Google Cloud Containment, Microsoft Azure Detection, Microsoft Azure Containment, Cloudflare Detection, Cloudflare Containment, Wiz, GitHub |
 
-Any MCP server works too. AWS Audit and AWS Containment each sign in through your organisation's
+Any MCP server works too. AWS Detection and AWS Containment each sign in through your organisation's
 IAM Identity Center, with a permission set of their own, and cover every account you are assigned:
-the audit role only reads, and the containment role holds only the actions it takes; AWS Audit
+the detection role only reads, and the containment role holds only the actions it takes; AWS Detection
 also reads Identity Center's assignments, AWS Config's history, S3 exposure, Inspector and Macie. Google Cloud
-Audit, Google Cloud Containment and both Google Workspace tools sign in with your Google account,
+Detection, Google Cloud Containment and both Google Workspace tools sign in with your Google account,
 each tool with a sign-in of its own, so only Google Cloud Containment holds Google Cloud's full
 scope and a custom role limits it to the actions it takes; GitHub signs in with a
-code, through an OAuth app your organisation registers. Microsoft Azure Audit and Microsoft Azure Containment each use an app
-registration's client ID and secret, one subscription per account: the audit app only reads, and
-the containment app holds a custom role with only the actions it takes. Okta Audit and Okta Containment
+code, through an OAuth app your organisation registers. Microsoft Azure Detection and Microsoft Azure Containment each use an app
+registration's client ID and secret, one subscription per account: the detection app only reads, and
+the containment app holds a custom role with only the actions it takes. Okta Detection and Okta Containment
 each sign in as an Okta admin of their own through OAuth, with a native app your org makes for each:
-the audit sign-in's scopes only read, and the containment admin holds a custom role with only the
-permissions its actions take. Microsoft Entra ID Audit and Microsoft Entra ID Containment likewise each
+the detection sign-in's scopes only read, and the containment admin holds a custom role with only the
+permissions its actions take. Microsoft Entra ID Detection and Microsoft Entra ID Containment likewise each
 sign in as an admin of their own through OAuth, with a public client app registration your organisation
-makes for each and no client secret: the audit app's permissions only read, and the containment admin
-holds only the roles its actions take. Microsoft Defender XDR Audit and Microsoft Defender XDR Containment
+makes for each and no client secret: the detection app's permissions only read, and the containment admin
+holds only the roles its actions take. Microsoft Defender XDR Detection and Microsoft Defender XDR Containment
 sign in the same way: Audit reads alerts, incidents, advanced hunting and devices through Microsoft Graph
 with read-only permissions, and Containment isolates, restricts, quarantines, scans and collects through
 the Defender for Endpoint API with an admin whose Defender role covers only those actions and device groups.
-CrowdStrike Falcon Audit and CrowdStrike Falcon Containment each use an API client of their own, its
-client ID and secret, as Falcon has no sign-in for an admin: the audit client holds only Read scopes,
+CrowdStrike Falcon Detection and CrowdStrike Falcon Containment each use an API client of their own, its
+client ID and secret, as Falcon has no sign-in for an admin: the detection client holds only Read scopes,
 and the containment client only the scopes its actions take, never Real Time Response's admin commands.
-SentinelOne Audit and SentinelOne Containment each use a service user of their own and its API token, on
-one console under `sentinelone.net`: the audit user holds only the Viewer role, and the containment user a
+SentinelOne Detection and SentinelOne Containment each use a service user of their own and its API token, on
+one console under `sentinelone.net`: the detection user holds only the Viewer role, and the containment user a
 custom role with only the actions it takes, each sent with the exact IDs approved.
-Cloudflare Audit and Cloudflare Containment each use a scoped API token of their own, sent only to
-`api.cloudflare.com`: the audit token holds only Read permissions, for the edge and Zero Trust, and the
+Cloudflare Detection and Cloudflare Containment each use a scoped API token of their own, sent only to
+`api.cloudflare.com`: the detection token holds only Read permissions, for the edge and Zero Trust, and the
 containment token only the edit permissions its actions take.
 
 Some services have a guide in [docs/tools](docs/tools) explaining the access each tool asks for,

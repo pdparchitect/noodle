@@ -4,7 +4,7 @@ import NoodleToolConnections
 @testable import PionCore
 import XCTest
 
-/// Google Cloud Audit says what it searched and what it could not, keeps what it found when a later read fails, and
+/// Google Cloud Detection says what it searched and what it could not, keeps what it found when a later read fails, and
 /// says exactly what to change when Google refuses it.
 final class GoogleCloudTests: XCTestCase {
     private let cloud = try! GoogleCloud.preset.makeConnection(name: "Google Cloud — Kestrel", values: [

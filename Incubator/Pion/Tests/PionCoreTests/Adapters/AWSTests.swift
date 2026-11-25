@@ -24,7 +24,7 @@ final class AWSTests: XCTestCase {
     static func body(_ object: [String: Any]) -> String { String(data: try! JSONSerialization.data(withJSONObject: object), encoding: .utf8)! }
 
     func testAConnectionSignsInThroughIdentityCenterAndTakesOneRoleInEachAccount() {
-        XCTAssertEqual(AWS.preset.name, "AWS Audit")
+        XCTAssertEqual(AWS.preset.name, "AWS Detection")
         XCTAssertEqual(AWS.preset.id, "c2b701c3-9057-41aa-8bda-9b7635180fce", "the tool's ID is kept, so connections made before stay")
         XCTAssertEqual(aws.endpoint.absoluteString, "https://amazonaws.com")
         XCTAssertEqual(aws.awsIdentityCenter?.startURL.absoluteString, "https://example.awsapps.com/start", "kept without the browser's #/")

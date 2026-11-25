@@ -6,7 +6,7 @@ import NoodleToolConnections
 /// AWS, as a defender reads it: who did what in CloudTrail, what GuardDuty, Security Hub and Access Analyzer found,
 /// who an access key belongs to, every user's credentials, what instances and open security groups exist, and
 /// CloudWatch Logs Insights queries. One connection covers a whole organisation: it signs in through the organisation's
-/// IAM Identity Center and takes one read-only role in whichever of its accounts a lookup names. AWS Audit only reads;
+/// IAM Identity Center and takes one read-only role in whichever of its accounts a lookup names. AWS Detection only reads;
 /// AWS Containment, a tool of its own with a permission set of its own, acts.
 public enum AWS {
     static let regions = ["us-east-1", "us-east-2", "us-west-1", "us-west-2", "ca-central-1", "sa-east-1", "eu-west-1", "eu-west-2",
@@ -14,10 +14,10 @@ public enum AWS {
                           "ap-northeast-1", "ap-northeast-2", "me-south-1", "af-south-1"]
 
     public static let preset = ToolDefinition(
-        id: "c2b701c3-9057-41aa-8bda-9b7635180fce", name: "AWS Audit",
+        id: "c2b701c3-9057-41aa-8bda-9b7635180fce", name: "AWS Detection",
         summary: "CloudTrail, GuardDuty, Security Hub, IAM and Identity Center, Access Analyzer, AWS Config, S3, EC2, Inspector, Macie and CloudWatch Logs across an organisation, read-only, with an alert watch.",
         defaultInstructions: """
-        Use AWS Audit to investigate an organisation's accounts: cloudtrail-events looks up CloudTrail events by user, \
+        Use AWS Detection to investigate an organisation's accounts: cloudtrail-events looks up CloudTrail events by user, \
         event name, source, resource or access key, with who acted (root, an IAM user or an assumed role and its \
         issuer), from where, whether MFA was used and any error; guardduty-findings, securityhub-findings and \
         access-analyzer-findings list what those services found, each finding with its own account and region; \
@@ -65,9 +65,9 @@ public enum AWS {
         "Choose **Add & Connect**. Your organisation's sign-in page opens with a code: check it matches the one Pion shows, and approve it. Pion stays signed in for as long as your organisation lets a session last, then asks again. Then ask an agent to run check-access.",
     ]
 
-    /// The audit permission set's inline policy: reads that SecurityAudit may not hold, and nothing that changes anything.
+    /// The detection permission set's inline policy: reads that SecurityAudit may not hold, and nothing that changes anything.
     static let auditPolicy = """
-    {"Version":"2012-10-17","Statement":[{"Sid":"PionAuditReads","Effect":"Allow","Resource":"*","Action":[
+    {"Version":"2012-10-17","Statement":[{"Sid":"PionDetectionReads","Effect":"Allow","Resource":"*","Action":[
      "logs:StartQuery","logs:GetQueryResults","iam:SimulatePrincipalPolicy","iam:GetAccountAuthorizationDetails","iam:GenerateCredentialReport",
      "iam:GetCredentialReport","config:GetResourceConfigHistory","config:DescribeConfigurationRecorders","config:DescribeConfigurationRecorderStatus",
      "s3:ListAllMyBuckets","s3:GetBucketPolicyStatus","s3:GetBucketPolicy","s3:GetBucketAcl","s3:GetBucketOwnershipControls",
@@ -984,7 +984,7 @@ extension AWS {
         return trails
     }
 
-    /// Tries each thing AWS Audit reads once in an account, and says what works, what to change for what does not,
+    /// Tries each thing AWS Detection reads once in an account, and says what works, what to change for what does not,
     /// which of the services the watch relies on are on, and whether the role could change anything.
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable { let account: String? }
@@ -1183,7 +1183,7 @@ extension AWS {
                 let allowed = simulated.all("member").filter { $0.value("EvalDecision") == "allowed" }.compactMap { $0.value("EvalActionName") }
                 return allowed.isEmpty
                     ? "✓ The role cannot make changes such as \(changes.prefix(3).joined(separator: ", ")), by its own policies."
-                    : "⚠ The role can change the account: its policies allow \(allowed.joined(separator: ", ")). AWS Audit only reads, so give its permission set only SecurityAudit and the inline policy from Setup Steps; AWS Containment has a permission set of its own."
+                    : "⚠ The role can change the account: its policies allow \(allowed.joined(separator: ", ")). AWS Detection only reads, so give its permission set only SecurityAudit and the inline policy from Setup Steps; AWS Containment has a permission set of its own."
             } catch {
                 return "· Whether the role could change anything: not checked (\(AWS.fix(for: error, needs: ["iam:GetRole", "iam:SimulatePrincipalPolicy"]) ?? error.localizedDescription))"
             }

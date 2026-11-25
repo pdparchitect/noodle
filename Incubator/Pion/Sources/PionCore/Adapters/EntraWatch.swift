@@ -3,7 +3,7 @@ import NoodleCore
 import NoodleToolConnections
 import Synchronization
 
-/// Microsoft Entra ID Audit's alert watch, and security-events, which reads back what woke the agents, the same way for
+/// Microsoft Entra ID Detection's alert watch, and security-events, which reads back what woke the agents, the same way for
 /// both: the directory audit log's changes that hand over the tenant, open a way back in or weaken its defences, and
 /// the users and sign-ins Identity Protection rates at high risk.
 extension Entra {

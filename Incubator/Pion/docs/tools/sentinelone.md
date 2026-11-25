@@ -3,7 +3,7 @@
 Pion has two SentinelOne tools, each added per management console with a
 service user and API token of its own:
 
-- **SentinelOne Audit** reads what SentinelOne's agents see: agents, with
+- **SentinelOne Detection** reads what SentinelOne's agents see: agents, with
   whether they are disconnected from the network, infected and in touch with
   the console; threats with their indicators, storyline, mitigation actions,
   notes and timeline; the activity log of who did what; sites, groups and
@@ -36,7 +36,7 @@ nothing else is involved.
 
 | Tool | Role | Must not have |
 | --- | --- | --- |
-| SentinelOne Audit | **Viewer**, at the account or the sites to investigate | any other role |
+| SentinelOne Detection | **Viewer**, at the account or the sites to investigate | any other role |
 | SentinelOne Containment | a custom role, **Pion Containment**, with only: Endpoints: View, Disconnect From Network, Reconnect To Network, Initiate Scan; Threats: View, Kill, Quarantine, Un-Quarantine, Remediate, Rollback, Change Incident Status, Change Analyst Verdict; Blocklist: View, Create, Delete; Activity: View; Sites: View | Admin, IT, SOC, IR Team or any built-in role; users, policies, exclusions, uninstalling agents, Remote Shell |
 
 The permission names follow the console's role editor, which groups them by
@@ -59,7 +59,7 @@ needed:
 
 **check-access reads the token's own user** (`GET /web/api/v2.1/user`): its
 name, email, ID, scope, roles and where it holds them, and when its token
-expires. Audit's check-access warns of any role but Viewer. Containment's warns
+expires. Detection's check-access warns of any role but Viewer. Containment's warns
 of a built-in role broader than it needs, and says a Viewer-only user can take
 none of its actions. **check-access never sends a change**, and SentinelOne
 lists no role's actions without trying one, so Containment's action permissions
@@ -83,7 +83,7 @@ consoles that Pion could check.
 ## Setting it up with least access
 
 1. **Make the service user.** In **Settings › Users › Service Users**, choose
-   **Actions › Create New Service User**. Name it **Pion Audit**, and give it an
+   **Actions › Create New Service User**. Name it **Pion Detection**, and give it an
    expiration date.
 2. **Give it the Viewer role** at the scope agents should see: the account, or
    only the sites to investigate.
@@ -209,7 +209,7 @@ nothing, and says:
 
 - which console it reaches;
 - the token's service user, its scope, its roles and when the token expires;
-- for Audit, whether the user holds only Viewer, with a warning otherwise;
+- for Detection, whether the user holds only Viewer, with a warning otherwise;
 - for each read, whether it works, and if not, which permission to add or that
   the console lacks the licence.
 
@@ -239,7 +239,7 @@ no longer accepts.
 ## Containing an incident
 
 **SentinelOne Containment** is a separate tool, with its own service user, so
-the audit user stays read-only.
+the detection user stays read-only.
 
 1. **Make the role.** In **Settings › Users › Roles**, choose **New Role**,
    name it **Pion Containment**, and give it only the permissions in the table

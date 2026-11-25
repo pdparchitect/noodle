@@ -61,7 +61,7 @@ final class GoogleCloudContainmentTests: XCTestCase {
         XCTAssertEqual(project.settings?["signer"], "pion-containment@kestrel.example")
         guard case .connection(let configuration) = GoogleCloud.containment.configuration, let oauth = configuration.oauth,
               case .connection(let audit) = GoogleCloud.preset.configuration, let auditOAuth = audit.oauth else { return XCTFail("no sign-in") }
-        // Only containment carries all of Google Cloud; the audit sign-in keeps its narrower scopes.
+        // Only containment carries all of Google Cloud; the detection sign-in keeps its narrower scopes.
         XCTAssertEqual(oauth.scopes, ["https://www.googleapis.com/auth/cloud-platform", "https://www.googleapis.com/auth/userinfo.email"])
         XCTAssertFalse(auditOAuth.scopes.contains("https://www.googleapis.com/auth/cloud-platform"))
         XCTAssertTrue(oauth.clients.isEmpty)

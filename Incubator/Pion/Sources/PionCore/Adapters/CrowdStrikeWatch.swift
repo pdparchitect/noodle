@@ -3,7 +3,7 @@ import NoodleCore
 import NoodleToolConnections
 import Synchronization
 
-/// CrowdStrike Falcon Audit's alert watch, and security-events, which reads back what woke the agents, the same way for
+/// CrowdStrike Falcon Detection's alert watch, and security-events, which reads back what woke the agents, the same way for
 /// both: new high and critical alerts not closed, Real Time Response sessions opened, by anyone, and hosts newly
 /// contained or with containment pending.
 extension CrowdStrike {

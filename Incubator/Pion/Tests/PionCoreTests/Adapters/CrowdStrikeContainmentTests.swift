@@ -52,7 +52,7 @@ final class CrowdStrikeContainmentTests: XCTestCase {
         for scope in CrowdStrike.containmentScopes { XCTAssertTrue(setup.contains(scope.shown), scope.plain) }
         XCTAssertTrue(setup.contains("Never give it **Real time response (admin): Write**"))
         XCTAssertFalse(CrowdStrike.containmentScopes.contains { $0.name.contains("admin") || $0.name == "Host groups" })
-        XCTAssertTrue(Set(CrowdStrike.auditScopes).isDisjoint(with: CrowdStrike.containmentScopes.filter { $0.access == "Write" }), "Audit holds no write scope")
+        XCTAssertTrue(Set(CrowdStrike.auditScopes).isDisjoint(with: CrowdStrike.containmentScopes.filter { $0.access == "Write" }), "Detection holds no write scope")
     }
 
     /// Every change but setting an alert in progress or reopening it is held for approval and says what recovering

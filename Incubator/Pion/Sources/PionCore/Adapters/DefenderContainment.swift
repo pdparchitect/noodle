@@ -4,7 +4,7 @@ import NoodleToolConnections
 
 /// Microsoft Defender XDR Containment: responding on one tenant's devices through the Defender for Endpoint API, signed
 /// in through an app registration of its own as an admin of its own with only the Defender roles its actions take, kept
-/// apart from Audit's so the audit sign-in stays read-only. Every action that changes a device, or uses it to gather or
+/// apart from Detection's so the detection sign-in stays read-only. Every action that changes a device, or uses it to gather or
 /// scan, waits for the champion's approval, and each says how it is recovered.
 ///
 /// Defender for Endpoint takes a request as a machine action, which the device carries out when it next checks in, so
@@ -17,7 +17,7 @@ extension Defender {
         summary: "Isolate a device or release it, restrict which apps run on it or lift that, stop and quarantine a file, run an antivirus scan and collect an investigation package, through Defender for Endpoint.",
         defaultInstructions: """
         Use Microsoft Defender XDR Containment to respond on a device Defender for Endpoint manages. Find the device with \
-        Microsoft Defender XDR Audit first, by devices, device or an alert's evidence, which give its 40-character Defender \
+        Microsoft Defender XDR Detection first, by devices, device or an alert's evidence, which give its 40-character Defender \
         for Endpoint ID, then read it here with device: whether it is onboarded and active, its pending machine actions, \
         and the last observed isolation and app-restriction actions, which are what Defender last recorded, not the \
         device's state verified; when device says they could not be confirmed, say so in the approval reason. Record it \
@@ -58,7 +58,7 @@ extension Defender {
         "In the [Microsoft Entra admin center](https://entra.microsoft.com), open **App registrations** and choose **New registration**. Name it Pion Defender Containment, kept for this tool alone, and keep **Single tenant**. Under **Redirect URI**, choose **Public client/native (mobile & desktop)** and give \(Entra.redirects). Add no client secret or certificate: Pion keeps none and signs in with PKCE.",
         "Under **API permissions**, choose **Add a permission › APIs my organization uses**, search for **WindowsDefenderATP**, choose **Delegated permissions** and add exactly \(containmentPermissions.map { "`\($0)`" }.joined(separator: ", ")); remove Microsoft Graph's `User.Read`, which a new app is given. Choose **Grant admin consent**. Pion asks for these, as `\(endpointResource)/…`, and `offline_access`, and refuses a sign-in that lacks any. `Machine.ReadWrite` is the only permission that reads one device and its machine actions; it could also change a device's tags, which Pion never does.",
         "Under **Enterprise applications**, open the app: in **Properties**, set **Assignment required?** to **Yes**, and under **Users and groups** assign only the admin who will sign in.",
-        "Microsoft allows an action only when both the app's permissions and the signed-in admin's Defender role allow it, for that device's group. Keep an admin for Pion Defender Containment alone, such as pion-defender-containment@contoso.com, apart from Pion Defender Audit's.",
+        "Microsoft allows an action only when both the app's permissions and the signed-in admin's Defender role allow it, for that device's group. Keep an admin for Pion Defender Containment alone, such as pion-defender-containment@contoso.com, apart from Pion Defender Detection's.",
         "In the [Microsoft Defender portal](https://security.microsoft.com), under **System › Permissions**, give that admin a role with only: in Microsoft Defender XDR's unified roles, **Security data basics (read)**, **Response (manage)** and, for collect-investigation-package, **Alerts (manage)**; or in Defender for Endpoint's roles, **View data**, **Active remediation actions** and **Alerts investigation**. Assign it only the device groups agents may act on. Never make the admin a Global or Security Administrator.",
         "Actions need Microsoft Defender for Endpoint Plan 2, or Microsoft 365 E5. Give the **Directory (tenant) ID** and the app's **Application (client) ID**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
@@ -300,7 +300,7 @@ extension Defender {
     /// whose last observed action released it. A state that could not be confirmed blocks nothing; the result says so.
     static func target(_ value: String, for act: Act, on service: ServiceClient) async throws -> Target {
         guard let id = deviceID(value) else {
-            throw ServiceError.input("Nothing was changed: give the device's 40-character Defender for Endpoint ID, as Microsoft Defender XDR Audit's devices, device or alert gives it.")
+            throw ServiceError.input("Nothing was changed: give the device's 40-character Defender for Endpoint ID, as Microsoft Defender XDR Detection's devices, device or alert gives it.")
         }
         let machine: Machine
         do { machine = try await read(devicesNeed) { try await get(service, ["api", "machines", id], api: endpointAPI, as: Machine.self) } }
@@ -428,7 +428,7 @@ extension Defender {
                                                   done: status == "succeeded", recovery: recovery, readAt: target.readAt))
     }
 
-    static let deviceField = JSONSchema.string("The device's 40-character Defender for Endpoint ID, as Microsoft Defender XDR Audit's devices, device or alert gives it.")
+    static let deviceField = JSONSchema.string("The device's 40-character Defender for Endpoint ID, as Microsoft Defender XDR Detection's devices, device or alert gives it.")
     static let commentField = JSONSchema.string("Why, for Defender for Endpoint's record of the action: the reason given in the approval request, with the Investigation.")
 
     struct ActInput: Decodable, Sendable { let device: String; let comment: String }

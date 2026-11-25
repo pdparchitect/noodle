@@ -2,7 +2,7 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// AWS Audit's deeper reads, all within its read-only permission set: who could make themselves an administrator and
+/// AWS Detection's deeper reads, all within its read-only permission set: who could make themselves an administrator and
 /// whom each role trusts, how a resource's configuration changed and who changed it, which buckets are open, who holds
 /// which Identity Center permission set where, whose credentials are weak or stale, and what Inspector and Macie found.
 extension AWS {

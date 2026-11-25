@@ -3,22 +3,22 @@ import NoodleCore
 import NoodleToolConnections
 
 /// An Okta org's users, their groups, apps, sign-in factors and grants, its admins and API tokens, and its System Log,
-/// read as the admin who signs in. Each account is its own org, named by its domain. Okta Audit only reads; Okta
+/// read as the admin who signs in. Each account is its own org, named by its domain. Okta Detection only reads; Okta
 /// Containment, a tool of its own with a sign-in of its own, acts.
 ///
 /// Both sign in through OAuth at the org's own authorization server, with an authorization code and PKCE, through a
 /// native app the org made, which keeps no client secret. Okta allows a request only when both the sign-in's scopes and
-/// the admin's role allow it, so Okta Audit's scopes only read, whatever the admin may do, and each tool's setup gives
+/// the admin's role allow it, so Okta Detection's scopes only read, whatever the admin may do, and each tool's setup gives
 /// its admin only the role the tool needs, which check-access reports.
 ///
 /// Both tools' guide is Incubator/Pion/docs/tools/okta.md. Change it with the setup steps, permissions or operations here.
 public enum Okta {
     public static let preset = ToolDefinition(
         // The ID and adapter key stay as they were, so connections made before keep working.
-        id: "bdc65def-9c77-4503-9d57-eac000822cce", name: "Okta Audit",
+        id: "bdc65def-9c77-4503-9d57-eac000822cce", name: "Okta Detection",
         summary: "Users, groups, apps, sign-in factors, grants, admins, API tokens and the System Log of an Okta org, read-only.",
         defaultInstructions: """
-        Use Okta Audit to learn who an identity is and what happened to it: find-user, then user-groups, user-apps, \
+        Use Okta Detection to learn who an identity is and what happened to it: find-user, then user-groups, user-apps, \
         user-factors and user-grants (the apps a user let act for them, which keep working after a password change); \
         sign-in-events searches the System Log by the user who acted, the user acted on (target), IP address, event type, \
         failures and time; admin-roles says who holds which admin role, api-tokens every API token, who made it and where \
@@ -55,7 +55,7 @@ public enum Okta {
                               usesResourceIndicator: false, revocationEndpoint: URL(string: "https://okta.invalid/oauth2/v1/revoke")!)
     }
 
-    /// Only reading scopes, one for each kind of thing Okta Audit reads: users, with their factors and grants, and the
+    /// Only reading scopes, one for each kind of thing Okta Detection reads: users, with their factors and grants, and the
     /// signed-in admin; groups; apps; the System Log; admin roles and assignments; API tokens.
     static let auditScopes = ["okta.users.read", "okta.users.read.self", "okta.groups.read", "okta.apps.read", "okta.logs.read",
                               "okta.roles.read", "okta.apiTokens.read"]
@@ -71,9 +71,9 @@ public enum Okta {
         ]
     }
 
-    static let setup = appSteps("Pion Audit", scopes: auditScopes) + [
-        "Okta allows a request only when both the app's scopes and the signed-in admin's role allow it. Keep an admin for Pion Audit alone, such as pion-audit@example.com, with the **Read-Only Administrator** role under **Security › Administrators**.",
-        "To audit admins and API tokens too, under **Security › Administrators › Roles** create a role such as **Pion Audit** with only **View roles, resources, and admin assignments** (`okta.iam.read`) and **View API tokens** (`okta.users.apitokens.read`), and assign it to the same admin for all users and all Identity and Access Management resources. The Read-Only Administrator cannot see them.",
+    static let setup = appSteps("Pion Detection", scopes: auditScopes) + [
+        "Okta allows a request only when both the app's scopes and the signed-in admin's role allow it. Keep an admin for Pion Detection alone, such as pion-detection@example.com, with the **Read-Only Administrator** role under **Security › Administrators**.",
+        "To audit admins and API tokens too, under **Security › Administrators › Roles** create a role such as **Pion Detection** with only **View roles, resources, and admin assignments** (`okta.iam.read`) and **View API tokens** (`okta.users.apitokens.read`), and assign it to the same admin for all users and all Identity and Access Management resources. The Read-Only Administrator cannot see them.",
         "Give your org's domain, such as `acme.okta.com`, not its `-admin` address, and the app's **Client ID**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
 
@@ -702,7 +702,7 @@ extension Okta {
             .permissions?.compactMap(\.label) ?? []
     }
 
-    /// Tries each thing Okta Audit reads once, says what works and what to change for what does not, which scopes the
+    /// Tries each thing Okta Detection reads once, says what works and what to change for what does not, which scopes the
     /// sign-in holds, and which roles the signed-in admin holds.
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
@@ -746,7 +746,7 @@ extension Okta {
                 lines.append("· Signed in as \(me.profile?.login ?? me.id), who holds \(named.isEmpty ? "no admin role" : named.joined(separator: ", ")).")
                 lines.append(writes.isEmpty
                     ? "✓ The signed-in admin cannot change the org: they hold only reading roles."
-                    : "⚠ The signed-in admin's roles also allow changes: \(Array(Set(writes)).sorted().prefix(6).joined(separator: ", ")). This sign-in's scopes only read, so Okta Audit cannot make them, but an admin kept for it needs only the Read-Only Administrator and a custom role that views roles and API tokens.")
+                    : "⚠ The signed-in admin's roles also allow changes: \(Array(Set(writes)).sorted().prefix(6).joined(separator: ", ")). This sign-in's scopes only read, so Okta Detection cannot make them, but an admin kept for it needs only the Read-Only Administrator and a custom role that views roles and API tokens.")
             } catch {
                 lines.append("· Which roles the signed-in admin holds: not read: \(error.localizedDescription)")
             }

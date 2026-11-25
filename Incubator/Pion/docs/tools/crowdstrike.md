@@ -3,7 +3,7 @@
 Pion has two CrowdStrike Falcon tools, each added per Falcon customer (CID)
 with an API client of its own:
 
-- **CrowdStrike Falcon Audit** reads what Falcon's sensors see: hosts, with
+- **CrowdStrike Falcon Detection** reads what Falcon's sensors see: hosts, with
   their containment status and whether they are online, alerts with their
   process trees, who used Real Time Response on which host and every command
   they ran, host groups, assessed container images, and who can use the
@@ -36,7 +36,7 @@ scopes** you give it, whoever made it; no user's roles are involved.
 
 | Tool | Scopes it needs | Scopes it must not have |
 | --- | --- | --- |
-| CrowdStrike Falcon Audit | **Hosts: Read**, **Alerts: Read**; and, for the parts that use them, **Real time response audit: Read**, **Host groups: Read**, **Falcon Container Image: Read**, **User management: Read** | any **Write** scope |
+| CrowdStrike Falcon Detection | **Hosts: Read**, **Alerts: Read**; and, for the parts that use them, **Real time response audit: Read**, **Host groups: Read**, **Falcon Container Image: Read**, **User management: Read** | any **Write** scope |
 | CrowdStrike Falcon Containment | **Hosts: Read**, **Hosts: Write**, **Alerts: Read**, **Alerts: Write**, **IOC Management: Read**, **IOC Management: Write**, **Real time response: Read**, **Real time response: Write** | **Real time response (admin): Write**, **Host groups: Write**, and any other Write scope |
 
 Why each is needed:
@@ -72,7 +72,7 @@ which needs **Real time response (admin): Write**: Falcon refuses each with a
 403 when the client lacks the scope, so those two are shown. For every other
 write scope it says "write access not verified". The table above is guidance:
 confirm on each client's page that it holds only what the table lists, and that
-Audit's client holds no Write scope at all.
+Detection's client holds no Write scope at all.
 
 **One cloud each.** Pion offers Falcon's US-1 (`api.crowdstrike.com`), US-2
 (`api.us-2.crowdstrike.com`), EU-1 (`api.eu-1.crowdstrike.com`) and US-GOV-1
@@ -89,7 +89,7 @@ an offset or a token, never an address, so a listing never leads elsewhere.
 ## Setting it up with least access
 
 1. **Make the client.** In **Support and resources › API clients and keys**,
-   choose **Create API client**. Name it **Pion Falcon Audit**.
+   choose **Create API client**. Name it **Pion Falcon Detection**.
 2. **Give it only Read scopes**: **Hosts** and **Alerts**, and those of
    Real time response audit, Host groups, Falcon Container Image and User
    management you want agents to read. Leave every **Write** box empty.
@@ -217,7 +217,7 @@ nothing, and says:
 - for each read, whether it works, and if not, which scope to add or that the
   customer lacks the subscription;
 - whether the client appears to hold **Real time response: Write** or
-  **Real time response (admin): Write**, which Audit must not, with a warning to
+  **Real time response (admin): Write**, which Detection must not, with a warning to
   remove either;
 - that every other write scope is not verified, as Falcon offers no way to list
   a client's scopes without attempting a change.
@@ -244,7 +244,7 @@ longer accepts.
 ## Containing an incident
 
 **CrowdStrike Falcon Containment** is a separate tool, with its own API client,
-so the audit client stays read-only.
+so the detection client stays read-only.
 
 1. **Make another client**, named **Pion Falcon Containment**, with only
    Containment's scopes from the table above. Never give it **Real time
@@ -278,7 +278,7 @@ description and result say what recovering from it involves:
 | `update-alert-status` (not held) | Sets alerts in progress or reopens them, with an optional comment. It hides nothing. | `update-alert-status` again, or `close-alert`. |
 | **check-access** (not held) | See step 3. | Nothing changes. |
 
-Hosts are given by their 32-character device ID, which Audit's `hosts`, `host`
+Hosts are given by their 32-character device ID, which Detection's `hosts`, `host`
 and `alert` give, and alerts by their composite ID.
 
 Pion reads what it acts on, whole, just before acting, and refuses, sending

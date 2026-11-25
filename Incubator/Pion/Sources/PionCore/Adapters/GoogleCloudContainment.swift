@@ -4,8 +4,8 @@ import NoodleCore
 import NoodleToolConnections
 
 /// Google Cloud Containment: acting on one organisation, folder or project to contain an incident, through a sign-in of
-/// its own, kept apart from Google Cloud Audit's so the audit sign-in never holds the cloud-platform scope. It signs in
-/// as a person, as Audit does, never as a service account. Every resource it acts on is checked for its type and to lie
+/// its own, kept apart from Google Cloud Detection's so the detection sign-in never holds the cloud-platform scope. It signs in
+/// as a person, as Detection does, never as a service account. Every resource it acts on is checked for its type and to lie
 /// inside the account's scope before anything changes; what cuts off or restores access, stops a VM or opens a bucket
 /// again waits for the champion's approval. Each change is conditional where Google allows it, on the etag, fingerprint
 /// or metageneration Pion read, and what Pion makes carries its name and description, so an undo removes only Pion's own.
@@ -15,7 +15,7 @@ extension GoogleCloud {
         summary: "Disable a service account or one of its keys, remove one member from an IAM role, enforce public access prevention on a bucket, and snapshot, stop or isolate a VM, inside one organisation, folder or project.",
         defaultInstructions: """
         Use Google Cloud Containment to contain an incident inside the organisation, folder or project the account is \
-        set to. Find what to act on with Google Cloud Audit first, and give each resource by its full name. \
+        set to. Find what to act on with Google Cloud Detection first, and give each resource by its full name. \
         disable-sa-key turns off one user-managed service account key, ending what uses it, and enable-sa-key turns it \
         back on; tokens already minted with the key are not revoked and last until they expire, usually an hour. \
         disable-service-account stops a service account authenticating at all, every key and workload of it, and \
@@ -24,7 +24,7 @@ extension GoogleCloud {
         changed since Pion read it; give condition when the member holds the role in more than one binding, none for the \
         one without a condition. It refuses the account signed in, which it checks with Google is the account entered, \
         its domain, and the last owner unless told to; access \
-        through a group, another role, or a folder or organisation above stays, so check with Google Cloud Audit's \
+        through a group, another role, or a folder or organisation above stays, so check with Google Cloud Detection's \
         iam-policies. enforce-public-access-prevention stops a bucket being reached by allUsers or allAuthenticatedUsers, \
         returning the setting before and the metageneration after; revert-public-access-prevention takes the bucket, \
         that setting and that metageneration as you give them, copied from enforce's result, and acts only while the \
@@ -67,12 +67,12 @@ extension GoogleCloud {
     static let emailScope = "https://www.googleapis.com/auth/userinfo.email"
 
     static let containmentSetup = [
-        "In the Google Cloud project that holds your Google Cloud Audit client, also enable the [Identity and Access Management (IAM) API](https://console.cloud.google.com/apis/library/iam.googleapis.com), the [Cloud Resource Manager API](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com), the [Compute Engine API](https://console.cloud.google.com/apis/library/compute.googleapis.com) and the [Cloud Storage API](https://console.cloud.google.com/apis/library/storage-api.googleapis.com). Pion's requests count against this project.",
-        "Under Google Auth Platform's [Data Access](https://console.cloud.google.com/auth/scopes), add the scopes `https://www.googleapis.com/auth/cloud-platform` and `https://www.googleapis.com/auth/userinfo.email`, by which Pion asks Google which account signed in. Only Google Cloud Containment asks for cloud-platform, at a sign-in of its own; Google Cloud Audit keeps its narrower scopes.",
+        "In the Google Cloud project that holds your Google Cloud Detection client, also enable the [Identity and Access Management (IAM) API](https://console.cloud.google.com/apis/library/iam.googleapis.com), the [Cloud Resource Manager API](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com), the [Compute Engine API](https://console.cloud.google.com/apis/library/compute.googleapis.com) and the [Cloud Storage API](https://console.cloud.google.com/apis/library/storage-api.googleapis.com). Pion's requests count against this project.",
+        "Under Google Auth Platform's [Data Access](https://console.cloud.google.com/auth/scopes), add the scopes `https://www.googleapis.com/auth/cloud-platform` and `https://www.googleapis.com/auth/userinfo.email`, by which Pion asks Google which account signed in. Only Google Cloud Containment asks for cloud-platform, at a sign-in of its own; Google Cloud Detection keeps its narrower scopes.",
         "Paste that same iOS client's **Client ID** here, or create one under [Clients](https://console.cloud.google.com/auth/clients) of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev).",
         "In [Roles](https://console.cloud.google.com/iam-admin/roles), on the organisation, choose **Create role**, name it Pion Containment and add only these permissions: \(containmentPermissions.map { "`\($0)`" }.joined(separator: ", ")). For a project's account, make it on the project and leave out the folder and organisation ones. Leave out any whose action you do not want agents to have: setIamPolicy lets whoever holds it change any binding, granting as well as removing, though Pion only removes.",
         "Grant that role, and nothing else, to a Google account kept for containment, on the organisation, folder or project to act on. Never sign in with an Owner, Editor or Security Admin: the cloud-platform scope lets this sign-in do whatever the account can, so its role is what limits it.",
-        "Set Scope and its ID as for Google Cloud Audit, and **Account that signs in** to that account's email: before removing access, Pion asks Google which account signed in, refuses if it is not this one, and refuses to remove that account's own access. Choose **Add & Connect**, sign in as that account, and ask an agent to run check-access.",
+        "Set Scope and its ID as for Google Cloud Detection, and **Account that signs in** to that account's email: before removing access, Pion asks Google which account signed in, refuses if it is not this one, and refuses to remove that account's own access. Choose **Add & Connect**, sign in as that account, and ask an agent to run check-access.",
     ]
 
     /// Every permission the containment operations use, for the custom role its setup makes: reads that check each
@@ -328,7 +328,7 @@ extension GoogleCloud {
         let example = wanted ? "projects/PROJECT-ID/serviceAccounts/EMAIL/keys/KEY-ID" : "projects/PROJECT-ID/serviceAccounts/EMAIL"
         guard parts.count == (wanted ? 6 : 4), parts[0] == "projects", shaped(parts[1], projectPattern) != nil, parts[2] == "serviceAccounts",
               shaped(parts[3].lowercased(), accountPattern) != nil, !wanted || (parts[4] == "keys" && shaped(parts[5], keyIDPattern) != nil) else {
-            throw ServiceError.input("Give the \(wanted ? "key" : "service account") by its full name, \(example), as Google Cloud Audit's sa-keys lists it.")
+            throw ServiceError.input("Give the \(wanted ? "key" : "service account") by its full name, \(example), as Google Cloud Detection's sa-keys lists it.")
         }
         return AccountName(project: parts[1], account: parts[3].lowercased(), key: wanted ? parts[5] : nil)
     }
@@ -349,7 +349,7 @@ extension GoogleCloud {
     }
 
     struct KeyInput: Decodable, Sendable { let key: String }
-    static let keyInputSchema = JSONSchema.object(["key": .string("The key's full name, projects/PROJECT-ID/serviceAccounts/EMAIL/keys/KEY-ID, as Google Cloud Audit's sa-keys lists it.")],
+    static let keyInputSchema = JSONSchema.object(["key": .string("The key's full name, projects/PROJECT-ID/serviceAccounts/EMAIL/keys/KEY-ID, as Google Cloud Detection's sa-keys lists it.")],
                                                  required: ["key"])
 
     /// One key of a service account, read, and turned on or off when it is not already so.
@@ -615,7 +615,7 @@ extension GoogleCloud {
             guard let index = found.first else {
                 let elsewhere = bindings.filter { GoogleCloud.role(of: $0) == role && stored(in: $0) != nil }
                 let text = elsewhere.isEmpty
-                    ? "\(member) holds no binding of \(role) in the policy of \(place.name); nothing was changed. Access through a group, another role, or a folder or organisation above is not in this policy: Google Cloud Audit's iam-policies finds it."
+                    ? "\(member) holds no binding of \(role) in the policy of \(place.name); nothing was changed. Access through a group, another role, or a folder or organisation above is not in this policy: Google Cloud Detection's iam-policies finds it."
                     : "\(member) holds \(role) on \(place.name) only in " + elsewhere.map(GoogleCloud.describe).joined(separator: "; ") + ", which condition does not name; nothing was changed. Give condition to name one."
                 return try ServiceResult(text: text, structured: Kept(resource: place.name, role: role, member: member, changed: false))
             }

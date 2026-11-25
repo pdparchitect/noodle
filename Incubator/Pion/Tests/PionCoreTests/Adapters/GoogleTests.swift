@@ -339,7 +339,7 @@ final class GoogleTests: XCTestCase {
                                                                              values: ["clientID": "1234-abc.apps.googleusercontent.com"])
 
     /// The containment tool signs in on its own, through the same client, asking only for the Directory scopes
-    /// suspending, ending sessions and acting on phones take; the audit tool keeps its read-only scopes.
+    /// suspending, ending sessions and acting on phones take; the detection tool keeps its read-only scopes.
     func testContainmentSignsInSeparatelyWithOnlyTheScopesItsActionsTake() throws {
         XCTAssertNotNil(PionAdapters.all["google-workspace-containment"])
         XCTAssertEqual(containment.endpoint.absoluteString, "https://admin.googleapis.com")
@@ -353,7 +353,7 @@ final class GoogleTests: XCTestCase {
         for scope in oauth.scopes { XCTAssertTrue(GoogleWorkspace.containmentSetup.joined().contains("`\(scope)`"), scope) }
         XCTAssertEqual(configuration.oauthClientField, "clientID")
         XCTAssertNotEqual(GoogleWorkspace.containment.id, GoogleWorkspace.preset.id)
-        XCTAssertEqual(GoogleWorkspace.preset.name, "Google Workspace Audit")
+        XCTAssertEqual(GoogleWorkspace.preset.name, "Google Workspace Detection")
         XCTAssertEqual(GoogleWorkspace.containment.name, "Google Workspace Containment")
     }
 
@@ -452,7 +452,7 @@ final class GoogleTests: XCTestCase {
         XCTAssertEqual(queryItems(service.requests.first { $0.url?.path == directory + "/users" })["query"], "isAdmin=true")
     }
 
-    /// A refusal says what the Audit admin's role lacks, as Google answers 403 for anything outside it.
+    /// A refusal says what the Detection admin's role lacks, as Google answers 403 for anything outside it.
     func testAdminRolesExplainARefusalByTheAdminsRole() async throws {
         let service = FakeService()
         service.answers["/admin/directory/v1/users"] = (403, #"{"error":{"code":403,"message":"Not Authorized to access this resource/api"}}"#)
@@ -671,7 +671,7 @@ final class GoogleTests: XCTestCase {
     /// Every page and API the Setup Steps name is a link to it, so nobody has to search Google's consoles.
     func testSetupStepsLinkEveryPageAndAPITheyName() {
         let links: [(String, [String], [String])] = [
-            ("Google Workspace Audit", GoogleWorkspace.setup, ["console.cloud.google.com/apis/library/admin.googleapis.com",
+            ("Google Workspace Detection", GoogleWorkspace.setup, ["console.cloud.google.com/apis/library/admin.googleapis.com",
                                                               "console.cloud.google.com/auth/overview", "console.cloud.google.com/auth/scopes",
                                                               "console.cloud.google.com/auth/clients", "admin.google.com/ac/roles"]),
             ("Google Workspace Containment", GoogleWorkspace.containmentSetup, ["admin.google.com/ac/roles", "console.cloud.google.com/apis/library/admin.googleapis.com",
@@ -900,7 +900,7 @@ final class GoogleTests: XCTestCase {
 
     func testEveryGoogleScopeAskedForHasBeenChecked() throws {
         var tools = 0
-        defer { XCTAssertEqual(tools, 4, "Google Workspace Audit, Google Workspace Containment, Google Cloud Audit and Google Cloud Containment") }
+        defer { XCTAssertEqual(tools, 4, "Google Workspace Detection, Google Workspace Containment, Google Cloud Detection and Google Cloud Containment") }
         for preset in PionCatalogue.entries where preset.adapter?.hasPrefix("google-") == true {
             guard case .connection(let configuration) = preset.configuration, let oauth = configuration.oauth else { continue }
             tools += 1
@@ -1296,7 +1296,7 @@ final class GoogleTests: XCTestCase {
     }
 
     /// Containment's agents are told what the least-access role cannot do to an admin, to keep the evidence before
-    /// suspending, and what restoring an account needs; Audit's, what to hand the champion to remediate.
+    /// suspending, and what restoring an account needs; Detection's, what to hand the champion to remediate.
     func testInstructionsCoverAdminsEvidenceRestoringAndRemediation() {
         let containment = GoogleWorkspace.containment.defaultInstructions
         for expected in ["super admin", "before suspend", "invalidate-backup-codes", "before unsuspend"] {
@@ -1304,7 +1304,7 @@ final class GoogleTests: XCTestCase {
         }
         XCTAssertFalse(containment.contains("contain one with suspend"), "the least-access role cannot suspend an admin")
         let audit = GoogleWorkspace.preset.defaultInstructions
-        for expected in ["file IDs", "Message-ID"] { XCTAssertTrue(audit.contains(expected), "Audit instructions lack \(expected)") }
+        for expected in ["file IDs", "Message-ID"] { XCTAssertTrue(audit.contains(expected), "Detection instructions lack \(expected)") }
     }
 
     // MARK: Second review
@@ -2066,7 +2066,7 @@ final class GoogleTests: XCTestCase {
             && $0.contains("CAA_ACCESS_LEVELS_OLD=corp-only") && $0.contains("TARGET_ENTITY_NAME=Gmail") && $0.contains("ORG_UNIT_NAME=/Finance") }, events.text)
     }
 
-    /// Both tools' instructions name the new operations, and the audit tool's the file made public it wakes for.
+    /// Both tools' instructions name the new operations, and the detection tool's the file made public it wakes for.
     func testInstructionsNameTheInvestigationAndContainmentOperations() {
         let audit = GoogleWorkspace.preset.defaultInstructions
         for name in ["drive-exposure", "mail-trace", "client-activity", "anyone with the link", "read only in part"] { XCTAssertTrue(audit.contains(name), name) }

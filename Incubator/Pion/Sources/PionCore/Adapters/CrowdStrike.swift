@@ -4,7 +4,7 @@ import NoodleToolConnections
 
 /// CrowdStrike Falcon: its hosts, the alerts its sensors raised, who used Real Time Response on which host, its host
 /// groups and the container images it assessed, read through an API client's ID and secret. Each account is one Falcon
-/// cloud and customer (CID). CrowdStrike Falcon Audit only reads; CrowdStrike Falcon Containment, a tool of its own with
+/// cloud and customer (CID). CrowdStrike Falcon Detection only reads; CrowdStrike Falcon Containment, a tool of its own with
 /// an API client of its own, contains hosts, blocks indicators, runs two fixed Real Time Response commands and closes
 /// alerts. Falcon's incidents API was retired in 2026, so incidents are read as the alerts they gathered.
 ///
@@ -16,10 +16,10 @@ import NoodleToolConnections
 /// Both tools' guide is Incubator/Pion/docs/tools/crowdstrike.md. Change it with the setup steps, scopes or operations here.
 public enum CrowdStrike {
     public static let preset = ToolDefinition(
-        id: "fc56ba9d-c4aa-4ff9-80cf-507f21273249", name: "CrowdStrike Falcon Audit",
+        id: "fc56ba9d-c4aa-4ff9-80cf-507f21273249", name: "CrowdStrike Falcon Detection",
         summary: "Hosts, alerts, Real Time Response sessions, host groups and container image assessments in CrowdStrike Falcon, read-only.",
         defaultInstructions: """
-        Use CrowdStrike Falcon Audit to see endpoints as Falcon's sensors do. hosts finds hosts by name, IP address, \
+        Use CrowdStrike Falcon Detection to see endpoints as Falcon's sensors do. hosts finds hosts by name, IP address, \
         platform, containment status or host group, and host reads one in full: its sensor, when it was last seen, \
         whether it is online, its containment status, tags and groups, any hint that it runs Kubernetes workloads or \
         containers, which suggests but does not verify what runs there, and the alerts that named it. alerts lists \
@@ -62,7 +62,7 @@ public enum CrowdStrike {
         var plain: String { "\(name): \(access)" }
     }
 
-    /// Audit's scopes, every one Read. Hosts and Alerts are the tool; the rest each serve one part of it.
+    /// Detection's scopes, every one Read. Hosts and Alerts are the tool; the rest each serve one part of it.
     static let hostsRead = Scope(name: "Hosts", access: "Read")
     static let alertsRead = Scope(name: "Alerts", access: "Read")
     static let rtrAuditRead = Scope(name: "Real time response audit", access: "Read")
@@ -72,7 +72,7 @@ public enum CrowdStrike {
     static let auditScopes = [hostsRead, alertsRead, rtrAuditRead, hostGroupsRead, imagesRead, usersRead]
 
     static let setup = [
-        "In the Falcon console, open **Support and resources › API clients and keys** and choose **Create API client**. Name it Pion Falcon Audit, kept for this tool alone.",
+        "In the Falcon console, open **Support and resources › API clients and keys** and choose **Create API client**. Name it Pion Falcon Detection, kept for this tool alone.",
         "Give it only these scopes, each **Read** and nothing else: \(auditScopes.map(\.shown).joined(separator: ", ")). Hosts and Alerts are needed; leave out any other to go without what it reads. Give it no **Write** scope at all: Falcon offers no way to check a client's scopes without trying a change, so check them on the client's page.",
         "Choose **Create**, and copy the **Client ID** and **Secret** here; Falcon shows the secret only once.",
         cloudStep,
@@ -1151,12 +1151,12 @@ extension CrowdStrike {
         return lines
     }
 
-    /// Tries each thing Audit reads once and says what works and what to change, and warns of a write scope its client
+    /// Tries each thing Detection reads once and says what works and what to change, and warns of a write scope its client
     /// holds where a read shows it. It sends only reads.
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
-        static let summary = "Tries each thing this tool reads once and says what works and, for what does not, which scope to add; which Falcon cloud it reads; and warns when a read shows the API client holds Real Time Response's write or admin scope, which Audit must not. It sends only reads, so other write scopes are not verified."
+        static let summary = "Tries each thing this tool reads once and says what works and, for what does not, which scope to add; which Falcon cloud it reads; and warns when a read shows the API client holds Real Time Response's write or admin scope, which Detection must not. It sends only reads, so other write scopes are not verified."
         static let input = JSONSchema.object([:])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
@@ -1184,9 +1184,9 @@ extension CrowdStrike {
             if !working.contains(CrowdStrike.rtrAuditNeed.title) || !working.contains(CrowdStrike.alertsNeed.title) || !working.contains(CrowdStrike.hostsNeed.title) {
                 lines.append("· The alert watch reads alerts, Real Time Response sessions and contained hosts; what it cannot read it says once, and security-events says why.")
             }
-            lines += await CrowdStrike.unwanted(CrowdStrike.writeReads, tool: "Audit", service)
+            lines += await CrowdStrike.unwanted(CrowdStrike.writeReads, tool: "Detection", service)
             lines.append(CrowdStrike.notVerified(CrowdStrike.unverifiableWrites))
-            lines.append("· Pion Falcon Audit's client should hold only \(CrowdStrike.auditScopes.map(\.plain).joined(separator: ", ")), and no Write scope at all: check it in Support and resources › API clients and keys.")
+            lines.append("· Pion Falcon Detection's client should hold only \(CrowdStrike.auditScopes.map(\.plain).joined(separator: ", ")), and no Write scope at all: check it in Support and resources › API clients and keys.")
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
         }
     }

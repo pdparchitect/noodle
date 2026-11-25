@@ -80,7 +80,7 @@ final class CloudflareContainmentTests: XCTestCase {
         XCTAssertTrue(PionCatalogue.entries.contains { $0.id == Cloudflare.containment.id })
         let setup = Cloudflare.containmentSetup.joined(separator: "\n")
         for permission in Cloudflare.containmentPermissions + Cloudflare.containmentZonePermissions { XCTAssertTrue(setup.contains("**\(permission)**"), permission) }
-        XCTAssertTrue(setup.contains("Pion Containment") && setup.contains("apart from Pion Audit's"), setup)
+        XCTAssertTrue(setup.contains("Pion Containment") && setup.contains("apart from Pion Detection's"), setup)
     }
 
     /// Every change is held for approval and says what recovering from it involves; the reads are not held.

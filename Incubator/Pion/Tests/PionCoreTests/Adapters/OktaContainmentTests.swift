@@ -56,7 +56,7 @@ final class OktaContainmentTests: XCTestCase {
         XCTAssertEqual(Set(oauth.scopes), ["okta.users.manage", "okta.users.read.self", "okta.groups.manage", "okta.roles.manage",
                                            "okta.apiTokens.manage", "offline_access"])
         XCTAssertTrue(Set(oauth.scopes).isDisjoint(with: Set(audit.oauth!.scopes).subtracting(["okta.users.read.self", "offline_access"])),
-                      "a grant of its own, apart from Okta Audit's read-only one")
+                      "a grant of its own, apart from Okta Detection's read-only one")
         XCTAssertTrue(Okta.containmentSetup.contains { $0.contains("com.pdparchitect.pion:/oauth2callback") })
         XCTAssertTrue(Okta.containmentScopes.allSatisfy { scope in Okta.containmentSetup.contains { $0.contains("`\(scope)`") } })
         XCTAssertTrue(Okta.containmentSetup.contains { $0.contains("okta.users.lifecycle.suspend") && $0.contains("okta.users.apitokens.clear") })

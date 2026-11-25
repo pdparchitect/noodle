@@ -4,7 +4,7 @@ import NoodleToolConnections
 import Synchronization
 
 /// Cloudflare Containment: responding in one account, with a token of its own holding only the edit permissions its
-/// actions take, kept apart from Audit's so the audit token stays read-only. Every action that blocks or unblocks
+/// actions take, kept apart from Detection's so the detection token stays read-only. Every action that blocks or unblocks
 /// traffic, revokes sessions or devices, or gives them back waits for the champion's approval, and each says what
 /// recovering from it involves.
 ///
@@ -24,7 +24,7 @@ extension Cloudflare {
         id: "aa7d6d7e-fd6e-4b8a-a5a4-118e441e43b9", name: "Cloudflare Containment",
         summary: "Block an IP address, network or country at the edge and remove what it blocked, revoke a person's Access sessions, block a domain or IP address in Gateway and remove it, and revoke a WARP device, in Cloudflare.",
         defaultInstructions: """
-        Use Cloudflare Containment to respond in a Cloudflare account. Find the target with Cloudflare Audit first, then \
+        Use Cloudflare Containment to respond in a Cloudflare account. Find the target with Cloudflare Detection first, then \
         read it here and record it as evidence before acting. block-ip, block-asn and block-country add an IP Access \
         rule that blocks an address or range, a network or a country, for the whole account or one zone, and give its \
         ID; Pion keeps a record of each rule it makes, and unblock removes one by that ID only if the record says Pion \
@@ -51,7 +51,7 @@ extension Cloudflare {
     static let containmentZonePermissions = ["Zone › Firewall Services › Edit", "Zone › Zone › Read"]
 
     static let containmentSetup = [
-        "In the Cloudflare dashboard, open **Manage Account › Account API Tokens** and choose **Create Token › Create Custom Token**. Name it Pion Containment, kept for this tool alone, apart from Pion Audit's.",
+        "In the Cloudflare dashboard, open **Manage Account › Account API Tokens** and choose **Create Token › Create Custom Token**. Name it Pion Containment, kept for this tool alone, apart from Pion Detection's.",
         "Give it only \(containmentPermissions.map { "**\($0)**" }.joined(separator: " and ")). Cloudflare accepts nothing narrower for Gateway lists and WARP devices, and Zero Trust › Edit can change all of Zero Trust, so leave it out if agents should not block in Gateway, revoke devices or sessions. To block in one zone rather than the whole account, add \(containmentZonePermissions.map { "**\($0)**" }.joined(separator: " and ")) for that zone.",
         "Under **Account Resources** include only this account, and under **Zone Resources** only the zones it may act on. Optionally limit **Client IP Address Filtering** and set a **TTL**; then create the token and give it here. Pion sends it as `Authorization: Bearer <token>`.",
         accountStep,
@@ -898,7 +898,7 @@ extension Cloudflare {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "device"
         static let summary = "A WARP device registration's state before acting, by its registration ID: the device, its user, whether it is revoked or deleted and when last seen. It changes nothing."
-        static let input = JSONSchema.object(["id": .string("The registration's ID, as Cloudflare Audit's devices gives it.")], required: ["id"])
+        static let input = JSONSchema.object(["id": .string("The registration's ID, as Cloudflare Detection's devices gives it.")], required: ["id"])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             let registration = try await Cloudflare.targetRegistration(input.id, service)
@@ -914,7 +914,7 @@ extension Cloudflare {
         static let name = "revoke-device"
         static let recovery = "Recovery: unrevoke the registration, or have its user enrol the device in WARP again, in the Zero Trust dashboard (Team & Resources › Devices, or My Team › Devices); Pion offers no unrevoke, as it cannot verify who revoked a registration. Until then the device reaches nothing Zero Trust protects through it, and Gateway no longer filters it."
         static let summary = "Revoke one WARP device registration, by its ID, so the device can no longer reach Access applications or private networks through WARP. Reports the registration's state read after the request, which confirms the state, not who changed it. \(recovery)"
-        static let input = JSONSchema.object(["id": .string("The registration's ID, as Cloudflare Audit's devices gives it.")], required: ["id"])
+        static let input = JSONSchema.object(["id": .string("The registration's ID, as Cloudflare Detection's devices gives it.")], required: ["id"])
         static let readOnly = false
         static let destructive = true
 
@@ -1006,7 +1006,7 @@ extension Cloudflare {
                     let recorded = (try? Cloudflare.owned(service) { $0.kind == "gateway-item" && $0.label == value }) != nil
                     lines.append(items.contains(where: { $0.value == value }) ? "Pion's \(kind.label) list \(record.id), read whole, holds \(value)\(recorded ? ", which Pion's record says it added" : ", which Pion has no record of adding")." : "Pion's \(kind.label) list \(record.id), read whole, does not hold \(value).")
                     lines.append("\(state.said).")
-                } else { lines.append("Pion has no \(kind.label) list in Gateway for this connection, so it blocks nothing there; gateway-lists in Cloudflare Audit reads every list.") }
+                } else { lines.append("Pion has no \(kind.label) list in Gateway for this connection, so it blocks nothing there; gateway-lists in Cloudflare Detection reads every list.") }
             } else if let raw = input.user {
                 let user = try await Cloudflare.targetUser(raw, service)
                 let sessions = try await Cloudflare.sessions(user.id, service, need: Cloudflare.editZeroTrustNeed)

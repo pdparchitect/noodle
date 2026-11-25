@@ -4,14 +4,14 @@ import NoodleCore
 import NoodleToolConnections
 
 /// Microsoft Azure: activity, security alerts, resources and access, reached as an app registered in the tenant.
-/// Each account is one subscription. Microsoft Azure Audit only reads; Microsoft Azure Containment, a tool of its own
+/// Each account is one subscription. Microsoft Azure Detection only reads; Microsoft Azure Containment, a tool of its own
 /// with an app registration of its own, acts.
 public enum Azure {
     public static let preset = ToolDefinition(
-        id: "bb70fbdc-96ea-4c56-91cf-b1b29fe91328", name: "Microsoft Azure Audit",
+        id: "bb70fbdc-96ea-4c56-91cf-b1b29fe91328", name: "Microsoft Azure Detection",
         summary: "Activity log, Defender for Cloud alerts, resources and access in an Azure subscription, read-only.",
         defaultInstructions: """
-        Use Microsoft Azure Audit to investigate a subscription: activity-log searches its activity log by time, caller, \
+        Use Microsoft Azure Detection to investigate a subscription: activity-log searches its activity log by time, caller, \
         resource group, resource, resource provider, correlation ID, operation and outcome, with each event's caller IP, \
         claims and the permission it used; defender-alerts lists Microsoft Defender for Cloud alerts; resource-graph runs \
         KQL over its resources; role-assignments says who holds which role where, including roles eligible through \
@@ -46,7 +46,7 @@ public enum Azure {
         setup: setup)
 
     static let setup = [
-        "In the [Microsoft Entra admin center](https://entra.microsoft.com), open **App registrations** and choose **New registration**. Name it, such as Pion Audit, keep **Single tenant** and leave the redirect URI empty. It needs no API permissions.",
+        "In the [Microsoft Entra admin center](https://entra.microsoft.com), open **App registrations** and choose **New registration**. Name it, such as Pion Detection, keep **Single tenant** and leave the redirect URI empty. It needs no API permissions.",
         "Under **Certificates & secrets**, add a client secret and copy its **Value**, not its Secret ID; it is shown only once.",
         "In the [Azure portal](https://portal.azure.com), open the subscription, choose **Access control (IAM) › Add role assignment**, and give the app the **Reader** and **Security Reader** roles. Neither can change anything.",
         "Optionally, to watch for a Global Administrator elevating access, which Azure records only in the directory's own activity log, have a Global Administrator give the app **Monitoring Reader** at the root scope (`/`). Without it the watch says it cannot read that log.",
@@ -560,7 +560,7 @@ extension Azure {
         }
     }
 
-    /// Tries each thing Microsoft Azure Audit reads once, says what works and what to change for what does not, which
+    /// Tries each thing Microsoft Azure Detection reads once, says what works and what to change for what does not, which
     /// Defender plans raise alerts, and whether the app could change anything.
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
@@ -625,7 +625,7 @@ extension Azure {
                 let changes = Array(Set(held.flatMap { $0.actions ?? [] }.filter(Self.changes))).sorted()
                 lines.append(changes.isEmpty
                     ? "✓ The app cannot change the subscription: it holds no write, delete or wildcard action there."
-                    : "⚠ The app can change the subscription: it holds \(changes.prefix(5).joined(separator: ", "))\(changes.count > 5 ? " and more" : ""). Microsoft Azure Audit only reads, so give it only Reader and Security Reader; Microsoft Azure Containment has an app of its own.")
+                    : "⚠ The app can change the subscription: it holds \(changes.prefix(5).joined(separator: ", "))\(changes.count > 5 ? " and more" : ""). Microsoft Azure Detection only reads, so give it only Reader and Security Reader; Microsoft Azure Containment has an app of its own.")
             } catch {
                 lines.append("· Whether the app could change the subscription: not checked: \(error.localizedDescription)")
             }

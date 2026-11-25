@@ -3,7 +3,7 @@
 Pion has two Microsoft Entra ID tools, each added per tenant with a sign-in of
 its own:
 
-- **Microsoft Entra ID Audit** reads a tenant the way a defender does: who a
+- **Microsoft Entra ID Detection** reads a tenant the way a defender does: who a
   user is, their groups, roles and sign-in methods, the sign-in log, Identity
   Protection's risky users, who holds which directory role, which apps hold
   which Microsoft Graph permissions and credentials, and the directory audit
@@ -50,14 +50,14 @@ Microsoft allows a request only when **both** of these allow it:
 
 | Tool | Delegated Microsoft Graph permissions | Admin's roles |
 | --- | --- | --- |
-| Microsoft Entra ID Audit | `Directory.Read.All`, `AuditLog.Read.All`, `UserAuthenticationMethod.Read.All`, `IdentityRiskyUser.Read.All`, `IdentityRiskEvent.Read.All`, `RoleManagement.Read.Directory` | Global Reader |
+| Microsoft Entra ID Detection | `Directory.Read.All`, `AuditLog.Read.All`, `UserAuthenticationMethod.Read.All`, `IdentityRiskyUser.Read.All`, `IdentityRiskEvent.Read.All`, `RoleManagement.Read.Directory` | Global Reader |
 | Microsoft Entra ID Containment | `User.Read.All`, `User.EnableDisableAccount.All`, `User.RevokeSessions.All`, `UserAuthenticationMethod.ReadWrite.All`, `RoleManagement.ReadWrite.Directory`, `Application.ReadWrite.All`, `IdentityRiskyUser.ReadWrite.All`, `GroupMember.Read.All` | only the roles its actions take, below |
 
 Both also ask for `offline_access`, so the sign-in renews itself without asking
 again; Microsoft never lists it among the permissions it granted, so Pion does
 not require it back.
 
-Why Audit asks for each:
+Why Detection asks for each:
 
 - `Directory.Read.All` reads users, groups, apps, enterprise apps and their
   consents. Microsoft's sign-in log needs it beside `AuditLog.Read.All`, so it
@@ -70,7 +70,7 @@ Why Audit asks for each:
 - `RoleManagement.Read.Directory` reads role assignments and, in Privileged
   Identity Management, eligibility.
 
-Audit's permissions only read, so it cannot change anything, whatever its
+Detection's permissions only read, so it cannot change anything, whatever its
 admin's roles allow. Containment's permissions can change users, roles and
 apps, so its admin's roles are what limit it: never make that admin a Global
 Administrator.
@@ -98,21 +98,21 @@ listing never leads anywhere else.
 ## Setting it up with least access
 
 1. **Register the app.** In **App registrations**, choose **New registration**.
-   Name it **Pion Audit** and keep **Single tenant**. Under **Redirect URI**,
+   Name it **Pion Detection** and keep **Single tenant**. Under **Redirect URI**,
    choose **Public client/native (mobile & desktop)** and give
    `com.pdparchitect.pion:/oauth2callback`
    (`com.pdparchitect.pion.local:/oauth2callback` for Pion Dev). Add no client
    secret or certificate.
 2. **Add its permissions.** Under **API permissions**, choose **Add a
    permission › Microsoft Graph › Delegated permissions** and add exactly
-   Audit's permissions from the table above. Remove `User.Read`, which a new
+   Detection's permissions from the table above. Remove `User.Read`, which a new
    app is given. Choose **Grant admin consent**; only a Global Administrator or
    a Privileged Role Administrator can.
 3. **Let only its admin use it.** Under **Enterprise applications**, open the
    app. In **Properties**, set **Assignment required?** to **Yes**, and under
    **Users and groups** assign only the admin who will sign in.
-4. **Choose its admin.** Keep an admin for Microsoft Entra ID Audit alone, such
-   as `pion-audit@contoso.com`, with only the **Global Reader** role. It reads
+4. **Choose its admin.** Keep an admin for Microsoft Entra ID Detection alone, such
+   as `pion-detection@contoso.com`, with only the **Global Reader** role. It reads
    everything this tool reads and changes nothing.
 5. **Add the account** with the **Directory (tenant) ID** and the app's
    **Application (client) ID**, from its **Overview**. Choose **Add & Connect**
@@ -277,7 +277,7 @@ role is missing, so Pion names both.
 ## Containing an incident
 
 **Microsoft Entra ID Containment** is a separate tool, with its own app, admin
-and sign-in, so the audit sign-in stays read-only.
+and sign-in, so the detection sign-in stays read-only.
 
 1. **Register another app** as in steps 1 to 3 above, named **Pion
    Containment**, and give it Containment's permissions from the table above.

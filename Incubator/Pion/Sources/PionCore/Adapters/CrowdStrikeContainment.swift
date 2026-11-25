@@ -4,7 +4,7 @@ import NoodleToolConnections
 import Synchronization
 
 /// CrowdStrike Falcon Containment: responding on one customer's hosts, through an API client of its own with only the
-/// scopes its actions take, kept apart from Audit's so the audit client stays read-only. Every action that cuts a host
+/// scopes its actions take, kept apart from Detection's so the detection client stays read-only. Every action that cuts a host
 /// off, blocks something, ends a process or hides an alert waits for the champion's approval, and each says what
 /// recovering from it involves.
 ///
@@ -21,7 +21,7 @@ extension CrowdStrike {
         summary: "Contain a host or lift containment, block a hash, domain or IP address and remove what it blocked, kill a process through Real Time Response, and close or reopen alerts, in CrowdStrike Falcon.",
         defaultInstructions: """
         Use CrowdStrike Falcon Containment to respond on hosts Falcon protects. Find the host with CrowdStrike Falcon \
-        Audit first, by hosts, host or an alert, which give its 32-character device ID, then read it here with host: \
+        Detection first, by hosts, host or an alert, which give its 32-character device ID, then read it here with host: \
         its containment status, whether its sensor is online, and whether Falcon's record holds a hint that it runs \
         Kubernetes workloads or containers, which is a hint, not verified, or none. Record it as evidence before acting. \
         contain-host cuts the host off the network, keeping it connected to Falcon, until lift-containment, which must \
@@ -56,7 +56,7 @@ extension CrowdStrike {
                                     Scope(name: "Real time response", access: "Read"), Scope(name: "Real time response", access: "Write")]
 
     static let containmentSetup = [
-        "In the Falcon console, open **Support and resources › API clients and keys** and choose **Create API client**. Name it Pion Falcon Containment, kept for this tool alone, apart from Pion Falcon Audit's.",
+        "In the Falcon console, open **Support and resources › API clients and keys** and choose **Create API client**. Name it Pion Falcon Containment, kept for this tool alone, apart from Pion Falcon Detection's.",
         "Give it only these scopes: \(containmentScopes.map(\.shown).joined(separator: ", ")). Never give it **Real time response (admin): Write**, which runs scripts and puts files, or any other Write scope; Falcon offers no way to check a client's scopes without trying a change, so check them on the client's page.",
         "Choose **Create**, and copy the **Client ID** and **Secret** here; Falcon shows the secret only once.",
         "For rtr-kill-process, the hosts' response policies, in **Host setup and management › Response policies**, must turn on **Real Time Response**. Pion runs only `ps` and `kill`, so leave **Custom scripts**, **put** and **run** off for it. Containing hosts, indicators and alerts need no policy change.",
@@ -91,7 +91,7 @@ extension CrowdStrike {
         return "Requested through Pion after the champion's approval: " + words
     }
 
-    static let hostField = JSONSchema.string("The host's 32-character device ID, as CrowdStrike Falcon Audit's hosts, host or alert gives it.")
+    static let hostField = JSONSchema.string("The host's 32-character device ID, as CrowdStrike Falcon Detection's hosts, host or alert gives it.")
     static let commentField = JSONSchema.string("Why: the reason given in the approval request, with the Investigation.")
 
     /// What Falcon said its ID for the request was, for a result that could not be verified.
@@ -111,7 +111,7 @@ extension CrowdStrike {
     /// Reads a host whole, or refuses: a malformed ID, or a host Falcon does not return.
     static func target(_ value: String, on service: ServiceClient) async throws -> Target {
         guard let id = deviceID(value) else {
-            throw ServiceError.input("Nothing was changed: give the host's 32-character device ID, as CrowdStrike Falcon Audit's hosts, host or alert gives it.")
+            throw ServiceError.input("Nothing was changed: give the host's 32-character device ID, as CrowdStrike Falcon Detection's hosts, host or alert gives it.")
         }
         let (found, _) = try await read(hostsNeed) { try await hosts([id], service) }
         guard let host = found.first else {

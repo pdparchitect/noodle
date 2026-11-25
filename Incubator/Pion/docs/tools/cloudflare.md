@@ -3,7 +3,7 @@
 Pion has two Cloudflare tools, each added per Cloudflare account with an API
 token of its own:
 
-- **Cloudflare Audit** reads the account from Cloudflare's side. At the edge:
+- **Cloudflare Detection** reads the account from Cloudflare's side. At the edge:
   zones and DNS records, firewall events, the account audit log, members and
   the account's own API tokens. In Zero Trust: Access logins, applications and
   policies, users and their sessions, Gateway activity, rules and lists, WARP
@@ -41,7 +41,7 @@ it outlasts the person who made it.
 
 | Tool | Permissions | Must not have |
 | --- | --- | --- |
-| Cloudflare Audit | Account › Account Settings › Read, Account › Account API Tokens › Read, Account › Zero Trust › Read, Account › Account Analytics › Read, Account › Cloudflare Tunnel › Read; Zone › Zone › Read, Zone › DNS › Read, Zone › Analytics › Read | any Edit permission |
+| Cloudflare Detection | Account › Account Settings › Read, Account › Account API Tokens › Read, Account › Zero Trust › Read, Account › Account Analytics › Read, Account › Cloudflare Tunnel › Read; Zone › Zone › Read, Zone › DNS › Read, Zone › Analytics › Read | any Edit permission |
 | Cloudflare Containment | Account › Account Firewall Access Rules › Edit, Account › Zero Trust › Edit; to act in one zone, also Zone › Firewall Services › Edit and Zone › Zone › Read | anything else, above all Account Settings, API Tokens, DNS and Access: Apps and Policies Edit |
 
 Why each is needed:
@@ -76,7 +76,7 @@ other's permissions: check-access says which parts the token covers.
 token made under a person's profile): its ID, whether it is active and when it
 expires. Neither needs a permission or changes anything. When the token may
 read its own record (Account API Tokens › Read), check-access lists its
-permissions: Audit's warns of any that is not Read; Containment's says which of
+permissions: Detection's warns of any that is not Read; Containment's says which of
 its edit permissions the record shows. **check-access never sends a change**,
 so without that record Containment's edit permissions are **not verified**:
 every read Containment tries works with Read as well as Edit, and an action
@@ -96,7 +96,7 @@ and so is an Account ID that is not 32 hexadecimal characters.
 ## Setting it up with least access
 
 1. **Make the token.** In **Manage Account › Account API Tokens**, choose
-   **Create Token › Create Custom Token** and name it **Pion Audit**.
+   **Create Token › Create Custom Token** and name it **Pion Detection**.
 2. **Give it the Read permissions** in the table above, nothing that edits.
 3. **Limit it** to this account under **Account Resources** and its zones under
    **Zone Resources**; optionally limit client IP addresses and set a TTL.
@@ -273,7 +273,7 @@ token does not cover, or a token Cloudflare no longer accepts.
 
 ## Containing an incident
 
-**Cloudflare Containment** is a separate tool, with its own token, so the audit
+**Cloudflare Containment** is a separate tool, with its own token, so the detection
 token stays read-only.
 
 1. **Make another token**, named **Pion Containment**, with only

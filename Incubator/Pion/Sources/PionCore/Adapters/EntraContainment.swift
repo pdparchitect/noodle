@@ -3,7 +3,7 @@ import NoodleCore
 import NoodleToolConnections
 
 /// Microsoft Entra ID Containment: acting on one tenant to contain an incident, signed in through an app registration of
-/// its own as an admin of its own with only the roles its operations take, kept apart from Audit's so the audit sign-in
+/// its own as an admin of its own with only the roles its operations take, kept apart from Detection's so the detection sign-in
 /// stays read-only. Everything that cuts off or restores access, removes a sign-in method, a role or an app's
 /// credential, or changes what Identity Protection says of a user, waits for the champion's approval, and each says how
 /// it is undone.
@@ -17,7 +17,7 @@ extension Entra {
         summary: "Disable or restore a user's sign-in, revoke their sessions, delete their sign-in methods, remove a directory role, remove an app's client secret, and confirm a user compromised or dismiss their risk.",
         defaultInstructions: """
         Use Microsoft Entra ID Containment to contain an account in one Microsoft tenant. Find the user with Microsoft \
-        Entra ID Audit first, then read them here with user, which lists whether they can sign in, their active and \
+        Entra ID Detection first, then read them here with user, which lists whether they can sign in, their active and \
         eligible directory roles with each assignment's ID, their sign-in methods with their IDs, Identity Protection's \
         risk and whether they are a Global Administrator: record it as evidence before acting. Give each user by their \
         object ID (a GUID) or full user principal name; Pion never acts on the admin signed in to this connection, or on \
@@ -28,7 +28,7 @@ extension Entra {
         delete-sign-in-methods. A user synced from on-premises Active Directory is disabled there, not here. \
         remove-directory-role removes active role assignments and eligibility in Privileged Identity Management the user \
         holds directly, never through a group. remove-app-credential removes one client secret from an app registration or \
-        enterprise app by its keyId from Audit's app-credentials; it refuses a certificate, which Graph removes only with \
+        enterprise app by its keyId from Detection's app-credentials; it refuses a certificate, which Graph removes only with \
         proof Pion does not hold, and says how the champion removes it in the portal. All of these, enable-sign-in and \
         dismiss-user-risk included, as restoring access or hiding risk can let an attacker back in, are held for the \
         champion's approval: give the exact user, and in --approval-reason why, the expected effect and how to undo it, \
@@ -57,7 +57,7 @@ extension Entra {
     ]
 
     static let containmentSetup = appSteps("Pion Containment", scopes: containmentScopes) + [
-        "Microsoft allows a request only when both the app's permissions and the signed-in admin's role allow it, so the roles are what limit this tool. Keep an admin for Pion Containment alone, such as pion-containment@contoso.com, apart from Pion Audit's.",
+        "Microsoft allows a request only when both the app's permissions and the signed-in admin's role allow it, so the roles are what limit this tool. Keep an admin for Pion Containment alone, such as pion-containment@contoso.com, apart from Pion Detection's.",
         "Give that admin only these roles, leaving out any whose action you do not want agents to have: **Privileged Authentication Administrator** (disable, enable and revoke sessions for any user, and delete their sign-in methods), **Privileged Role Administrator** (remove directory roles), **Cloud Application Administrator** (remove apps' client secrets) and **Security Operator** (confirm or dismiss a user's risk). Better, make them eligible in Privileged Identity Management and activate them when containing. Never make the admin a Global Administrator.",
         "Confirming or dismissing risk needs Microsoft Entra ID P2. Give the **Directory (tenant) ID** and the app's **Application (client) ID**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
@@ -475,7 +475,7 @@ extension Entra {
         struct Input: Decodable, Sendable { let app: String; let kind: String; let keyId: String }
         static let name = "remove-app-credential"
         static let recovery = "Recovery: none, as a secret cannot be shown again: whatever used it needs a new one. Pion never adds credentials."
-        static let summary = "Remove one client secret from an app registration or enterprise app, by the app's object ID and the secret's keyId from Microsoft Entra ID Audit's app-credentials, saying what it was. A certificate is refused, with the steps to remove it in the Microsoft Entra admin center. \(recovery)"
+        static let summary = "Remove one client secret from an app registration or enterprise app, by the app's object ID and the secret's keyId from Microsoft Entra ID Detection's app-credentials, saying what it was. A certificate is refused, with the steps to remove it in the Microsoft Entra admin center. \(recovery)"
         static let input = JSONSchema.object(["app": .string("The app's object ID (a GUID), as app-credentials lists it; not its application (client) ID."),
                                               "kind": .string("Whether it is an app registration or an enterprise app.", oneOf: ["application", "servicePrincipal"]),
                                               "keyId": .string("The secret's keyId (a GUID), as app-credentials lists it.")],

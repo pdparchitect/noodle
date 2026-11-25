@@ -3,7 +3,7 @@ import NoodleCore
 import NoodleToolConnections
 import Synchronization
 
-/// SentinelOne Audit's alert watch, and security-events, which reads back what woke the agents, the same way for both:
+/// SentinelOne Detection's alert watch, and security-events, which reads back what woke the agents, the same way for both:
 /// new unresolved threats of malicious or suspicious confidence; network disconnects and threat mitigations a person
 /// issued, from the activity log; and agents newly disconnected from the network, by anyone or by policy.
 extension SentinelOne {

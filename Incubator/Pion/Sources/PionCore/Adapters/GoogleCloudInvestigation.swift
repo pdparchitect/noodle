@@ -2,7 +2,7 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// Google Cloud Audit's deeper reads, all through the scopes it already holds: who can act as a service account,
+/// Google Cloud Detection's deeper reads, all through the scopes it already holds: who can act as a service account,
 /// what is public, which keys exist, what changed in the last 35 days, which organisation policies are set, where
 /// Data Access logging is on, and one Security Command Center finding in full or all of them counted.
 extension GoogleCloud {

@@ -29,7 +29,7 @@ final class CloudflareTests: XCTestCase {
     }
 
     func testAuditIsItsOwnReadOnlyToolWithABearerTokenAndRadarStaysApart() async throws {
-        XCTAssertEqual(Cloudflare.preset.name, "Cloudflare Audit")
+        XCTAssertEqual(Cloudflare.preset.name, "Cloudflare Detection")
         XCTAssertEqual(Cloudflare.preset.id, "a975fdab-e1f0-486c-abf6-d941d667d6f7", "the catalogue entry keeps its ID")
         XCTAssertEqual(cloudflare.endpoint.absoluteString, "https://api.cloudflare.com/client/v4")
         XCTAssertEqual(cloudflare.tokenHeader, "Authorization")

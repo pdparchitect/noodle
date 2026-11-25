@@ -4,12 +4,12 @@ import NoodleToolConnections
 
 /// SentinelOne: its agents and the endpoints they run on, the threats they found with their indicators, storylines,
 /// timelines and notes, the activity log of who did what, sites, groups and exclusions, read with a service user's API
-/// token. Each account is one management console. SentinelOne Audit only reads; SentinelOne Containment, a tool of its
+/// token. Each account is one management console. SentinelOne Detection only reads; SentinelOne Containment, a tool of its
 /// own with a service user and token of its own, disconnects agents from the network, mitigates threats, sets their
 /// status and verdict, blocks hashes and starts scans.
 ///
 /// SentinelOne has no sign-in for an admin: each tool sends its own service user's API token, as
-/// `Authorization: ApiToken <token>`, and may do exactly what that user's role allows in that user's scope. Audit's
+/// `Authorization: ApiToken <token>`, and may do exactly what that user's role allows in that user's scope. Detection's
 /// user holds the Viewer role; Containment's a custom role with only the actions it takes. check-access reads the
 /// token's own user, its role and scope, and sends no change.
 ///
@@ -20,10 +20,10 @@ import NoodleToolConnections
 /// Both tools' guide is Incubator/Pion/docs/tools/sentinelone.md. Change it with the setup steps, roles or operations here.
 public enum SentinelOne {
     public static let preset = ToolDefinition(
-        id: "9d1c01e9-bb44-4a66-876a-e60b48337ca3", name: "SentinelOne Audit",
+        id: "9d1c01e9-bb44-4a66-876a-e60b48337ca3", name: "SentinelOne Detection",
         summary: "Agents, threats with their indicators, timelines and notes, the activity log, sites, groups and exclusions in SentinelOne, read-only.",
         defaultInstructions: """
-        Use SentinelOne Audit to see endpoints as SentinelOne's agents do. agents finds agents by computer name, \
+        Use SentinelOne Detection to see endpoints as SentinelOne's agents do. agents finds agents by computer name, \
         network status, infection, OS, site or group, and agent reads one in full: whether it is disconnected from the \
         network, infected and with how many active threats, its OS, addresses, when last active, and its unresolved \
         threats. threats lists threats by computer, agent, incident status, confidence and time, and threat reads one \
@@ -53,7 +53,7 @@ public enum SentinelOne {
     static let consoleStep = "For the console address, give your console's host as your browser shows it, such as `usea1-acme.sentinelone.net`: a host under `sentinelone.net`. Pion reaches no other host, so an on-premises or other console is refused. Then ask an agent to run check-access."
 
     static let setup = [
-        "In the SentinelOne console, open **Settings › Users › Service Users** and choose **Actions › Create New Service User**. Name it Pion Audit, kept for this tool alone, and give it an expiration date.",
+        "In the SentinelOne console, open **Settings › Users › Service Users** and choose **Actions › Create New Service User**. Name it Pion Detection, kept for this tool alone, and give it an expiration date.",
         "Give it the **Viewer** role, which only reads, at the scope agents should see: the account, or only the sites to investigate. Nothing else: Audit sends no change, and check-access warns of any role but Viewer.",
         "Copy the **API token** it shows and give it here; SentinelOne shows it only once. Pion sends it as `Authorization: ApiToken <token>`. The token ends on the date set: make a new one for the same user before then.",
         consoleStep,
@@ -1115,7 +1115,7 @@ extension SentinelOne {
         }
     }
 
-    /// Tries each thing Audit reads once and says what works and what to change, with the token's user, role and
+    /// Tries each thing Detection reads once and says what works and what to change, with the token's user, role and
     /// scope. It sends only reads.
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
@@ -1132,7 +1132,7 @@ extension SentinelOne {
                 let roles = me.roleNames
                 if roles.isEmpty { lines.append("? Whether it holds only Viewer could not be told: SentinelOne gave no role. Check it in Settings › Users › Service Users.") }
                 else if roles.allSatisfy({ $0 == "viewer" }) { lines.append("✓ It holds only the Viewer role, which reads and changes nothing.") }
-                else { lines.append("⚠ It holds \(roles.filter { $0 != "viewer" }.joined(separator: ", ")), not only Viewer: Audit's service user should hold only Viewer, so it can change nothing. Change its role in Settings › Users › Service Users.") }
+                else { lines.append("⚠ It holds \(roles.filter { $0 != "viewer" }.joined(separator: ", ")), not only Viewer: Detection's service user should hold only Viewer, so it can change nothing. Change its role in Settings › Users › Service Users.") }
             }
             let reads: [(Need, [String], [String: String?], Bool)] = [
                 (SentinelOne.agentsNeed, ["agents"], [:], true),
@@ -1154,7 +1154,7 @@ extension SentinelOne {
             if ![SentinelOne.agentsNeed, SentinelOne.threatsNeed, SentinelOne.activitiesNeed].allSatisfy({ working.contains($0.title) }) {
                 lines.append("· The alert watch reads threats, agents disconnected from the network and the activity log; what it cannot read it says once, and security-events says why.")
             }
-            lines.append("· Pion Audit's service user should hold only the Viewer role, at the account or sites to investigate: check it in Settings › Users › Service Users.")
+            lines.append("· Pion Detection's service user should hold only the Viewer role, at the account or sites to investigate: check it in Settings › Users › Service Users.")
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
         }
     }

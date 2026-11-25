@@ -3,7 +3,7 @@
 Pion has two Microsoft Defender XDR tools, each added per tenant with a sign-in
 of its own:
 
-- **Microsoft Defender XDR Audit** reads what Microsoft's detections found:
+- **Microsoft Defender XDR Detection** reads what Microsoft's detections found:
   alerts and incidents across Defender for Endpoint, Office 365, Identity,
   Cloud Apps and the rest, advanced hunting across their tables, and the
   devices Defender for Endpoint reports. It wakes the agents it is assigned to
@@ -22,7 +22,7 @@ The pages they use:
 - in the [Microsoft Entra admin center](https://entra.microsoft.com):
   **App registrations**, for each tool's app, its redirect URI and its API
   permissions; **Enterprise applications**, to let only each tool's admin use
-  its app; and **Roles and administrators**, for Audit's admin;
+  its app; and **Roles and administrators**, for Detection's admin;
 - in the [Microsoft Defender portal](https://security.microsoft.com):
   **System › Permissions**, for each admin's Defender role and the device
   groups it covers, and **Action center**, to see and undo what Containment did.
@@ -49,7 +49,7 @@ Microsoft allows a request only when **both** of these allow it:
 
 | Tool | API | Delegated permissions | Admin's roles |
 | --- | --- | --- | --- |
-| Microsoft Defender XDR Audit | Microsoft Graph | `SecurityAlert.Read.All`, `SecurityIncident.Read.All`, `ThreatHunting.Read.All`, `User.Read` | Security Reader |
+| Microsoft Defender XDR Detection | Microsoft Graph | `SecurityAlert.Read.All`, `SecurityIncident.Read.All`, `ThreatHunting.Read.All`, `User.Read` | Security Reader |
 | Microsoft Defender XDR Containment | Defender for Endpoint (**WindowsDefenderATP**) | `Machine.ReadWrite`, `Machine.Isolate`, `Machine.RestrictExecution`, `Machine.StopAndQuarantine`, `Machine.Scan`, `Machine.CollectForensics` | only the Defender permissions its actions take, below |
 
 Both also ask for `offline_access`, so the sign-in renews itself; Microsoft
@@ -60,16 +60,16 @@ back.
 asks for them with the resource in front, as Microsoft's docs say, and checks
 the token response lists each one the same way. Should Microsoft list them
 without the resource in front, every Containment sign-in is refused as lacking
-permissions, and needs a change in how Pion compares them; Audit's Graph
+permissions, and needs a change in how Pion compares them; Detection's Graph
 permissions are not affected.
 
 **One sign-in reaches one API.** Microsoft gives a token for one API at a time,
-so Audit reads Microsoft Graph alone, and Containment the Defender for Endpoint
+so Detection reads Microsoft Graph alone, and Containment the Defender for Endpoint
 API alone, asking for its permissions as
 `https://api.securitycenter.microsoft.com/<permission>`, the resource that API's
 tokens must name, and sending requests to `api.security.microsoft.com`.
 
-Why Audit asks for each:
+Why Detection asks for each:
 
 - `SecurityAlert.Read.All` reads alerts, with their evidence.
 - `SecurityIncident.Read.All` reads incidents and the alerts they gather.
@@ -78,7 +78,7 @@ Why Audit asks for each:
 - `User.Read` reads the signed-in admin and the tenant, which check-access
   names.
 
-Audit does not read Defender for Endpoint's machine actions, such as who
+Detection does not read Defender for Endpoint's machine actions, such as who
 isolated a device. That API reads a single device or its machine actions only
 with `Machine.ReadWrite`, which could also change a device's tags, so it belongs
 to Containment, whose `machine-actions` reads them. Containment never changes a
@@ -91,7 +91,7 @@ device's tags.
   password changes, or a Conditional Access policy blocks it, the tool says to
   connect it again.
 
-Audit reaches only `login.microsoftonline.com`, at your tenant's own address,
+Detection reaches only `login.microsoftonline.com`, at your tenant's own address,
 and `graph.microsoft.com`; Containment only `login.microsoftonline.com` and
 `api.security.microsoft.com`. Pion checks the tenant is a Directory (tenant) ID
 or a domain alone, and refuses `common`, `organizations` and `consumers`, which
@@ -103,20 +103,20 @@ query, so a listing never leads anywhere else.
 ## Setting it up with least access
 
 1. **Register the app.** In **App registrations**, choose **New registration**.
-   Name it **Pion Defender Audit** and keep **Single tenant**. Under **Redirect
+   Name it **Pion Defender Detection** and keep **Single tenant**. Under **Redirect
    URI**, choose **Public client/native (mobile & desktop)** and give
    `com.pdparchitect.pion:/oauth2callback`
    (`com.pdparchitect.pion.local:/oauth2callback` for Pion Dev). Add no client
    secret or certificate.
 2. **Add its permissions.** Under **API permissions**, choose **Add a
    permission › Microsoft Graph › Delegated permissions** and add exactly
-   Audit's permissions from the table above; a new app has `User.Read`
+   Detection's permissions from the table above; a new app has `User.Read`
    already. Choose **Grant admin consent**.
 3. **Let only its admin use it.** Under **Enterprise applications**, open the
    app. In **Properties**, set **Assignment required?** to **Yes**, and under
    **Users and groups** assign only the admin who will sign in.
-4. **Choose its admin.** Keep an admin for Audit alone, such as
-   `pion-defender-audit@contoso.com`, with only the **Security Reader** role.
+4. **Choose its admin.** Keep an admin for Detection alone, such as
+   `pion-defender-detection@contoso.com`, with only the **Security Reader** role.
    If your tenant uses Microsoft Defender XDR's unified role-based access, give
    them a custom role with only **Security data basics (read)** instead, over
    every device group they should see. Devices outside the groups their role
@@ -244,7 +244,7 @@ For anything that does not work, it says what to change. Any refused call says
 the same: the tenant's licence, the app's permission or the admin's role, or a
 sign-in that Microsoft no longer accepts, which needs connecting again.
 Microsoft's refusal does not say whether the app's permission or the admin's
-role is missing, so Pion names both. Audit does not read which permissions the
+role is missing, so Pion names both. Detection does not read which permissions the
 app is consented, as that takes a directory permission it does not ask for; it
 refuses a sign-in that lacks any it asks for.
 
@@ -266,7 +266,7 @@ refuses a sign-in that lacks any it asks for.
 ## Containing an incident
 
 **Microsoft Defender XDR Containment** is a separate tool, with its own app,
-admin and sign-in, so the audit sign-in stays read-only.
+admin and sign-in, so the detection sign-in stays read-only.
 
 1. **Register another app** as in steps 1 and 3 above, named **Pion Defender
    Containment**.
@@ -311,7 +311,7 @@ description and result say what recovering from it involves:
 | **check-access** (not held) | See step 5. | Nothing changes. |
 
 Every action takes the device by its 40-character Defender for Endpoint ID,
-which Audit's `devices`, `device` and `alert` give, and a comment: Defender for
+which Detection's `devices`, `device` and `alert` give, and a comment: Defender for
 Endpoint requires one and records it with the action. Pion records it as
 "Requested through Pion after the champion's approval:" and the reason given,
 which should be the approval request's.

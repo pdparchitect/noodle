@@ -2,7 +2,7 @@
 
 Pion has two Google Workspace tools, each with its own sign-in:
 
-- **Google Workspace Audit** reads your audit reports: sign-ins, admin actions,
+- **Google Workspace Detection** reads your audit reports: sign-ins, admin actions,
   apps granted access, Drive activity and more, and who holds which admin role.
   It wakes the agents it is assigned to when an audit event means an attack. It
   cannot change anything.
@@ -16,8 +16,8 @@ Pion has two Google Workspace tools, each with its own sign-in:
   The Investigation's Audit Log records each request and how it was decided.
 
 They are separate so that the access to change accounts is given on purpose, to
-the agents you choose. An agent with only the audit tool has no way to ask for
-an action, and the audit sign-in never carries access that could change an
+the agents you choose. An agent with only the detection tool has no way to ask for
+an action, and the detection sign-in never carries access that could change an
 account.
 
 The quick steps for each are under **Setup Steps** in **Settings → Tools**. This
@@ -57,7 +57,7 @@ Anyone in your organisation can complete the sign-in, admin or not. Without the
 right admin role every request is refused, and the agents are told what the
 role is missing.
 
-## Google Workspace Audit
+## Google Workspace Detection
 
 Pion asks only for read-only access: to audit reports, and to users, admin
 roles, groups, mobile devices and domains. With it agents can investigate an account:

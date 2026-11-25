@@ -3,7 +3,7 @@ import NoodleCore
 import NoodleToolConnections
 import Synchronization
 
-/// Microsoft Azure Audit's alert watch, and security-events, which reads back what woke the agents, the same way for
+/// Microsoft Azure Detection's alert watch, and security-events, which reads back what woke the agents, the same way for
 /// both: open high-severity Defender for Cloud alerts, for the plans turned on, and the activity log entries that open
 /// the way in, hide what follows or stay: powerful roles granted, Key Vault access changed, logging deleted, locks and
 /// policies removed, network rules opened to the internet, commands run on VMs, storage opened, and access elevated.

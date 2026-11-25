@@ -23,7 +23,7 @@ final class CrowdStrikeTests: XCTestCase {
     }
 
     func testItIsAuditOnEachFalconCloudItsOwnAddressAndTokenServiceAndNoOther() throws {
-        XCTAssertEqual(CrowdStrike.preset.name, "CrowdStrike Falcon Audit")
+        XCTAssertEqual(CrowdStrike.preset.name, "CrowdStrike Falcon Detection")
         XCTAssertEqual(CrowdStrike.preset.id, "fc56ba9d-c4aa-4ff9-80cf-507f21273249", "the tool keeps its ID")
         XCTAssertEqual(falconEU.endpoint.absoluteString, "https://api.eu-1.crowdstrike.com")
         XCTAssertEqual(falconEU.clientCredentials?.tokenEndpoint.absoluteString, "https://api.eu-1.crowdstrike.com/oauth2/token")
@@ -41,7 +41,7 @@ final class CrowdStrikeTests: XCTestCase {
         XCTAssertThrowsError(try CrowdStrike.cloud(elsewhere))
     }
 
-    /// Audit's client is made with Read scopes alone, and its operations only read.
+    /// Detection's client is made with Read scopes alone, and its operations only read.
     func testItsSetupAsksOnlyForReadScopesAndEveryOperationOnlyReads() async throws {
         let setup = CrowdStrike.setup.joined(separator: "\n")
         for scope in CrowdStrike.auditScopes {
@@ -266,7 +266,7 @@ final class CrowdStrikeTests: XCTestCase {
         for words in ["Falcon cloud EU-1, api.eu-1.crowdstrike.com", "✓ Hosts (Hosts: Read)", "✓ Alerts (Alerts: Read)",
                       "⚠ Real Time Response sessions: the API client lacks the scope Real time response audit: Read",
                       "⚠ Container image assessments: this needs a Falcon subscription",
-                      "⚠ Appears to hold Real time response: Write, which Audit must not have", "✓ Holds no Real time response (admin): Write",
+                      "⚠ Appears to hold Real time response: Write, which Detection must not have", "✓ Holds no Real time response (admin): Write",
                       "Hosts: Write, Host groups: Write, Alerts: Write, IOC Management: Write: write access not verified — Falcon offers no way to list a client's scopes without attempting a change",
                       "and no Write scope at all"] {
             XCTAssertTrue(checked.text.contains(words), "\(words): \(checked.text)")
