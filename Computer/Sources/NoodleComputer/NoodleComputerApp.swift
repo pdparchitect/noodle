@@ -46,6 +46,10 @@ struct NoodleComputerApp: App {
           NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle")!)
         }
         Divider()
+        Button("License") {
+          NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/blob/main/LICENSE")!)
+        }
+        Divider()
         IssueReportButtons(area: "Noodle Computer")
       }
       ComputerFileCommands(delegate: delegate)

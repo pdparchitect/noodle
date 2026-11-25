@@ -53,6 +53,8 @@ struct NoodleAppletApp: App {
       CommandGroup(replacing: .help) {
         Button("\(AppletBuildIdentity.current.appName) Help") { NSWorkspace.shared.open(AppletLinks.repository) }
         Divider()
+        Button("License") { NSWorkspace.shared.open(AppletLinks.license) }
+        Divider()
         IssueReportButtons(area: "Noodle Applet")
       }
       AppletFileCommands(delegate: delegate, runtime: delegate.runtime)
@@ -74,6 +76,7 @@ struct NoodleAppletApp: App {
 
 enum AppletLinks {
   static let repository = URL(string: "https://github.com/pdparchitect/noodle")!
+  static let license = URL(string: "https://github.com/pdparchitect/noodle/blob/main/LICENSE")!
 }
 
 /// Launch arguments that verification runs pass, matched by digest; see Shared/LaunchChecks.

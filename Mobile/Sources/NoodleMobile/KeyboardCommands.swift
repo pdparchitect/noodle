@@ -93,12 +93,15 @@ struct NoodleCommands: Commands {
         CommandGroup(replacing: .help) {
             Button("Noodle Help") { UIApplication.shared.open(NoodleCommands.help) }
             Divider()
+            Button("License") { UIApplication.shared.open(NoodleCommands.license) }
+            Divider()
             Button("Report a Bug") { UIApplication.shared.open(NoodleCommands.newIssue("bug_report.yml")) }
             Button("Request a Feature") { UIApplication.shared.open(NoodleCommands.newIssue("feature_request.yml")) }
         }
     }
 
     static let help = URL(string: "https://github.com/pdparchitect/noodle")!
+    static let license = URL(string: "https://github.com/pdparchitect/noodle/blob/main/LICENSE")!
 
     /// A GitHub issue form with Noodle Mobile chosen as the affected area, as the Mac apps' Help menus do.
     static func newIssue(_ template: String) -> URL {

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- License in the Help menu, between Help and the bug and feature links.
+
 ## [0.61.0] - 2026-11-25
 
 ### Changed
