@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SUITES = {
     "noodle": ([""], ["scripts/coverage-report.py"]),
     "shared": (["Shared/Wallpaper", "Shared/SettingsUI", "Shared/LaunchChecks", "Shared/HubLink", "Shared/Surface",
-                "Shared/Brand", "Shared/ExternalTools", "Shared/Patch", "Push"], []),
+                "Shared/Brand", "Shared/ExternalTools", "Shared/Patch", "Shared/Document", "Push"], []),
     "noodle-macos27": (["", "Shared/SettingsUI"], ["scripts/build-mlx-metal.sh"]),
     "computer": (["Computer", "Computer/LocalMac"], []),
     "applet": (["Applet"], []),
