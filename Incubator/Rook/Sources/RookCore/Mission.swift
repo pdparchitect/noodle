@@ -70,6 +70,13 @@ public struct Mission: Codable, Identifiable, Hashable, Sendable {
         set { scopeRules = newValue.isEmpty ? nil : newValue }
     }
     private var scopeRules: [String]?
+    /// Services the champion opened for the Mission's computers beyond its scope, such as lookup sites; never targets,
+    /// so its agents are not told which.
+    public var exceptions: [String] {
+        get { exceptionRules ?? [] }
+        set { exceptionRules = newValue.isEmpty ? nil : newValue }
+    }
+    private var exceptionRules: [String]?
 
     public init(id: UUID, number: Int, title: String, objective: String, severity: Severity? = nil,
                 champion: String, source: String? = nil,
@@ -180,6 +187,19 @@ public enum MissionScope {
         return rules
     }
 
+    /// As `parse`, for services opened beyond the scope: they only open, so a deny line belongs in the scope.
+    public static func parseExceptions(_ text: String) throws -> [String] {
+        let rules = try parse(text)
+        if let denied = rules.first(where: { $0.hasPrefix("deny ") }),
+           let line = text.components(separatedBy: .newlines).firstIndex(where: { (try? ScopeRule($0).line) == denied }) {
+            throw CaseError("Line \(line + 1): Opened services cannot deny; put “\(denied)” in the scope.")
+        }
+        return rules
+    }
+
+    /// What the agents are told about services opened beyond the scope: that there are some, never which.
+    static let servicesNote = "Some services outside the scope can also be reached from this Mission's computers, for lookups. They are never targets."
+
     /// What the agents read: what is in scope, then what is taken out of it; nil while none is set.
     public static func agentText(_ scope: [String]) -> String? {
         let rules = scope.compactMap { try? ScopeRule($0) }
@@ -192,8 +212,8 @@ public enum MissionScope {
     }
 
     /// The Mission group's description, which every member is told: the objective, then the scope.
-    public static func groupDescription(objective: String, scope: [String]) -> String {
-        [objective, agentText(scope) ?? ""].filter { !$0.isEmpty }.joined(separator: "\n\n")
+    public static func groupDescription(objective: String, scope: [String], exceptions: [String] = []) -> String {
+        [objective, agentText(scope) ?? "", exceptions.isEmpty ? "" : servicesNote].filter { !$0.isEmpty }.joined(separator: "\n\n")
     }
 }
 

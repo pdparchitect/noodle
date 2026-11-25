@@ -1288,6 +1288,8 @@ import UniformTypeIdentifiers
         var computerNames: [UUID: String] = [:]
         /// What its agents may target, one rule per line; only the champion sets it.
         var scope: [String] = []
+        /// Services its computers may reach beyond the scope, never targets; only the champion opens them.
+        var exceptions: [String] = []
         /// The lead is always one of them.
         var members: Set<UUID> { staff.union(lead.map { [$0] } ?? []) }
     }
@@ -1313,10 +1315,11 @@ import UniformTypeIdentifiers
         guard !members.isEmpty else { throw CaseError("Add at least one agent.") }
         let folders = try AgentFolder.validated(draft.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
         let scope = try MissionScope.parse(draft.scope.joined(separator: "\n"))
+        let exceptions = try MissionScope.parseExceptions(draft.exceptions.joined(separator: "\n"))
         guard let before = conversation(current.id) else { throw WorkspaceError.missingConversation(current.id) }
         // The group's description is what its agents are told it is for, so a new scope wakes them as a new objective does.
         let group = try repository.updateGroup(conversationID: current.id, named: Self.groupName(number: current.number, title: title),
-            publicDescription: MissionScope.groupDescription(objective: draft.objective, scope: scope), participantIDs: Array(members), existingAgents: everyAgent, folders: folders, now: now)
+            publicDescription: MissionScope.groupDescription(objective: draft.objective, scope: scope, exceptions: exceptions), participantIDs: Array(members), existingAgents: everyAgent, folders: folders, now: now)
         let updated = try store.update(current.id, by: .champion(champion), now: now) { value in
             var events: [(event: String, detail: String)] = []
             if value.title != title { events.append(("title", title)); value.title = title }
@@ -1326,6 +1329,7 @@ import UniformTypeIdentifiers
             return events
         }
         try store.setScope(scope, of: current.id, by: .champion(champion), now: now)
+        try store.setExceptions(exceptions, of: current.id, by: .champion(champion), now: now)
         try applyComputers(of: draft, to: current.id)
         reload()
         readTranscript(group.id)
@@ -1380,13 +1384,15 @@ import UniformTypeIdentifiers
         guard !members.isEmpty else { throw CaseError("Add at least one agent.") }
         let folders = try AgentFolder.validated(draft.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
         let scope = try MissionScope.parse(draft.scope.joined(separator: "\n"))
+        let exceptions = try MissionScope.parseExceptions(draft.exceptions.joined(separator: "\n"))
         let number = (missions.map(\.number).max() ?? 0) + 1
         let group = try createGroup(name: Self.groupName(number: number, title: title),
-                                    description: MissionScope.groupDescription(objective: draft.objective, scope: scope),
+                                    description: MissionScope.groupDescription(objective: draft.objective, scope: scope, exceptions: exceptions),
                                     members: members, folders: folders, lead: draft.lead)
         var mission = try store.open(id: group.id, title: title, objective: draft.objective,
                                            champion: champion, number: number, openedBy: openedBy, now: now)
         if !scope.isEmpty { try store.setScope(scope, of: mission.id, by: .champion(champion), now: now) }
+        if !exceptions.isEmpty { try store.setExceptions(exceptions, of: mission.id, by: .champion(champion), now: now) }
         try applyComputers(of: draft, to: mission.id)
         reload()
         readTranscript(group.id)

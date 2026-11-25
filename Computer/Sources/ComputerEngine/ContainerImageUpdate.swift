@@ -22,23 +22,7 @@ extension ContainerComputer {
                              status: @escaping @Sendable (String, TransferProgress?) async -> Void) async throws -> ContainerDiskState? {
         try validateImageReference(computer.imageReference)
         let store = try ImageStore(path: cache.appendingPathComponent("Images"))
-        let initDisk = cache.appendingPathComponent("initfs-0.43.0.ext4")
-        if !FileManager.default.fileExists(atPath: initDisk.path) {
-            let label = "Downloading Linux startup files…"
-            await status(label, nil)
-            let progress = ImageDownloadProgress(label: label, report: status)
-            let image = try await registryRequest(reference: initReference) {
-                try await store.getInitImage(reference: initReference, progress: { await progress.update($0) })
-            }
-            let staging = cache.appendingPathComponent("initfs-\(UUID().uuidString).partial")
-            defer { try? FileManager.default.removeItem(at: staging) }
-            _ = try await image.initBlock(at: staging, for: .linuxArm)
-            try Task.checkCancellation()
-            // A simultaneous creation may have completed the shared init disk.
-            if !FileManager.default.fileExists(atPath: initDisk.path) {
-                try FileManager.default.moveItem(at: staging, to: initDisk)
-            }
-        }
+        try await prepareInitDisk(cache: cache, store: store, status: status)
         let label = "Checking and downloading the current image…"
         await status(label, nil)
         let progress = ImageDownloadProgress(label: label, report: status)
@@ -88,6 +72,29 @@ extension ContainerComputer {
             throw error
         }
     }
+
+    /// The startup disk every Linux computer and gateway boots from, downloaded once into `cache`.
+    static func prepareInitDisk(cache: URL, store: ImageStore,
+                                status: @escaping @Sendable (String, TransferProgress?) async -> Void) async throws {
+        let initDisk = initDisk(in: cache)
+        guard !FileManager.default.fileExists(atPath: initDisk.path) else { return }
+        let label = "Downloading Linux startup files…"
+        await status(label, nil)
+        let progress = ImageDownloadProgress(label: label, report: status)
+        let image = try await registryRequest(reference: initReference) {
+            try await store.getInitImage(reference: initReference, progress: { await progress.update($0) })
+        }
+        let staging = cache.appendingPathComponent("initfs-\(UUID().uuidString).partial")
+        defer { try? FileManager.default.removeItem(at: staging) }
+        _ = try await image.initBlock(at: staging, for: .linuxArm)
+        try Task.checkCancellation()
+        // A simultaneous creation may have completed the shared init disk.
+        if !FileManager.default.fileExists(atPath: initDisk.path) {
+            try FileManager.default.moveItem(at: staging, to: initDisk)
+        }
+    }
+
+    static func initDisk(in cache: URL) -> URL { cache.appendingPathComponent("initfs-0.43.0.ext4") }
 
     /// Asks the registry for the image's current digest without downloading it.
     /// Nil when the answer is unknown, so no update is suggested by mistake.

@@ -140,6 +140,23 @@ public final class RookStore: @unchecked Sendable {
         }
     }
 
+    /// Replaces the services opened for the Mission beyond its scope; only its champion sets them, audited as the scope.
+    public func setExceptions(_ exceptions: [String], of id: UUID, by actor: CaseActor, now: Date = Date()) throws {
+        guard case .champion = actor else { throw CaseError("Only the champion opens services for a Mission.") }
+        let rules = try MissionScope.parseExceptions(exceptions.joined(separator: "\n"))
+        try update(id, by: actor, now: now) { mission in
+            guard mission.exceptions != rules else { return [] }
+            mission.exceptions = rules
+            return [("exceptions", rules.isEmpty ? "Closed the opened services." : "Opened services: \(rules.joined(separator: ", ")).")]
+        }
+    }
+
+    /// Adds a line to the Mission's audit log without changing it, such as what its gateway stopped.
+    public func record(_ event: String, detail: String, in id: UUID, by actor: CaseActor, now: Date = Date()) throws {
+        try lock.withLock { try unlockedAppend(AuditEntry(at: now, actor: actor, event: event, detail: detail), to: id) }
+        onChange?()
+    }
+
     /// Takes a deleted computer out of every Mission that had it.
     public func forgetComputer(_ computer: UUID, named name: String, by actor: CaseActor, now: Date = Date()) throws {
         for mission in missions() where mission.computers.contains(computer) {

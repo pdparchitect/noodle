@@ -5,6 +5,8 @@
 //   computer-lab serve TOPOLOGY.json     boots the pods, then serves the commands below until down
 //   computer-lab exec POD [--timeout S] -- COMMAND
 //   computer-lab plug POD CARD nat|link|none
+//   computer-lab policy POLICY.json      loads a new policy into the engine's gateway
+//   computer-lab events                  what the gateway blocked since last asked
 //   computer-lab down
 import ComputerCore
 import ComputerEngine
@@ -17,8 +19,25 @@ import Virtualization
 
 /// The pods and their cards. A link names a cable; exactly two cards share each name.
 struct Topology: Codable {
+    /// The engine's own gateway, which cards with `behindGateway` are cabled to. Rules are domains, addresses or networks.
+    struct Policy: Codable {
+        var allow: [String]
+        var deny: [String]?
+
+        var engine: GatewayPolicy {
+            func rule(_ text: String) -> GatewayPolicy.Rule {
+                let parts = text.split(separator: "/")
+                if parts.count == 2, let prefix = Int(parts[1]) { return .network(String(parts[0]), prefix: prefix) }
+                if text.allSatisfy({ $0.isNumber || $0 == "." }) { return .address(text) }
+                return .domain(text.hasPrefix("*.") ? String(text.dropFirst(2)) : text)
+            }
+            return GatewayPolicy(allowed: allow.map(rule) + GatewayPolicy.packageSources, denied: (deny ?? []).map(rule))
+        }
+    }
+
     struct Card: Codable {
         var nat: Bool?
+        var behindGateway: Bool?
         var link: String?
         /// The card's address with its prefix; a NAT card gets its own from DHCP.
         var address: String?
@@ -37,6 +56,7 @@ struct Topology: Codable {
         var cards: [Card]
     }
 
+    var gateway: Policy?
     var pods: [Pod]
 }
 
@@ -69,6 +89,7 @@ actor Lab {
     private var cards: [String: [Topology.Card]] = [:]
     private var linkCards: [String: [Int: LinkInterface]] = [:]
     private var links: [NetworkLink] = []
+    private var gateway: ComputerGateway?
 
     init(state: URL, kernel: URL) { self.state = state; self.kernel = kernel }
 
@@ -93,6 +114,13 @@ actor Lab {
             links.append(link)
             ends[name] = [link.first, link.second]
         }
+        if let policy = topology.gateway {
+            log("gateway: starting the engine's gateway")
+            let gateway = ComputerGateway(id: UUID(), directory: state.appendingPathComponent("Gateway"), cache: state, kernel: kernel)
+            self.gateway = gateway
+            try await gateway.start(policy: policy.engine)
+            log("gateway: ready, slots \(await gateway.slots.map { "eth\($0.index)→\($0.outsideAddress)" }.joined(separator: " "))")
+        }
         for pod in topology.pods {
             log("\(pod.name): pulling \(pod.image)")
             let image = try await store.pull(reference: pod.image, platform: .current)
@@ -104,8 +132,15 @@ actor Lab {
             let environment = try await image.config(for: .current).config?.env
                 ?? ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"]
             var interfaces: [any Interface] = []
+            var nameservers = pod.nameservers ?? []
             for (index, card) in pod.cards.enumerated() {
-                if let name = card.link {
+                if card.behindGateway == true {
+                    guard let gateway else { throw LabError("\(pod.name) card \(index) wants a gateway; the topology has none.") }
+                    let attachment = try await gateway.attach(UUID())
+                    log("\(pod.name): eth\(index) on the gateway as \(attachment.address)")
+                    interfaces.append(attachment.interface)
+                    nameservers = [attachment.nameserver]
+                } else if let name = card.link {
                     guard let address = card.address else { throw LabError("\(pod.name) card \(index) needs an address.") }
                     let interface = LinkInterface(end: ends[name]!.removeFirst(), ipv4Address: try CIDRv4(address),
                                                   ipv4Gateway: try card.gateway.map { try IPv4Address($0) })
@@ -122,7 +157,7 @@ actor Lab {
                 config.memoryInBytes = UInt64(pod.memoryMiB ?? 512) << 20
                 config.hostname = pod.name
                 config.interfaces = interfaces
-                config.dns = DNS(nameservers: pod.nameservers ?? [])
+                config.dns = DNS(nameservers: nameservers)
                 config.bootLog = .file(path: self.state.appendingPathComponent("Pods/\(pod.name).boot.log"))
             }
             try await runtime.addContainer("main", rootfs: .block(format: "ext4", source: rootfs.path, destination: "/")) { config in
@@ -200,7 +235,18 @@ actor Lab {
         }
     }
 
+    func apply(_ policy: Topology.Policy) async throws {
+        guard let gateway else { throw LabError("This lab has no gateway.") }
+        try await gateway.apply(policy.engine)
+    }
+
+    func events() async throws -> String {
+        guard let gateway else { throw LabError("This lab has no gateway.") }
+        return try await gateway.events().map { "\($0)" }.joined(separator: "\n")
+    }
+
     func down() async {
+        await gateway?.stop()
         for (name, pod) in pods {
             log("\(name): stopping")
             try? await pod.killContainer("main", signal: .kill)
@@ -271,6 +317,12 @@ func serve(socket path: String, lab: Lab) throws {
                         case "plug":
                             try await lab.plug(request.pod ?? "", card: request.card ?? 0, into: request.plug ?? "")
                             answer = Reply(ok: true, output: "Plugged card \(request.card ?? 0) of \(request.pod ?? "") into \(request.plug ?? "").")
+                        case "policy":
+                            let policy = try JSONDecoder().decode(Topology.Policy.self, from: Data((request.command ?? "").utf8))
+                            try await lab.apply(policy)
+                            answer = Reply(ok: true, output: "Policy loaded.")
+                        case "events":
+                            answer = Reply(ok: true, output: try await lab.events())
                         case "down":
                             await lab.down()
                             answer = Reply(ok: true, output: "Stopped.")
@@ -341,6 +393,16 @@ do {
     case "plug":
         guard arguments.count == 4, let card = Int(arguments[2]) else { throw LabError("plug POD CARD nat|link|none") }
         let reply = try send(Request(op: "plug", pod: arguments[1], card: card, plug: arguments[3]), socket: socketPath)
+        print(reply.output)
+        exit(reply.ok ? 0 : 1)
+    case "policy":
+        guard arguments.count == 2 else { throw LabError("policy POLICY.json") }
+        let text = try String(contentsOfFile: arguments[1], encoding: .utf8)
+        let reply = try send(Request(op: "policy", command: text), socket: socketPath)
+        print(reply.output)
+        exit(reply.ok ? 0 : 1)
+    case "events":
+        let reply = try send(Request(op: "events"), socket: socketPath)
         print(reply.output)
         exit(reply.ok ? 0 : 1)
     case "down":

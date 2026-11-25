@@ -7,6 +7,7 @@ import ContainerizationEXT4
 import ContainerizationExtras
 import ContainerizationOCI
 import Foundation
+import Virtualization
 
 public final class ComputerOutput: Writer, @unchecked Sendable {
     private let lock = NSLock()
@@ -46,13 +47,17 @@ public actor ContainerComputer {
         try state.activate(in: directory)
     }
 
+    /// `network` puts a computer behind a gateway instead of NAT; it gives itself the slot's address, so it needs no DHCP.
     public func start(computer: Computer, directory: URL, cache: URL, kernel: URL,
-               preparedState: ContainerDiskState? = nil) async throws -> String {
+               preparedState: ContainerDiskState? = nil, network: ComputerNetwork = .nat) async throws -> String {
+        var behindGateway: GatewayAttachment?
+        if case .gateway(let attachment) = network { behindGateway = attachment }
+        let usesNAT = computer.networkEnabled && behindGateway == nil
         guard pod == nil else { throw ComputerError("This computer is already running.") }
         try Self.requireSupportedImage(computer)
         let state = try preparedState ?? ContainerDiskState.load(in: directory)
         let layers = state.directory(in: directory)
-        if computer.networkEnabled, !FileManager.default.fileExists(atPath: layers.appendingPathComponent("Network.ext4").path) {
+        if usesNAT, !FileManager.default.fileExists(atPath: layers.appendingPathComponent("Network.ext4").path) {
             try await Self.prepareNetworkDisk(computer: computer, layers: layers,
                                               store: ImageStore(path: cache.appendingPathComponent("Images")))
         }
@@ -60,7 +65,7 @@ public actor ContainerComputer {
             from: Data(contentsOf: layers.appendingPathComponent("ImageConfig.json")))
         guestConfiguration = savedImage.config.map { LinuxProcessConfiguration(from: $0) } ?? LinuxProcessConfiguration()
         let vmm = VZVirtualMachineManager(kernel: Kernel(path: kernel, platform: .linuxArm),
-            initialFilesystem: .block(format: "ext4", source: cache.appendingPathComponent("initfs-0.43.0.ext4").path,
+            initialFilesystem: .block(format: "ext4", source: Self.initDisk(in: cache).path,
                                       destination: "/", options: ["ro"]))
         let interface = try CIDRv4("192.0.2.2/24")
         var display: NativeDisplay?
@@ -82,13 +87,16 @@ public actor ContainerComputer {
                 .init(name: "noodle-upper", source: .diskImage(path: layers.appendingPathComponent("Upper.ext4")), format: "ext4")
             ]
             config.bootLog = .file(path: directory.appendingPathComponent("Boot.log"))
-            if computer.networkEnabled {
+            if let behindGateway, computer.networkEnabled {
+                config.interfaces = [behindGateway.interface]
+                config.dns = DNS(nameservers: [])
+            } else if computer.networkEnabled {
                 config.interfaces = [NATInterface(ipv4Address: interface, ipv4Gateway: nil)]
                 config.dns = DNS(nameservers: [])
             }
         }
         let output = ComputerOutput()
-        if computer.networkEnabled {
+        if usesNAT {
             try await runtime.addContainer("network-init", rootfs: .block(format: "ext4",
                 source: layers.appendingPathComponent("Network.ext4").path, destination: "/")) { config in
                 config.process.arguments = ["/bin/sh", "-c", """
@@ -135,7 +143,7 @@ public actor ContainerComputer {
             try await runtime.create()
             try await Self.mountOverlay(in: runtime, hosts: Self.hosts(for: ContainerRegistry.bundled.hostname))
             try Task.checkCancellation()
-            if computer.networkEnabled {
+            if usesNAT {
                 try await runtime.startContainer("network-init")
                 let status = try await runtime.waitContainer("network-init", timeoutInSeconds: 30)
                 if output.text().contains("NOODLE_NETWORK_NO_CARRIER") {
@@ -145,7 +153,8 @@ public actor ContainerComputer {
             }
             try await runtime.startContainer("workspace")
             if computer.networkEnabled {
-                let resolvers = output.text().split(separator: "\n").map(String.init).filter { $0.hasPrefix("nameserver ") }
+                let resolvers = behindGateway.map { ["nameserver " + $0.nameserver] }
+                    ?? output.text().split(separator: "\n").map(String.init).filter { $0.hasPrefix("nameserver ") }
                 guard !resolvers.isEmpty else { throw ComputerError("DHCP returned no DNS servers.") }
                 let process = try await runtime.execInContainer("workspace", processID: "dns-setup") { config in
                     // DHCP output is passed as arguments, never interpolated as shell code.
@@ -167,6 +176,40 @@ public actor ContainerComputer {
         } catch {
             try? await stop()
             throw error
+        }
+    }
+
+    /// Moves the running computer's card onto a gateway slot, giving it the slot's addresses, or unplugs it (nil).
+    // TODO: Going back to NAT needs a restart: the computer would need a new DHCP lease, which only network-init asks for.
+    public func plug(_ attachment: GatewayAttachment?) async throws {
+        guard let pod else { throw ComputerError("Start the computer first.") }
+        if let attachment {
+            let output = ComputerOutput()
+            let process = try await pod.execInContainer("workspace", processID: "network-plug-" + UUID().uuidString.lowercased()) { config in
+                // The addresses are passed as arguments, never interpolated as shell code.
+                config.arguments = ["/bin/sh", "-c", """
+                    ip address flush dev eth0 && ip address add "$1/24" dev eth0 && ip link set eth0 up \
+                        && ip route replace default via "$2" && printf 'nameserver %s\\n' "$2" > /etc/resolv.conf
+                    """, "noodle-network", attachment.address, attachment.gateway]
+                config.environmentVariables = ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"]
+                config.capabilities = Self.workspaceCapabilities
+                config.stdout = output
+                config.stderr = output
+            }
+            try await process.start()
+            let status = try await process.wait(timeoutInSeconds: 20)
+            try? await process.delete()
+            guard status.exitCode == 0 else { throw ComputerError("The computer could not move to its new network.\n\(output.text())") }
+        }
+        let next: VZNetworkDeviceAttachment? = attachment?.interface.attachment()
+        nonisolated(unsafe) let chosen = next
+        try await pod.withVirtualMachineInstance { instance in
+            guard let machine = instance as? VZVirtualMachineInstance else { throw ComputerError("This computer cannot change networks while running.") }
+            let vm = machine.vzVirtualMachine
+            try machine.vmQueue.sync {
+                guard let card = vm.networkDevices.first else { throw ComputerError("This computer has no network card.") }
+                card.attachment = chosen
+            }
         }
     }
 

@@ -1,0 +1,6 @@
+{
+  "gateway": { "allow": ["*.nmap.org", "192.168.64.1/32"], "deny": ["www.nmap.org"] },
+  "pods": [
+    { "name": "client", "image": "docker.io/library/alpine:3.22", "memoryMiB": 1024, "cards": [ { "behindGateway": true } ] }
+  ]
+}

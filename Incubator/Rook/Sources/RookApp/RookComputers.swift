@@ -25,12 +25,25 @@ import SwiftUI
     /// Marks computers whose image has a newer one, as Noodle Computer does, so they offer Upgrade. Rook keeps
     /// its computers as long as it runs, so this runs as long too.
     @ObservationIgnored private var imageUpdates: Task<Void, Never>?
+    @ObservationIgnored private let root: URL
+    /// Each Mission's gateway while any of its computers runs, and the Missions whose gateway is up, for the marker.
+    @ObservationIgnored private var gateways: [UUID: ComputerGateway] = [:]
+    @ObservationIgnored private var startingGateways: [UUID: Task<ComputerGateway, Error>] = [:]
+    @ObservationIgnored private var appliedPolicies: [UUID: GatewayPolicy] = [:]
+    private(set) var runningGateways: Set<UUID> = []
+    /// Which Mission's gateway each running computer is cabled to; absent while it uses NAT.
+    @ObservationIgnored private var placements: [UUID: UUID] = [:]
+    /// What each gateway's audit lines have already said, so a scan of a thousand ports is one line per address.
+    @ObservationIgnored private var reported: [UUID: Set<String>] = [:]
+    @ObservationIgnored private var reconciling: Task<Void, Never>?
+    @ObservationIgnored private var gatewayWatch: Task<Void, Never>?
 
     /// Only Linux computers and SSH: Windows and this Mac need helpers Rook does not carry.
     static let kinds: Set<ComputerKind> = [.container, .ssh]
 
     init(model: RookModel, root: URL) throws {
         self.model = model
+        self.root = root
         store = try ComputerStore(root: root)
         staging = FileManager.default.temporaryDirectory.appendingPathComponent("ComputerTransfers", isDirectory: true)
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
@@ -42,6 +55,8 @@ import SwiftUI
             self?.forgetDeleted(keeping: Set(sessions.map(\.id)))
         }.store(in: &subscriptions)
         imageUpdates = Task { [store] in await store.watchImageUpdates() }
+        store.network = { [weak self] session in try await self?.network(for: session) ?? .nat }
+        watchMissions()
     }
 
     private func forgetDeleted(keeping ids: Set<UUID>) {
@@ -64,6 +79,172 @@ import SwiftUI
     var computers: [ComputerSession] { store.sessions.filter { Self.kinds.contains($0.computer.kind) } }
 
     func session(_ id: UUID) -> ComputerSession? { computers.first { $0.id == id } }
+}
+
+// MARK: Gateways
+
+/// Every Linux computer in an open Mission reaches the network only through that Mission's gateway, which lets
+/// through its scope, the services opened for it and package sources, and stops and reports the rest. Computers in
+/// no Mission use NAT, as in Noodle Computer.
+extension RookComputers {
+    /// What a Mission's gateway lets through: its targets, its opened services and package sources; its deny lines win.
+    static func policy(for mission: Mission) -> GatewayPolicy {
+        func rule(_ target: ScopeRule.Target) -> GatewayPolicy.Rule {
+            switch target {
+            case .host(let name), .subdomains(let name): .domain(name)
+            case .address(let address): .address(address)
+            case .network(let address, let prefix): .network(address, prefix: prefix)
+            }
+        }
+        let scope = mission.scope.compactMap { try? ScopeRule($0) }
+        let exceptions = mission.exceptions.compactMap { try? ScopeRule($0) }
+        return GatewayPolicy(
+            allowed: scope.filter { !$0.isExcluded }.map { rule($0.target) } + exceptions.map { rule($0.target) } + GatewayPolicy.packageSources,
+            denied: scope.filter(\.isExcluded).map { rule($0.target) })
+    }
+
+    /// The open Mission whose network a computer uses.
+    // TODO: A computer in several open Missions takes the newest one's network; the champion should choose.
+    func networkMission(for computer: UUID) -> Mission? {
+        model.missions.filter { !$0.isClosed && $0.computers.contains(computer) }.max { $0.number < $1.number }
+    }
+
+    func gatewayRunning(for mission: UUID) -> Bool { runningGateways.contains(mission) }
+
+    /// Asked by the engine as a Linux computer starts.
+    fileprivate func network(for session: ComputerSession) async throws -> ComputerNetwork {
+        guard session.computer.networkEnabled, let mission = networkMission(for: session.id) else {
+            placements[session.id] = nil
+            return .nat
+        }
+        let gateway = try await gateway(for: mission)
+        let attachment = try await gateway.attach(session.id)
+        placements[session.id] = mission.id
+        return .gateway(attachment)
+    }
+
+    /// The Mission's gateway, started with its policy if it is not running; one start however many computers ask.
+    private func gateway(for mission: Mission) async throws -> ComputerGateway {
+        if let gateway = gateways[mission.id], await gateway.isRunning { return gateway }
+        if let starting = startingGateways[mission.id] { return try await starting.value }
+        let policy = Self.policy(for: mission)
+        let gateway = ComputerGateway(id: mission.id, directory: root.appendingPathComponent("Gateways/\(mission.id.uuidString)", isDirectory: true),
+                                      cache: store.imageCache, kernel: store.kernel)
+        let starting = Task { try await gateway.start(policy: policy); return gateway }
+        startingGateways[mission.id] = starting
+        defer { startingGateways[mission.id] = nil }
+        _ = try await starting.value
+        gateways[mission.id] = gateway
+        appliedPolicies[mission.id] = policy
+        runningGateways.insert(mission.id)
+        watchGateways()
+        return gateway
+    }
+
+    /// Follows every change to the Missions: a new scope or opened service, a computer added or taken away, a close.
+    fileprivate func watchMissions() {
+        withObservationTracking { _ = model.missions } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.reconcile()
+                self.watchMissions()
+            }
+        }
+    }
+
+    /// One pass at a time, each after the last.
+    private func reconcile() {
+        let previous = reconciling
+        reconciling = Task { [weak self] in
+            await previous?.value
+            await self?.reconcileNow()
+        }
+    }
+
+    private func reconcileNow() async {
+        let missions = model.missions
+        for (id, gateway) in gateways {
+            if let mission = missions.first(where: { $0.id == id }), !mission.isClosed {
+                let policy = Self.policy(for: mission)
+                guard appliedPolicies[id] != policy else { continue }
+                do { try await gateway.apply(policy); appliedPolicies[id] = policy }
+                catch { model.problem = "The gateway of \(mission.reference) kept its old rules: \(error.localizedDescription)" }
+            }
+        }
+        for session in computers where session.computer.kind == .container && session.computer.networkEnabled && !session.phase.busy {
+            let current = placements[session.id]
+            guard session.phase == .running, let runtime = session.container else {
+                if let current { await gateways[current]?.detach(session.id) }
+                placements[session.id] = nil
+                continue
+            }
+            let desired = networkMission(for: session.id)
+            guard desired?.id != current else { continue }
+            do {
+                if let desired {
+                    let attachment = try await gateway(for: desired).attach(session.id)
+                    try await runtime.plug(attachment)
+                    session.append("\nNow on the network of \(desired.reference).\n")
+                } else {
+                    // TODO: A computer that leaves its last Mission stays unplugged until it restarts on NAT.
+                    try await runtime.plug(nil)
+                    session.append("\nUnplugged: it is in no open Mission. Restart it to use NAT.\n")
+                }
+                if let current { await gateways[current]?.detach(session.id) }
+                placements[session.id] = desired?.id
+            } catch { model.problem = "\(session.computer.name) could not change networks: \(error.localizedDescription)" }
+        }
+        // A gateway no computer uses stops; its disk keeps its packages for next time.
+        for (id, gateway) in gateways where !placements.values.contains(id) {
+            await gateway.stop()
+            gateways[id] = nil
+            appliedPolicies[id] = nil
+            reported[id] = nil
+            runningGateways.remove(id)
+        }
+    }
+
+    /// Reads what each gateway stopped, into its Mission's audit log, while any runs.
+    private func watchGateways() {
+        guard gatewayWatch == nil else { return }
+        gatewayWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard let self, !self.gateways.isEmpty else { self?.gatewayWatch = nil; return }
+                // Computers that stopped free their slots, and a gateway none uses stops.
+                self.reconcile()
+                for (id, gateway) in self.gateways {
+                    guard let events = try? await gateway.events() else { continue }
+                    for event in events { await self.record(event, of: gateway, in: id) }
+                }
+            }
+        }
+    }
+
+    private func record(_ event: GatewayEvent, of gateway: ComputerGateway, in mission: UUID) async {
+        let detail: String
+        switch event {
+        case .blocked(let slot, let destination, let port, let proto, let denied):
+            let key = "\(destination) \(port ?? 0) \(proto)"
+            guard reported[mission, default: []].insert(key).inserted else { return }
+            let computer = await slot.asyncMap { await gateway.occupant(ofSlot: $0) }.flatMap { self.session($0)?.computer.name } ?? "A computer"
+            // TODO: Name the address from the gateway's DNS log, as most are reached by name.
+            detail = "The gateway stopped \(computer) reaching \(destination)\(port.map { " port \($0)" } ?? "") (\(proto)): "
+                + (denied ? "the scope denies it." : "it is outside the scope.")
+        case .conflict(let address):
+            detail = "\(address) answers for names both in and out of scope, so the gateway keeps it closed."
+        }
+        // TODO: Gateway lines are audited in the champion's name; the audit log has no actor for Rook itself.
+        do { try model.store.record("network", detail: detail, in: mission, by: .champion(model.champion)) }
+        catch { model.problem = error.localizedDescription }
+    }
+}
+
+private extension Optional {
+    func asyncMap<T>(_ transform: (Wrapped) async -> T?) async -> T? {
+        guard let self else { return nil }
+        return await transform(self)
+    }
 }
 
 extension EnvironmentValues {
@@ -325,6 +506,11 @@ struct MissionComputerChips: View {
     }
 
     var body: some View {
+        if computers.gatewayRunning(for: mission.id) {
+            Image(systemName: "network.badge.shield.half.filled")
+                .foregroundStyle(.secondary)
+                .help("This Mission's computers reach only its scope, the services opened for it and package sources.")
+        }
         ForEach(mission.computers.compactMap(computers.session)) { session in
             MissionComputerChip(session: session) { open(session.id) }
         }

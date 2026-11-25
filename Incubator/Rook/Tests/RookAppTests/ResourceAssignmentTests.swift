@@ -142,6 +142,24 @@ import XCTest
         XCTAssertEqual(opened.scope, [], "only the champion sets a scope")
     }
 
+    /// Services opened beyond the scope are kept with the Mission; its agents hear only that there are some.
+    func testMissionExceptionsAreKeptButNotListedToTheTeam() throws {
+        let lead = try agent()
+        var draft = RookModel.Draft(title: "Portal", objective: "Get into the portal", lead: lead.id)
+        draft.scope = ["*.target.com"]
+        draft.exceptions = ["crt.sh"]
+        let mission = try model.open(draft)
+        XCTAssertEqual(model.store.mission(mission.id)?.exceptions, ["crt.sh"])
+        let description = try XCTUnwrap(model.conversation(mission.id)?.publicDescription)
+        XCTAssertFalse(description.contains("crt.sh"))
+        XCTAssertEqual(description, MissionScope.groupDescription(objective: "Get into the portal", scope: ["*.target.com"], exceptions: ["crt.sh"]))
+        draft.exceptions = ["deny crt.sh"]
+        XCTAssertThrowsError(try model.updateMission(mission, draft: draft))
+        draft.exceptions = []
+        try model.updateMission(mission, draft: draft)
+        XCTAssertEqual(model.store.mission(mission.id)?.exceptions, [])
+    }
+
     func testClosedMissionsCannotChangeResourceGrants() throws {
         let lead = try agent()
         let other = try agent("Brisk Otter")

@@ -275,6 +275,11 @@ public enum ComputerDisplayMode: String {
         return session
     }
     public var kernel: URL { Bundle.main.resourceURL!.appendingPathComponent("Runtime/vmlinux-arm64") }
+    /// Where a Linux computer's network goes when it starts; NAT when nil. A host app sets it to put computers
+    /// behind a gateway.
+    public var network: (@MainActor (ComputerSession) async throws -> ComputerNetwork)?
+    /// The startup disk and images, shared with gateways.
+    public var imageCache: URL { cache }
 
     /// `selects` false for computers agents and the Hub make: the person stays where they are.
     public func create(_ requested: Computer, source: URL?, sshSecret: SSHSecret? = nil, selects: Bool = true) async -> Bool {
@@ -593,7 +598,8 @@ public enum ComputerDisplayMode: String {
                 let runtime = session.container ?? ContainerComputer()
                 session.container = runtime
                 let text = try await runtime.start(
-                    computer: computer, directory: directory, cache: cache, kernel: kernel)
+                    computer: computer, directory: directory, cache: cache, kernel: kernel,
+                    network: try await network?(session) ?? .nat)
                 session.append(text)
                 session.display = await runtime.display
                 if !computer.hasDesktop {

@@ -269,6 +269,7 @@ public struct CaseToolProvider: ToolProvider {
             MissionScope.agentText(mission.scope)
                 ?? "Scope: none set yet. Ask the champion what is in scope before you go near a target.",
         ]
+        if !mission.exceptions.isEmpty { lines.append(MissionScope.servicesNote) }
         lines.append("\nEntities (\(record.entities.count)):")
         lines += record.entities.map { "- \($0.id) \($0.kind.rawValue) \($0.name)\($0.detail.map { ": \($0)" } ?? "") [last seen \(date.string(from: $0.lastSeen))]" }
         lines.append("\nEvidence (\(record.evidence.count)):")

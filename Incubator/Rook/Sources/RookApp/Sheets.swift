@@ -1,3 +1,4 @@
+import ComputerEngine
 import NoodleHubClient
 import HubLink
 import NoodleBrand
@@ -143,7 +144,8 @@ struct NewMissionSheet: View {
                 if let computers {
                     MissionComputersRow(computers: computers, selection: $draft.computers, names: $draft.computerNames)
                 }
-                MissionScopeRow(scope: $draft.scope)
+                MissionRulesRow(kind: .scope, rules: $draft.scope)
+                MissionRulesRow(kind: .exceptions, rules: $draft.exceptions)
                 if let error { Text(error).foregroundStyle(.red).font(.callout) }
             }
             .padding(20)
@@ -153,7 +155,7 @@ struct NewMissionSheet: View {
             if let mission, let group = model.conversation(mission.id) {
                 draft = RookModel.Draft(title: mission.title, objective: mission.objective,
                     lead: group.lead, staff: Set(group.participantIDs), folders: group.folders ?? [], computers: mission.computers,
-                    scope: mission.scope)
+                    scope: mission.scope, exceptions: mission.exceptions)
             }
             loaded = true
             titleFocused = true
@@ -176,63 +178,99 @@ struct NewMissionSheet: View {
     }
 }
 
-/// What the Mission's agents may target, as the Computers row shows its computers: a count, and a sheet to edit them.
-private struct MissionScopeRow: View {
-    @Binding var scope: [String]
+/// The two lists a Mission's gateway is built from: what its agents may target, and the services opened beyond that.
+private enum MissionRules {
+    case scope, exceptions
+
+    var title: String { self == .scope ? "Scope" : "Exceptions" }
+    var symbol: String { self == .scope ? "scope" : "network.badge.shield.half.filled" }
+    var help: String {
+        self == .scope ? "What the agents in this Mission may target. Every one of them is told it."
+            : "Services this Mission's computers may reach beyond its scope, such as lookup sites. They are never targets, and the agents are not told which."
+    }
+    var placeholder: String { self == .scope ? "*.example.com\n203.0.113.0/24\ndeny payments.example.com" : "crt.sh\napi.shodan.io" }
+    var editorHelp: String {
+        self == .scope
+            ? "One rule per line: a domain, *.domain for every name under it, an address or a network. deny in front takes a rule out of scope, even where another covers it."
+            : "One service per line: a domain, *.domain for every name under it, an address or a network."
+    }
+    /// What is open behind every gateway whatever the lists say.
+    var builtIn: [String] {
+        guard self == .exceptions else { return [] }
+        return GatewayPolicy.packageSources.compactMap { if case .domain(let name) = $0 { name } else { nil } }
+    }
+
+    func parse(_ text: String) throws -> [String] {
+        self == .scope ? try MissionScope.parse(text) : try MissionScope.parseExceptions(text)
+    }
+}
+
+/// A Mission's list, as the Computers row shows its computers: a count, and a sheet to edit them.
+private struct MissionRulesRow: View {
+    let kind: MissionRules
+    @Binding var rules: [String]
     @State private var editing = false
 
     var body: some View {
         Button { editing = true } label: {
             HStack {
-                Label("Scope", systemImage: "scope")
+                Label(kind.title, systemImage: kind.symbol)
                 Spacer()
-                Text(scope.isEmpty ? "None" : "\(scope.count)").foregroundStyle(.secondary)
+                Text(rules.isEmpty ? "None" : "\(rules.count)").foregroundStyle(.secondary)
                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
             }.padding(12).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
-        .help("What the agents in this Mission may target. Every one of them is told it.")
-        .sheet(isPresented: $editing) { MissionScopeSheet(scope: $scope) }
+        .help(kind.help)
+        .sheet(isPresented: $editing) { MissionRulesSheet(kind: kind, rules: $rules) }
     }
 }
 
-/// The scope as text, one rule per line; Done stays off while a line is not a rule, which is named under it.
-private struct MissionScopeSheet: View {
-    @Binding var scope: [String]
+/// The list as text, one rule per line; Done stays off while a line is not a rule, which is named under it.
+private struct MissionRulesSheet: View {
+    let kind: MissionRules
+    @Binding var rules: [String]
     @State private var text: String
     @Environment(\.dismiss) private var dismiss
     private static let font = Font.system(size: 13, design: .monospaced)
 
-    init(scope: Binding<[String]>) {
-        _scope = scope
-        _text = State(initialValue: scope.wrappedValue.joined(separator: "\n"))
+    init(kind: MissionRules, rules: Binding<[String]>) {
+        self.kind = kind
+        _rules = rules
+        _text = State(initialValue: rules.wrappedValue.joined(separator: "\n"))
     }
 
-    private var parsed: Result<[String], Error> { Result { try MissionScope.parse(text) } }
+    private var parsed: Result<[String], Error> { Result { try kind.parse(text) } }
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(heading: "Scope", title: "Done", enabled: (try? parsed.get()) != nil) {
-                guard let rules = try? parsed.get() else { return }
-                scope = rules
+            SheetHeader(heading: kind.title, title: "Done", enabled: (try? parsed.get()) != nil) {
+                guard let parsed = try? parsed.get() else { return }
+                rules = parsed
                 dismiss()
             }
             Divider()
             VStack(alignment: .leading, spacing: 8) {
+                if !kind.builtIn.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Always Open").font(.caption.weight(.semibold))
+                        Text(kind.builtIn.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary)
+                    }
+                    .help("Package sources, so the computers can install software.")
+                }
                 TextEditor(text: $text)
                     .font(Self.font)
                     .autocorrectionDisabled(true)
-                    .accessibilityLabel("Scope")
+                    .accessibilityLabel(kind.title)
                     .frame(height: 200)
                     .overlay(alignment: .topLeading) {
                         if text.isEmpty {
-                            Text("*.example.com\n203.0.113.0/24\ndeny payments.example.com")
+                            Text(kind.placeholder)
                                 .font(Self.font).foregroundStyle(.tertiary).padding(.leading, 5).allowsHitTesting(false)
                         }
                     }
                     .roundedBorderEditor()
-                    .help("One rule per line: a domain, *.domain for every name under it, an address or a network. "
-                          + "deny in front takes a rule out of scope, even where another covers it.")
+                    .help(kind.editorHelp)
                 if case .failure(let error) = parsed {
                     Text(error.localizedDescription).foregroundStyle(.red).font(.callout)
                 }

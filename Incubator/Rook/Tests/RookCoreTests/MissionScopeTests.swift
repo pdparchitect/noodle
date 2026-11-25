@@ -96,3 +96,41 @@ final class MissionScopeTests: XCTestCase {
         XCTAssertTrue(set.contains("Out of scope, even where an in-scope rule covers it:\n- payments.target.com"), set)
     }
 }
+
+final class MissionExceptionsTests: XCTestCase {
+    private var root: URL!
+    private var store: RookStore!
+
+    override func setUpWithError() throws {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("MissionExceptionsTests-\(UUID().uuidString)", isDirectory: true)
+        store = RookStore(root: root)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    /// Exceptions open services for lookups; they are never targets, so they take no deny lines.
+    func testExceptionsOnlyOpenAndOnlyTheChampionSetsThem() throws {
+        XCTAssertEqual(try MissionScope.parseExceptions(" Crt.sh \nshodan.io\n\n8.8.8.8"), ["crt.sh", "shodan.io", "8.8.8.8"])
+        XCTAssertThrowsError(try MissionScope.parseExceptions("crt.sh\ndeny shodan.io")) { error in
+            XCTAssertTrue(error.localizedDescription.contains("Line 2"), error.localizedDescription)
+        }
+        let mission = try store.open(id: UUID(), title: "External test", objective: "Get in", champion: "Avery")
+        XCTAssertEqual(mission.exceptions, [])
+        XCTAssertThrowsError(try store.setExceptions(["crt.sh"], of: mission.id, by: .agent(UUID())))
+        XCTAssertThrowsError(try store.setExceptions(["deny crt.sh"], of: mission.id, by: .champion("Avery")))
+        try store.setExceptions(["crt.sh"], of: mission.id, by: .champion("Avery"))
+        try store.setExceptions([], of: mission.id, by: .champion("Avery"))
+        XCTAssertEqual(store.audit(mission.id).filter { $0.event == "exceptions" }.map(\.detail),
+                       ["Opened services: crt.sh.", "Closed the opened services."])
+    }
+
+    /// Agents are told services exist, never which, so none is taken for a target.
+    func testAgentsAreToldServicesAreOpenButNotWhich() {
+        let described = MissionScope.groupDescription(objective: "Get in", scope: ["*.target.com"], exceptions: ["crt.sh"])
+        XCTAssertTrue(described.contains("Some services outside the scope can also be reached from this Mission's computers"), described)
+        XCTAssertFalse(described.contains("crt.sh"))
+        XCTAssertEqual(MissionScope.groupDescription(objective: "Get in", scope: [], exceptions: []), "Get in")
+    }
+}
