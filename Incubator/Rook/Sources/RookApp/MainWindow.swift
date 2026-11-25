@@ -339,6 +339,7 @@ struct ConversationRowMenu: View {
     let model: RookModel
     let window: WindowState
     let conversation: BotConversation
+    @Environment(\.rookComputers) private var computers
 
     var body: some View {
         let mission = model.mission(conversation.id)
@@ -380,6 +381,10 @@ struct ConversationRowMenu: View {
             Button("Show in Finder") { model.reveal(conversation) }
             if let mission {
                 Button("Export Mission…") { model.exportMission(mission) }
+                if let computers {
+                    Button("Show Network Log") { computers.showLog(.network, of: mission) }
+                    Button("Show DNS Log") { computers.showLog(.dns, of: mission) }
+                }
             }
         }
         Divider()

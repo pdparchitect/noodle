@@ -6,6 +6,7 @@ import Foundation
 import HubLink
 import NoodleComputerTools
 import NoodleCore
+import NoodleRuntime
 import NoodleRuntimeSettings
 import NoodleSettingsUI
 import RookCore
@@ -37,6 +38,11 @@ import SwiftUI
     @ObservationIgnored private var reported: [UUID: Set<String>] = [:]
     @ObservationIgnored private var reconciling: Task<Void, Never>?
     @ObservationIgnored private var gatewayWatch: Task<Void, Never>?
+    /// Each Mission's network and DNS logs as Noodle's activity windows show them: loaded from its files when first
+    /// shown, then followed as the gateway writes more.
+    @ObservationIgnored private let missionLogs: [MissionLog: (store: ActivityStore, windows: ActivityWindows)] =
+        [.network: (ActivityStore(), ActivityWindows()), .dns: (ActivityStore(), ActivityWindows())]
+    @ObservationIgnored private var loadedLogs: Set<MissionLogKey> = []
 
     /// Only Linux computers and SSH: Windows and this Mac need helpers Rook does not carry.
     static let kinds: Set<ComputerKind> = [.container, .ssh]
@@ -251,9 +257,11 @@ extension RookComputers {
                   "type": lookup.type, "answers": lookup.answers])
         }
         do {
-            try model.store.appendLog(network, to: "network.log", in: mission)
-            try model.store.appendLog(dns, to: "dns.log", in: mission)
+            try model.store.appendLog(network, to: MissionLog.network.file, in: mission)
+            try model.store.appendLog(dns, to: MissionLog.dns.file, in: mission)
         } catch { model.problem = "Could not keep the gateway's log: \(error.localizedDescription)" }
+        follow(network, in: .network, of: mission)
+        follow(dns, in: .dns, of: mission)
         // The audit log says once per address what the gateway stopped; the network log has every attempt.
         var details: [String] = []
         for entry in records.firewall where entry.verdict != .allowed {
@@ -270,6 +278,82 @@ extension RookComputers {
             do { try model.store.record("network", detail: detail, in: mission, by: .champion(model.champion)) }
             catch { model.problem = error.localizedDescription }
         }
+    }
+}
+
+// MARK: Mission logs
+
+/// The logs a Mission's gateway keeps in its folder.
+enum MissionLog: Hashable {
+    case network, dns
+
+    var file: String { self == .network ? "network.log" : "dns.log" }
+    var title: String { self == .network ? "Network Log" : "DNS Log" }
+
+    /// One JSON line of the log as an activity window shows it: when, and what, in a line.
+    func entry(_ line: Substring) -> (date: Date, title: String)? {
+        guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { return nil }
+        let dates = ISO8601DateFormatter()
+        dates.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = (object["time"] as? String).flatMap(dates.date) ?? Date()
+        let computer = object["computer"] as? String ?? "Unknown"
+        switch self {
+        case .network:
+            let verdict = switch object["verdict"] as? String {
+            case "allowed": "Allowed"
+            case "denied": "Denied"
+            default: "Outside scope"
+            }
+            let destination = (object["destination"] as? String ?? "?") + ((object["name"] as? String).map { " (\($0))" } ?? "")
+            let port = (object["port"] as? Int).map { ":\($0)" } ?? ""
+            let flags = (object["flags"] as? [String]).map { " " + $0.joined(separator: ",") } ?? ""
+            return (date, "\(verdict): \(computer) → \(destination)\(port) \(object["protocol"] as? String ?? "")\(flags)")
+        case .dns:
+            let answers = (object["answers"] as? [String]) ?? []
+            return (date, "\(computer) looked up \(object["name"] as? String ?? "?") (\(object["type"] as? String ?? "?")) → "
+                          + (answers.isEmpty ? "no answer" : answers.joined(separator: ", ")))
+        }
+    }
+}
+
+struct MissionLogKey: Hashable {
+    let log: MissionLog
+    let mission: UUID
+}
+
+extension RookComputers {
+    /// Opens the log in its own window, its newest lines from the file first.
+    func showLog(_ log: MissionLog, of mission: Mission) {
+        guard let (store, windows) = missionLogs[log] else { return }
+        let activity = store.log(for: mission.id)
+        if loadedLogs.insert(MissionLogKey(log: log, mission: mission.id)).inserted {
+            activity.clear()
+            for line in Self.lastLines(of: model.store.folder(mission.id).appendingPathComponent(log.file), count: 500) {
+                if let entry = log.entry(line) { activity.record(.init(title: entry.title), at: entry.date) }
+            }
+        }
+        windows.show(id: mission.id, name: mission.reference, log: activity, noun: log.title)
+    }
+
+    /// Adds what the gateway just logged to a window's log once it has been shown; the file has the rest.
+    fileprivate func follow(_ lines: [String], in log: MissionLog, of mission: UUID) {
+        guard loadedLogs.contains(MissionLogKey(log: log, mission: mission)), let activity = missionLogs[log]?.store.log(for: mission) else { return }
+        for line in lines {
+            if let entry = log.entry(Substring(line)) { activity.record(.init(title: entry.title), at: entry.date) }
+        }
+    }
+
+    /// The last lines of a log, read from its end, so a long engagement's file is never read whole.
+    static func lastLines(of url: URL, count: Int) -> [Substring] {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return [] }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        let start = size > 1_048_576 ? size - 1_048_576 : 0
+        try? handle.seek(toOffset: start)
+        guard let data = try? handle.readToEnd() else { return [] }
+        var lines = String(decoding: data, as: UTF8.self).split(separator: "\n")
+        if start > 0, !lines.isEmpty { lines.removeFirst() }
+        return Array(lines.suffix(count))
     }
 }
 

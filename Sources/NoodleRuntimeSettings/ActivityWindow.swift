@@ -14,14 +14,15 @@ public final class ActivityWindows {
         show(id: agent.id, name: agent.displayName, log: log)
     }
 
-    /// Shows the log of the bot or tool connection with this ID, titled with its name.
+    /// Shows the log of the bot or tool connection with this ID, titled with its name. `noun` names what it shows,
+    /// as in "Kali - Activity", for an app keeping other logs in the same window.
     @discardableResult
-    public func show(id: UUID, name: String, log: ActivityLog) -> ActivityWindowController {
+    public func show(id: UUID, name: String, log: ActivityLog, noun: String = "Activity") -> ActivityWindowController {
         let controller: ActivityWindowController
         if let existing = controllers[id] {
             controller = existing
         } else {
-            controller = ActivityWindowController(log: log)
+            controller = ActivityWindowController(log: log, noun: noun)
             controller.onClose = { [weak self] in self?.controllers[id] = nil }
             controllers[id] = controller
         }
@@ -51,14 +52,17 @@ public final class ActivityWindows {
 @MainActor
 public final class ActivityWindowController: NSWindowController, NSWindowDelegate {
     let log: ActivityLog
+    let noun: String
     let output = ActivityTextView()
-    private let empty = ActivityEmptyLabel(labelWithString: "No activity yet")
+    private let empty: ActivityEmptyLabel
     private var timer: Timer?
     private var revision = -1
     var onClose: (() -> Void)?
 
-    init(log: ActivityLog) {
+    init(log: ActivityLog, noun: String = "Activity") {
         self.log = log
+        self.noun = noun
+        empty = ActivityEmptyLabel(labelWithString: "No \(noun.lowercased()) yet")
         let panel = ActivityPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 500),
                                       styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false
@@ -97,8 +101,8 @@ public final class ActivityWindowController: NSWindowController, NSWindowDelegat
             empty.centerXAnchor.constraint(equalTo: output.centerXAnchor),
             empty.centerYAnchor.constraint(equalTo: output.centerYAnchor)
         ])
-        panel.contentView = AnnotationPreviewFrame(content: content, filename: "Activity", kindLabel: "",
-            closeHint: "Close Activity (Esc or ⌘W)", closeLabel: "Close Activity")
+        panel.contentView = AnnotationPreviewFrame(content: content, filename: noun, kindLabel: "",
+            closeHint: "Close \(noun) (Esc or ⌘W)", closeLabel: "Close \(noun)")
         // Rendering is batched independently of token rate and runtime callbacks.
         timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -112,7 +116,7 @@ public final class ActivityWindowController: NSWindowController, NSWindowDelegat
     required init?(coder: NSCoder) { nil }
 
     func updateTitle(_ name: String) {
-        let title = "\(name) - Activity"
+        let title = "\(name) - \(noun)"
         window?.title = title
         (window?.contentView as? AnnotationPreviewFrame)?.filename = title
     }
