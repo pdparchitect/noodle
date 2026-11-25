@@ -84,6 +84,7 @@ public enum HarnessVersionPolicy {
         case .muse: return ["serve", "schema"]
         case .openCode: return ["acp", "api", "auth", "--standalone"]
         case .antigravity: return ["--input-format", "--output-format", "--conversation", "--dangerously-skip-permissions"]
+        case .copilot: return ["--acp"]
         }
     }
 
@@ -134,13 +135,14 @@ public enum HarnessVersionPolicy {
         case .openCode: address = "https://opencode.ai/update/api/latest/cli/npm"
         // The manifest Google's installer and the CLI's own updater read.
         case .antigravity: address = "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/darwin_arm64.json"
+        case .copilot: address = "https://api.github.com/repos/github/copilot-cli/releases/latest"
         }
         return URL(string: address)
     }
 
     public static func latestVersion(provider: HarnessProvider, data: Data) -> String? {
         let value: String
-        if provider == .codex {
+        if provider == .codex || provider == .copilot {
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   object["prerelease"] as? Bool != true, object["draft"] as? Bool != true,
                   let tag = object["tag_name"] as? String else { return nil }
@@ -196,6 +198,9 @@ public enum HarnessVersionPolicy {
         case .antigravity:
             command = "agy update"
             link = "https://antigravity.google/docs/cli/install"
+        case .copilot:
+            command = "copilot update"
+            link = "https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli"
         }
         return .init(command: command,
             instructions: "Run this command in Terminal, then choose Check Again. Updates follow the provider’s configured release channel; managed or pinned installs may intentionally remain on an older version. Existing bot processes keep their running version until restarted.",

@@ -9,7 +9,7 @@ import XCTest
     }
 
     func testProvidersConfigureAccessModelEffortAndResumeSavedSessions() async throws {
-        for provider in [HarnessProvider.apple, .fx, .grokBuild, .openCode] {
+        for provider in [HarnessProvider.apple, .fx, .grokBuild, .openCode, .copilot] {
             for extended in [false, true] {
                 let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: provider, extended: extended)
                 p.start(); try await f.openACP(wire, provider: provider)
@@ -78,6 +78,34 @@ import XCTest
         }
     }
 
+    /// Copilot names a missing session in its own words; the bot waits for Kick to recover it from history.
+    func testMissingCopilotSessionPausesForRecoveryAndKeepsPointer() async throws {
+        let f = try fixture(), old = HarnessWire(), first = f.acp(old, provider: .copilot)
+        first.start(); try await f.openACP(old, provider: .copilot); first.stop { _ in }
+        let wire = HarnessWire(), p = f.acp(wire, provider: .copilot)
+        p.start(); try await f.wait { wire.count("initialize") == 1 }
+        try wire.reply("initialize", result: ["protocolVersion": 1])
+        try await f.wait { wire.count("session/load") == 1 }
+        try wire.reply("session/load", error: ["code": -32002, "message": "Resource not found: Session fixture-session not found"])
+        try await f.wait { p.snapshot.phase == .failed }
+        XCTAssertEqual(p.snapshot.failure, .missingSession("fixture-session"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: f.state(.copilot).path))
+        XCTAssertEqual(wire.count("session/new"), 0)
+        XCTAssertTrue(f.failures.isEmpty)
+    }
+
+    /// Signed out, Copilot refuses the session; the bot waits for sign-in instead of restarting.
+    func testSignedOutCopilotPausesForSignIn() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: .copilot)
+        p.start(); try await f.wait { wire.count("initialize") == 1 }
+        try wire.reply("initialize", result: ["protocolVersion": 1])
+        try await f.wait { wire.count("session/new") == 1 }
+        try wire.reply("session/new", error: ["code": -32000, "message": "Authentication required"])
+        try await f.wait { p.snapshot.phase == .failed }
+        XCTAssertEqual(p.snapshot.failure, .authenticationRequired)
+        XCTAssertTrue(f.failures.isEmpty)
+    }
+
     func testNonMissingLoadFailureRetainsSavedPointer() async throws {
         let f = try fixture(), old = HarnessWire(), first = f.acp(old)
         first.start(); try await f.openACP(old); first.stop { _ in }
@@ -94,7 +122,7 @@ import XCTest
     /// Cancelling would end the turn and any background work or sub-agents it runs, and ACP cannot add a message
     /// to a running prompt, so an urgent message waits for the turn to end.
     func testUrgentWakeWaitsForTheTurnInsteadOfCancellingIt() async throws {
-        for provider in [HarnessProvider.apple, .fx, .grokBuild, .openCode] {
+        for provider in [HarnessProvider.apple, .fx, .grokBuild, .openCode, .copilot] {
             let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: provider)
             p.start(); try await f.openACP(wire, provider: provider); p.notify()
             let id = p.notify(immediately: true); p.promoteNotification(id)
@@ -171,6 +199,53 @@ import XCTest
         XCTAssertEqual(wire.launches.count, 1)
     }
 
+    /// Copilot ends a turn whose model request failed as if it finished: `end_turn`, no usage, and the error
+    /// as a reply chunk of its own, without a message ID. Captured from Copilot 1.0.116 answering a 429.
+    private func copilotFailedTurn(_ wire: HarnessWire, _ text: String) throws {
+        wire.emit(["method": "session/update", "params": ["sessionId": "fixture-session", "update": [
+            "sessionUpdate": "agent_message_chunk", "content": ["type": "text", "text": text]]]])
+        try wire.reply("session/prompt", result: ["stopReason": "end_turn"])
+    }
+
+    func testCopilotRateLimitPausesForUsageWithItsResetAndKeepsUnfinishedWork() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: .copilot)
+        p.start(); try await f.openACP(wire, provider: .copilot); p.notify()
+        let sent = Date()
+        try copilotFailedTurn(wire, "Error: 429 Sorry, you've hit a rate limit that restricts the number of Copilot model requests you can make within a specific time period. Please try again in 4 minutes.")
+        try await f.wait { p.snapshot.phase == .failed }
+        XCTAssertEqual(p.snapshot.failure, .usageLimit)
+        let reset = try XCTUnwrap(p.snapshot.usageResetsAt)
+        XCTAssertEqual(reset.timeIntervalSince(sent), 240, accuracy: 30)
+        wire.onExit?(1); p.notify(); await f.drain()
+        XCTAssertTrue(f.failures.isEmpty)
+        XCTAssertTrue(p.isAlive); XCTAssertTrue(f.recovery(.copilot).hasUnfinishedTurn)
+        XCTAssertEqual(wire.count("session/prompt"), 1)
+        p.stop { _ in }
+    }
+
+    func testCopilotFailedModelRequestFailsTheTurnInsteadOfFinishingIt() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: .copilot)
+        p.start(); try await f.openACP(wire, provider: .copilot); p.notify()
+        try copilotFailedTurn(wire, "Error: Execution failed: Model \"fixture-model\" is not available.")
+        try await f.wait { p.snapshot.phase == .failed }
+        XCTAssertNotEqual(p.snapshot.failure, .usageLimit)
+        XCTAssertFalse(p.snapshot.detail.contains("fixture-model"), "Copilot's own words stay out of the status")
+        XCTAssertTrue(f.recovery(.copilot).hasUnfinishedTurn)
+        XCTAssertFalse(p.canReceiveHeartbeat)
+    }
+
+    /// A reply of the model's own carries a message ID, even when it starts with "Error:".
+    func testCopilotReplyThatMentionsAnErrorStillFinishesTheTurn() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: .copilot)
+        p.start(); try await f.openACP(wire, provider: .copilot); p.notify()
+        wire.emit(["method": "session/update", "params": ["sessionId": "fixture-session", "update": [
+            "sessionUpdate": "agent_message_chunk", "messageId": "fixture-message",
+            "content": ["type": "text", "text": "Error: you've hit a rate limit, says the log you sent."]]]])
+        try wire.reply("session/prompt", result: ["stopReason": "end_turn", "usage": ["inputTokens": 10, "outputTokens": 5]])
+        try await f.wait { p.canReceiveHeartbeat }
+        XCTAssertFalse(f.recovery(.copilot).hasUnfinishedTurn)
+    }
+
     func testGrokUsageFailurePausesWithoutRestartAndKeepsUnfinishedWork() async throws {
         let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: .grokBuild)
         p.start(); try await f.openACP(wire, provider: .grokBuild); p.notify()
@@ -186,7 +261,7 @@ import XCTest
 
     /// Stop cancels the running prompt once and drops the wake waiting behind it, so the bot goes idle.
     func testStopCancelsTheTurnOnceAndStartsNoOtherForWaitingMessages() async throws {
-        for provider in [HarnessProvider.apple, .fx, .grokBuild, .openCode] {
+        for provider in [HarnessProvider.apple, .fx, .grokBuild, .openCode, .copilot] {
             let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: provider)
             p.start(); try await f.openACP(wire, provider: provider)
             XCTAssertFalse(p.cancelTurn(), "No turn to cancel")

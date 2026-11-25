@@ -44,7 +44,7 @@ extension ExtendedAgentConnection: HarnessRuntimeConnection {
             case .antigravity:
                 startRestrictedAntigravity(agentID: agentID, executablePath: executablePath,
                     conversationID: resumeSession ? sessionID : nil, modelIdentifier: modelIdentifier, reply: reply)
-            case .fx, .grokBuild, .openCode:
+            case .fx, .grokBuild, .openCode, .copilot:
                 startRestrictedACP(provider: provider, agentID: agentID, executablePath: executablePath,
                                    modelIdentifier: modelIdentifier, effortIdentifier: effortIdentifier, reply: reply)
             default:

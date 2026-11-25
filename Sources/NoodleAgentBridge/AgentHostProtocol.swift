@@ -86,6 +86,7 @@ public enum AgentHostIdentity {
     func inspectOpenCode(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectMuse(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectAntigravity(withReply reply: @escaping (Data?, String?) -> Void)
+    func inspectCopilot(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectHarnessVersion(harnessIdentifier: String, executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
     /// The app names a download it staged in Noodle's storage. The host derives
     /// the folder, checks the vendor's signature, and replies with the executable.
@@ -155,6 +156,7 @@ public protocol AgentHostService: AnyObject {
     func inspectOpenCode(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectMuse(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectAntigravity(withReply reply: @escaping (Data?, String?) -> Void)
+    func inspectCopilot(withReply reply: @escaping (Data?, String?) -> Void)
     func inspectHarnessVersion(harnessIdentifier: String, executablePath: String, withReply reply: @escaping (Data?, String?) -> Void)
     /// The app names a download it staged in Noodle's storage. The host derives
     /// the folder, checks the vendor's signature, and replies with the executable.

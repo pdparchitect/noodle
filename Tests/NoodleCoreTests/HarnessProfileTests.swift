@@ -245,7 +245,7 @@ final class HarnessProfileTests: XCTestCase {
     /// page and code instead, so the person decides when to open it.
     func testDeviceCodeSignInsCannotOpenTheBrowserThemselves() throws {
         let executable = URL(fileURLWithPath: "/usr/bin/true")
-        for provider in [HarnessProvider.grokBuild, .muse] {
+        for provider in [HarnessProvider.grokBuild, .muse, .copilot] {
             let launch = HarnessProfileLogin.launch(provider, executable: executable, arguments: ["login"])
             XCTAssertEqual(launch.executable.path, "/usr/bin/sandbox-exec", provider.rawValue)
             XCTAssertEqual(launch.arguments.suffix(2), [executable.path, "login"], provider.rawValue)

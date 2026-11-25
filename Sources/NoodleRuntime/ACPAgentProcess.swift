@@ -34,6 +34,9 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
     private var stopped = false
     private var paused = false
     private var usageLimitDetail: String?
+    private var usageResetsAt: Date?
+    /// Copilot's account of a model request that failed, which it reports as a finished turn.
+    private var turnFailure: String?
     private var sessionModel: String?
     private var turnIsActive = false
     private var interruptRequested = false
@@ -60,7 +63,7 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
         makeConnection: @escaping @MainActor () throws -> any HarnessRuntimeConnection = { try ExtendedAgentConnection() },
         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         remoteAccess: (@MainActor (RemoteModelID) throws -> RemoteModelAccess)? = nil) {
-        precondition(provider == .apple || provider == .fx || provider == .grokBuild || provider == .openCode)
+        precondition([.apple, .fx, .grokBuild, .openCode, .copilot].contains(provider))
         self.provider = provider
         self.makeConnection = makeConnection
         self.sleep = sleep
@@ -240,6 +243,8 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
         turnIsActive = true
         reviewHeld = false
         usageLimitDetail = nil
+        usageResetsAt = nil
+        turnFailure = nil
         trace.begin(reason: reason)
         let prompt = reason.eventText + (state.needsHistoryRecovery ? "\n\n" + MessengerDocumentation.recoveredModelContext : "")
         request(.prompt(reason), method: "session/prompt", params: ["sessionId": sessionID, "prompt": [["type": "text", "text": prompt]]])
@@ -268,7 +273,7 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
                     let response: [String: Any] = interruptRequested
                         ? ["outcome": ["outcome": "cancelled"]]
                         : FxProtocol.permissionResponse(params: params, sessionID: sessionID,
-                                                        extendedAccess: extendedAccess, restrictedAccess: provider == .fx || provider == .grokBuild || provider == .openCode)
+                                                        extendedAccess: extendedAccess, restrictedAccess: provider != .apple)
                     send(["jsonrpc": "2.0", "id": id.json, "result": response])
                 } else {
                     send(["jsonrpc": "2.0", "id": id.json, "error": ["code": -32601, "message": "Unsupported client request"]])
@@ -276,7 +281,15 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
             } else if method == "session/update", params["sessionId"] as? String == sessionID, turnIsActive {
                 onActivity(object)
                 trace.outputObserved()
-                if let update = params["update"] as? [String: Any], FxProtocol.reviewWasHeld(update) { reviewHeld = true }
+                if let update = params["update"] as? [String: Any] {
+                    if FxProtocol.reviewWasHeld(update) { reviewHeld = true }
+                    if provider == .copilot, let failure = CopilotProtocol.turnFailure(fromUpdate: update) {
+                        if CopilotProtocol.isUsageLimit(failure) {
+                            usageLimitDetail = CopilotProtocol.usageLimitDetail
+                            usageResetsAt = CopilotProtocol.usageLimitReset(failure)
+                        } else { turnFailure = failure }
+                    }
+                }
             } else if provider == .grokBuild, method == "_x.ai/session/update",
                       params["sessionId"] as? String == sessionID, turnIsActive,
                       let update = params["update"] as? [String: Any],
@@ -298,6 +311,14 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
             }
             if provider == .grokBuild, let detail = GrokProtocol.authenticationFailureDescription(error) {
                 pause(detail, failure: .authenticationRequired)
+                return
+            }
+            if provider == .copilot, CopilotProtocol.authenticationRequired(error) {
+                pause(CopilotProtocol.authenticationFailureDescription, failure: .authenticationRequired)
+                return
+            }
+            if provider == .copilot, case .load = purpose, let sessionID, CopilotProtocol.missingSession(error, sessionID: sessionID) {
+                pause(CopilotProtocol.missingSessionDescription, event: .runtimeFailed, failure: .missingSession(sessionID))
                 return
             }
             if provider == .grokBuild, let detail = GrokProtocol.usageLimitDescription(error) {
@@ -360,7 +381,7 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
                 try FileManager.default.createDirectory(at: stateURL.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try state.save(to: stateURL)
             } catch { terminated("Could not save the \(name) session"); return }
-            if provider == .openCode, let model = configuration.modelIdentifier {
+            if provider == .openCode || provider == .copilot, let model = configuration.modelIdentifier {
                 request(.model, method: "session/set_config_option", params: ["sessionId": sessionID, "configId": "model", "value": model])
             } else if provider == .apple, let model = configuration.modelIdentifier, let remote = RemoteModelID(model) {
                 // The key travels only in this request, to this bot's own harness process.
@@ -387,6 +408,16 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
             }
             if let usageLimitDetail {
                 pause(usageLimitDetail, failure: .usageLimit)
+                return
+            }
+            if turnFailure != nil, result["stopReason"] as? String == "end_turn" {
+                // Unfinished, so Kick resumes the turn.
+                turnFailure = nil
+                interruptTimeout?.cancel()
+                interruptRequested = false
+                turnIsActive = false
+                trace.finish(.turnFailed)
+                update(.failed, CopilotProtocol.turnFailureDescription)
                 return
             }
             guard let stopReason = result["stopReason"] as? String else { terminated("\(name) returned no turn completion reason"); return }
@@ -486,8 +517,9 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
         onUnexpectedTermination(self, detail, needsRecovery)
     }
     private func update(_ phase: AgentRuntimePhase, _ detail: String, failure: AgentRuntimeFailure? = nil) {
+        let failure = failure ?? (phase == .failed && state.needsHistoryRecovery ? .recoveryFailed : nil)
         snapshot = .init(agentID: configuration.id, phase: phase, detail: detail, processIdentifier: pid,
-                         failure: failure ?? (phase == .failed && state.needsHistoryRecovery ? .recoveryFailed : nil))
+                         failure: failure, usageResetsAt: failure == .usageLimit ? usageResetsAt : nil)
         onSnapshot(snapshot)
     }
 }

@@ -20,6 +20,7 @@ public enum RestrictedAgentSandbox {
         case .muse: name = ".config/muse"
         case .openCode: name = ".local/share/opencode"
         case .antigravity: name = ".gemini/antigravity-cli"
+        case .copilot: name = ".copilot"
         default: throw HarnessSetupError("Unsupported restricted harness account.")
         }
         let directory = home.appendingPathComponent(name, isDirectory: true)
@@ -29,8 +30,9 @@ public enum RestrictedAgentSandbox {
         return directory
     }
 
+    /// `package` is code the executable runs from outside its own file: Copilot's unpacked package.
     public static func profile(provider: HarnessProvider, workspace: URL, repository: URL, home: URL,
-                               executable: URL, application: URL, temporary: URL,
+                               executable: URL, package: URL? = nil, application: URL, temporary: URL,
                                folders: [AgentFolder] = [], egressPort: UInt16? = nil) throws -> String {
         let privateHome = RestrictedHarnessStorage.home(workspace: workspace)
         let account = try accountDirectory(provider: provider, home: privateHome)
@@ -44,7 +46,7 @@ public enum RestrictedAgentSandbox {
         // Muse Code 1.4.4 and later list these for system-wide settings and fail every session without them.
         if provider == .muse { readFiles += ["/Library", "/Library/Application Support"] }
         let base = profile(workspace: workspace,
-            executablePaths: [executable.path], application: application,
+            executablePaths: [executable.path] + (package.map { [$0.path] } ?? []), application: application,
             readFiles: Array(Set(readFiles)).sorted(), folders: folders, egressPort: egressPort)
         guard provider == .openCode || provider == .antigravity else { return base }
         // Antigravity runs every shell command in a pseudo-terminal. The pty
@@ -102,6 +104,8 @@ public enum RestrictedAgentSandbox {
             return OpenCodeStorage.environment(workspace: workspace)
         case .antigravity:
             return ["HOME": privateHome.path, "AGY_CLI_DISABLE_AUTO_UPDATE": "true"]
+        case .copilot:
+            return CopilotLaunch.environment.merging(["HOME": privateHome.path]) { _, home in home }
         case .muse:
             let storage = workspace.appendingPathComponent(".noodle/muse")
             return ["HOME": privateHome.path, "XDG_CONFIG_HOME": privateHome.appendingPathComponent(".config").path,

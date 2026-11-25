@@ -107,7 +107,7 @@ final class RestrictedAgentSandboxTests: XCTestCase {
           [outside, inside].each(&:close)
         end
         """#
-        for provider: HarnessProvider in [.codex, .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity] {
+        for provider: HarnessProvider in [.codex, .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot] {
             let policy = provider == .codex
                 ? RestrictedAgentSandbox.profile(workspace: workspace, repository: root, codexHome: workspace,
                     executableDirectory: URL(fileURLWithPath: "/usr/bin"), application: workspace, temporary: workspace)
@@ -417,7 +417,7 @@ final class RestrictedAgentSandboxTests: XCTestCase {
     func testOnlyMuseCanListTheSystemLibraryFolders() throws {
         let listings = [#"(allow file-read-data (literal "/Library"))"#,
                         #"(allow file-read-data (literal "/Library/Application Support"))"#]
-        for provider in [HarnessProvider.claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity] {
+        for provider in [HarnessProvider.claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot] {
             let profile = try RestrictedAgentSandbox.profile(provider: provider,
                 workspace: URL(fileURLWithPath: "/fixture/bot/workspace"), repository: URL(fileURLWithPath: "/fixture"),
                 home: URL(fileURLWithPath: "/private-login"), executable: URL(fileURLWithPath: "/native/harness"),
@@ -431,6 +431,41 @@ final class RestrictedAgentSandboxTests: XCTestCase {
 
     func testInstalledGrokCanInitializeInsideItsRestrictedProfile() throws {
         try checkInstalledACP(provider: .grokBuild)
+    }
+
+    /// Copilot runs from the package unpacked once outside the bot, which the profile lets it read but not change.
+    /// With no login and no network it gets as far as asking for a sign-in, so everything before that worked.
+    func testInstalledCopilotRunsTheSharedPackageInsideItsRestrictedProfile() throws {
+        let realHome = HarnessStorage.userHome
+        let installed = realHome.appendingPathComponent(".local/bin/copilot")
+        guard FileManager.default.isExecutableFile(atPath: installed.path) else { throw XCTSkip("Copilot is not installed") }
+        let executable = try CopilotExecutableTrust.executable(at: installed.path, home: realHome)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("Noodle"))
+        let workspace = repository.directory(for: try repository.createAgent(named: "Copilot sandbox startup").agent)
+        let temporary = workspace.appendingPathComponent(".noodle/tmp")
+        try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+        let package = try CopilotLaunch.package(executable: executable, cacheHome: CopilotLaunch.cacheHome(root: repository.rootURL),
+                                                environment: ["HOME": root.path, "PATH": "/usr/bin:/bin"])
+        let policy = try RestrictedAgentSandbox.profile(provider: .copilot, workspace: workspace, repository: repository.rootURL,
+            home: root, executable: executable, package: package, application: workspace, temporary: temporary) + "\n(deny network*)"
+        var environment = try RestrictedAgentSandbox.environment(provider: .copilot, home: root, workspace: workspace)
+            .merging(HarnessProvider.copilot.reportingOffEnvironment) { own, _ in own }
+        environment["COPILOT_CLI_DIST_DIR"] = package.path
+        environment["TMPDIR"] = temporary.path
+        environment["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
+        let wire = try ACPWireFixture(executable: URL(fileURLWithPath: "/usr/bin/sandbox-exec"), workspace: workspace,
+                                     arguments: ["-p", policy, executable.path, "--acp"], environment: environment, requestTimeout: 30)
+        defer { wire.stop() }
+        XCTAssertEqual(try wire.request("initialize", FxProtocol.initializeParameters)["protocolVersion"] as? Int, 1)
+        XCTAssertThrowsError(try wire.request("session/new", ["cwd": workspace.path, "mcpServers": []])) {
+            XCTAssertTrue($0.localizedDescription.contains("Authentication required"), $0.localizedDescription)
+        }
+        let cache = RestrictedHarnessStorage.home(workspace: workspace).appendingPathComponent("Library/Caches/copilot")
+        let unpacked = FileManager.default.enumerator(at: cache, includingPropertiesForKeys: [.fileSizeKey])?
+            .compactMap { ($0 as? URL).flatMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize } }.reduce(0, +) ?? 0
+        XCTAssertLessThan(unpacked, 10_000_000, "The bot must not unpack its own copy of the package")
     }
 
     private func checkInstalledACP(provider: HarnessProvider) throws {

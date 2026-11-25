@@ -162,7 +162,7 @@ read this domain.
 
 Values for `AllowedHarnesses`:
 
-`codex` (Codex), `claude-code` (Claude Code), `muse` (Muse Code), `grok-build` (Grok Build), `fx` (FX), `opencode` (OpenCode), `antigravity` (Antigravity), `apple` (Apple Intelligence)
+`codex` (Codex), `claude-code` (Claude Code), `muse` (Muse Code), `grok-build` (Grok Build), `fx` (FX), `opencode` (OpenCode), `antigravity` (Antigravity), `copilot` (Copilot), `apple` (Apple Intelligence)
 
 Values for `MCPAllowList` and `MCPDenyList`:
 
@@ -224,7 +224,7 @@ Outbound connections, all HTTPS unless stated:
 | --- | --- |
 | Noodle and companion updates | `github.com` and the GitHub hosts its release downloads redirect to |
 | Harnesses | Each harness talks to its own provider, as it does outside Noodle. Allow what the harnesses you permit need. |
-| Harnesses Noodle installs (Managed by Noodle) | `api.github.com` and `releases.openai.com` (Codex), `downloads.claude.ai` (Claude Code), `releases.fx.sh` (FX), `x.ai` (Grok Build), `api.meta.ai` and `lookaside.facebook.com` (Muse Code), `opencode.ai` and `registry.npmjs.org` (OpenCode), `antigravity-cli-auto-updater-974169037036.us-central1.run.app` and `storage.googleapis.com` (Antigravity) |
+| Harnesses Noodle installs (Managed by Noodle) | `api.github.com` and `releases.openai.com` (Codex), `downloads.claude.ai` (Claude Code), `releases.fx.sh` (FX), `x.ai` (Grok Build), `api.meta.ai` and `lookaside.facebook.com` (Muse Code), `opencode.ai` and `registry.npmjs.org` (OpenCode), `antigravity-cli-auto-updater-974169037036.us-central1.run.app` and `storage.googleapis.com` (Antigravity), `api.github.com`, `github.com` and `release-assets.githubusercontent.com` (Copilot) |
 | Tool connections | The MCP servers people connect, and their sign-in pages |
 | Calls ringing on phones (Hubs) | `push.usenoodle.app`, and Apple's CloudKit |
 

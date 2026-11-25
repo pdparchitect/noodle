@@ -53,6 +53,7 @@ private enum HostPaths {
         case .muse: return try MuseExecutableTrust.executable(at: path, home: home)
         case .openCode: return try OpenCodeExecutableTrust.executable(at: path, home: home)
         case .antigravity: return try AntigravityExecutableTrust.executable(at: path, home: home)
+        case .copilot: return try CopilotExecutableTrust.executable(at: path, home: home)
         }
     }
 
@@ -200,6 +201,10 @@ if CommandLine.arguments.count == 13, CommandLine.arguments[1] == "--harness-chi
             if let model { strings += ["--model", model] }
             if let effort { strings += ["--reasoning-effort", effort] }
             strings += ["stdio"]
+        case .copilot:
+            // The model is chosen in the session, where Copilot refuses one its plan does not offer.
+            guard effort == nil, model.map(FxProtocol.validIdentifier) ?? true else { throw HostError("Unsupported Copilot model or effort.") }
+            strings = [executable.path, "--acp"]
         case .antigravity:
             guard effort == nil else { throw HostError("Unsupported Antigravity effort.") }
             // Noodle updates the copy it installed; the CLI updating itself would replace it unverified.
@@ -250,10 +255,14 @@ if CommandLine.arguments.count == 13, CommandLine.arguments[1] == "--harness-chi
                 profile = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
                     codexHome: codexHome, executableDirectory: executable.deletingLastPathComponent().deletingLastPathComponent(),
                     application: HostPaths.application, temporary: temporary, folders: folders, egressPort: egressPort)
-            case .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity:
+            case .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot:
+                // Copilot runs the package it unpacked once for every bot, which the bot may only read.
+                let package = provider != .copilot ? nil : try CopilotLaunch.package(executable: executable,
+                    cacheHome: CopilotLaunch.cacheHome(root: HostPaths.storage), environment: HostPaths.accountEnvironment)
+                if let package { setenv("COPILOT_CLI_DIST_DIR", package.path, 1) }
                 profile = try RestrictedAgentSandbox.profile(provider: provider, workspace: workspace, repository: repository,
-                    home: HostPaths.home, executable: executable, application: HostPaths.application, temporary: temporary,
-                    folders: folders, egressPort: egressPort)
+                    home: HostPaths.home, executable: executable, package: package, application: HostPaths.application,
+                    temporary: temporary, folders: folders, egressPort: egressPort)
             }
             if let egressPort {
                 for (key, value) in HarnessEgressProxy.environment(port: egressPort) { setenv(key, value, 1) }
@@ -261,8 +270,7 @@ if CommandLine.arguments.count == 13, CommandLine.arguments[1] == "--harness-chi
             setenv("TMPDIR", temporary.path, 1)
             setenv("TMPPREFIX", temporary.appendingPathComponent("zsh").path, 1)
             setenv("CODEX_HOME", codexHome.path, 1)
-            if provider == .claudeCode || provider == .fx || provider == .grokBuild || provider == .muse || provider == .openCode
-                || provider == .antigravity {
+            if provider != .codex && provider != .apple {
                 for (key, value) in try RestrictedAgentSandbox.environment(provider: provider, home: HostPaths.home, workspace: workspace) {
                     setenv(key, value, 1)
                 }
@@ -353,7 +361,7 @@ private final class HostSession: NSObject, AgentHostService {
     func startRestrictedACP(harnessIdentifier: String, agentID: String, executablePath: String,
                             modelIdentifier: String?, effortIdentifier: String?,
                             withReply reply: @escaping (Int32, String?) -> Void) {
-        guard let provider = HarnessProvider(rawValue: harnessIdentifier), provider == .fx || provider == .grokBuild || provider == .openCode else {
+        guard let provider = HarnessProvider(rawValue: harnessIdentifier), [.fx, .grokBuild, .openCode, .copilot].contains(provider) else {
             reply(0, "Unsupported restricted ACP harness.")
             return
         }
@@ -594,6 +602,17 @@ private final class HostSession: NSObject, AgentHostService {
         }
     }
 
+    func inspectCopilot(withReply reply: @escaping (Data?, String?) -> Void) {
+        queue.async {
+            do {
+                let result = try CopilotInspection.inspect(home: HostPaths.home, environment: HostPaths.defaultEnvironment(.copilot),
+                                                           managed: HostPaths.managedExecutable(.copilot),
+                                                           prefersManaged: HostPaths.managedHarnesses.isPreferred(.copilot))
+                reply(try JSONEncoder().encode(result), nil)
+            } catch { reply(nil, error.localizedDescription) }
+        }
+    }
+
     func inspectOpenCode(withReply reply: @escaping (Data?, String?) -> Void) {
         queue.async {
             do {
@@ -758,6 +777,10 @@ private final class HostSession: NSObject, AgentHostService {
                 return try FxInspection.status(executable: executable, environment: environment).authenticated
             case .openCode:
                 return try profiles.openCodeSignedIn(profile)
+            case .copilot:
+                return try CopilotInspection.inspect(home: HostPaths.home, environment: environment,
+                                                     managed: HostPaths.managedExecutable(.copilot),
+                                                     prefersManaged: HostPaths.managedHarnesses.isPreferred(.copilot)).authenticated
             default: throw HostError("This harness does not support this sign-in flow.")
             }
         }

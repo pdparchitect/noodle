@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- GitHub Copilot is a harness, off until turned on: the Hub can install it, signs in with a GitHub code, offers the models the Copilot plan includes and lends it like the other harnesses. Its usage reports to GitHub and its self-updates are turned off.
+
 ### Changed
 
 - Bots' harnesses run with their usage and error reports to Anthropic, OpenAI, xAI and Meta turned off, using each one's own setting and the standard DO_NOT_TRACK, including bots with extended access, which the network silo does not cover.

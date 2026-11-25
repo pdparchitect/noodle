@@ -47,7 +47,7 @@ public final class HarnessAccountOperation {
                         let challenge: HarnessSignInChallenge?
                         switch provider {
                         case .codex: challenge = CodexSetupProvider.relayedChallenge(url: url, code: code)
-                        case .grokBuild, .muse: challenge = HarnessProfileLogin.challenge(provider: provider, url: url, code: code)
+                        case .grokBuild, .muse, .copilot: challenge = HarnessProfileLogin.challenge(provider: provider, url: url, code: code)
                         default: challenge = FxProtocol.loginChallenge("Open \(url)\nCode: \(code)\n")
                         }
                         if let challenge { onChallenge?(challenge) }

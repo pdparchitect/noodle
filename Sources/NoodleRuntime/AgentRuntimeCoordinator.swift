@@ -47,7 +47,12 @@ public struct HarnessHostInspection {
             capabilityError: result.executablePath == nil ? "Antigravity is not installed" : (result.authenticated ? nil : "Run agy in Terminal to sign in, then check again."))
     }
 
-    static let providers: [HarnessProvider] = [.openCode, .grokBuild, .muse, .antigravity]
+    init(_ result: CopilotInspectionResult) {
+        self.init(executablePath: result.executablePath, models: result.models,
+            capabilityError: result.executablePath == nil ? "Copilot is not installed" : (result.authenticated ? nil : "Sign in to Copilot in Settings → Harness."))
+    }
+
+    static let providers: [HarnessProvider] = [.openCode, .grokBuild, .muse, .antigravity, .copilot]
 
     @MainActor public static func load(_ provider: HarnessProvider) async throws -> HarnessHostInspection {
         switch provider {
@@ -55,6 +60,7 @@ public struct HarnessHostInspection {
         case .openCode: return .init(try await OpenCodeHostProbe.load())
         case .muse: return .init(try await MuseHostProbe.load())
         case .antigravity: return .init(try await AntigravityHostProbe.load())
+        case .copilot: return .init(try await CopilotHostProbe.load())
         default: throw HarnessSetupError("\(provider.displayName) is not inspected by the Agent Host.")
         }
     }
@@ -1148,7 +1154,7 @@ public final class AgentRuntimeCoordinator {
     /// Only harnesses with a saved ACP session have recovery to prepare; the rest simply restart.
     private func sessionRecovery(_ recovery: SessionRecovery, for agent: AgentRecord) -> SessionRecovery? {
         let provider = runningAgent(agent).harnessIdentifier.flatMap(HarnessProvider.init(rawValue:))
-        return provider == .grokBuild || provider == .openCode ? recovery : nil
+        return provider?.recoversACPSessions == true ? recovery : nil
     }
 
     public func confirmKick(_ request: AgentKickRequest, repository: WorkspaceRepository) {
@@ -1298,7 +1304,7 @@ public final class AgentRuntimeCoordinator {
                         try storage.validate()
                         let running = self.runningAgent(agent)
                         guard let provider = running.harnessIdentifier.flatMap(HarnessProvider.init(rawValue:)),
-                              provider == .grokBuild || provider == .openCode else {
+                              provider.recoversACPSessions else {
                             throw HarnessSetupError("This harness does not support session recovery through Kick.")
                         }
                         let state = storage.sessionState(provider: provider,

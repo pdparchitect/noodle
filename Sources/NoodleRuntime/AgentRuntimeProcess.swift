@@ -86,7 +86,7 @@ public struct AgentRuntimeLaunch {
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,
                 onUnexpectedTermination: { onUnexpectedTermination($0, $1, $2) },
                 onActivity: onActivity, makeConnection: connectMuse)
-        case .apple, .fx, .grokBuild, .openCode:
+        case .apple, .fx, .grokBuild, .openCode, .copilot:
             return ACPAgentProcess(provider: provider, agent: agent, executableURL: executableURL, workspaceURL: workspaceURL,
                 extendedAccess: extendedAccess, recoverInterruptedWork: recoverInterruptedWork,
                 onSnapshot: onSnapshot, onHeartbeat: onHeartbeat,

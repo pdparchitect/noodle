@@ -31,6 +31,7 @@ final class HarnessSiloTests: XCTestCase {
         XCTAssertEqual(HarnessProvider.grokBuild.reportingOffEnvironment["DISABLE_TELEMETRY"], "1")
         XCTAssertEqual(HarnessProvider.grokBuild.reportingOffEnvironment["DISABLE_ERROR_REPORTING"], "1")
         XCTAssertEqual(HarnessProvider.muse.reportingOffEnvironment["TBH_DISABLE_TELEMETRY"], "1")
+        XCTAssertEqual(HarnessProvider.copilot.reportingOffEnvironment["COPILOT_TELEMETRY_DISABLED"], "true")
         let codex = CodexLaunch.appServerArguments()
         XCTAssertEqual(Array(codex.prefix(3)), ["app-server", "-c", "analytics.enabled=false"])
     }
@@ -82,7 +83,7 @@ final class HarnessSiloTests: XCTestCase {
         """#
         // The real port is only known to the script, so the policy carries a placeholder number first.
         let placeholder: UInt16 = 65_000
-        for provider: HarnessProvider in [.codex, .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity] {
+        for provider: HarnessProvider in [.codex, .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot] {
             // OpenCode's and Antigravity's own executables reach their local servers on any loopback port,
             // so ruby stands in for one of their tools here, not for the harness.
             let harness = URL(fileURLWithPath: [.openCode, .antigravity].contains(provider) ? "/usr/bin/true" : "/usr/bin/ruby")

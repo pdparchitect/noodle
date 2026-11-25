@@ -26,7 +26,7 @@ final class FirstBotSetup {
         case .claudeCode: "Claude"
         case .muse: "Muse"
         case .grokBuild: "Grok"
-        case .fx, .openCode, .antigravity, .apple: nil
+        case .fx, .openCode, .antigravity, .copilot, .apple: nil
         }
     }
 
@@ -42,7 +42,7 @@ final class FirstBotSetup {
         case .claudeCode: "Anthropic"
         case .muse: "Meta"
         case .grokBuild: "xAI"
-        case .fx, .openCode, .antigravity, .apple: nil
+        case .fx, .openCode, .antigravity, .copilot, .apple: nil
         }
     }
 

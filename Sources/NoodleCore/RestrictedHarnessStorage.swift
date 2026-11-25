@@ -117,6 +117,9 @@ public enum RestrictedHarnessStorage {
             } else {
                 try share("antigravity-oauth-token")
             }
+        case .copilot:
+            // Out of reach of the Keychain, Copilot keeps the login in its configuration file.
+            try share("config.json")
         default: break
         }
         for name in loginNames(provider) {
@@ -437,6 +440,7 @@ public enum RestrictedHarnessStorage {
         case .grokBuild: ".grok"
         case .muse: ".config/muse"
         case .antigravity: ".gemini/antigravity-cli"
+        case .copilot: ".copilot"
         default: nil
         }
     }
@@ -447,6 +451,7 @@ public enum RestrictedHarnessStorage {
         case .claudeCode: [".credentials.json"]
         case .fx: ["chatgpt-auth.json", "grok-auth.json", "api-key", "auth.json"]
         case .antigravity: ["antigravity-oauth-token"]
+        case .copilot: ["config.json"]
         default: []
         }
     }

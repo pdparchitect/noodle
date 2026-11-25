@@ -147,7 +147,7 @@ extension HarnessProvider {
         case .codex:
             ["juniper", "maple", "sol", "vale"].map { HarnessVoice(id: $0, presentation: .feminine) }
                 + ["arbor", "breeze", "cove", "ember", "spruce"].map { HarnessVoice(id: $0, presentation: .masculine) }
-        case .claudeCode, .muse, .grokBuild, .fx, .openCode, .antigravity, .apple:
+        case .claudeCode, .muse, .grokBuild, .fx, .openCode, .antigravity, .copilot, .apple:
             []
         }
     }

@@ -1,8 +1,8 @@
 # Harness setup
 
 A harness is the agent program behind each bot. Noodle supports Codex, Claude
-Code, Vercel FX, Grok Build, Muse Code, OpenCode v2, and Google Antigravity,
-using your own account, plus the experimental Apple Intelligence harness,
+Code, Vercel FX, Grok Build, Muse Code, OpenCode v2, Google Antigravity, and
+GitHub Copilot, using your own account, plus the experimental Apple Intelligence harness,
 which comes with Noodle and runs on your Mac.
 
 Noodle keeps its own sign-in for each harness, separate from the one the
@@ -51,7 +51,7 @@ To install a harness yourself:
 
 | Harness | Sign in |
 | --- | --- |
-| Codex, Claude Code, FX, Grok Build, Muse Code | **Sign In** in Noodle |
+| Codex, Claude Code, FX, Grok Build, Muse Code, Copilot | **Sign In** in Noodle |
 | OpenCode v2 | Works without an account on OpenCode's free models. For your own providers, **Sign In** shows a command to paste into Terminal. |
 | Antigravity | **Sign In** shows a command to paste into Terminal; follow its Google sign-in there. |
 | Apple Intelligence | Turn on Apple Intelligence in System Settings on a supported Mac running macOS 26 or later. No separate install or sign-in. |
@@ -68,8 +68,8 @@ explains what it covers.
 
 ## Profiles
 
-Claude Code, Codex, FX, Grok Build, Muse Code, OpenCode, and Antigravity can
-each be signed in to several accounts at once. Under the harness in **Settings → Harness**,
+Claude Code, Codex, FX, Grok Build, Muse Code, OpenCode, Antigravity, and
+Copilot can each be signed in to several accounts at once. Under the harness in **Settings → Harness**,
 choose **Profiles**, then **Add Profile…**, name it, and choose **Sign In…**
 beside it. Noodle shows a sign-in code and a button for the sign-in page. Claude
 Code instead opens its sign-in page in your browser. For Antigravity, Noodle
@@ -84,9 +84,9 @@ without deleting it.
 - Grok Build sign-ins expire after seven days; sign the profile in again from
   **Profiles**.
 - An unrestricted bot does not use your usual settings for its harness (in
-  `~/.claude`, `~/.codex`, `~/.grok`, `~/.config/muse` or `~/.gemini`), and
-  does not continue conversations started there. An unrestricted Antigravity
-  bot also does not see files in your home folder by their usual `~` paths,
+  `~/.claude`, `~/.codex`, `~/.grok`, `~/.config/muse`, `~/.gemini` or
+  `~/.copilot`), and does not continue conversations started there. An
+  unrestricted Antigravity or Copilot bot also does not see files in your home folder by their usual `~` paths,
   such as `~/.gitconfig` or `~/.ssh`.
 - A Codex or Claude Code conversation starts again when you change the bot's
   profile.
@@ -125,6 +125,18 @@ Reasoning effort is part of each Antigravity model's name, so there is no
 separate effort setting. Antigravity runs without asking for tool approvals; a
 restricted bot is still limited to its workspace. It cannot be interrupted
 mid-turn: an urgent message is handled as soon as the current turn ends.
+
+## Copilot
+
+Install Copilot with [GitHub's installer](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli):
+
+```sh
+curl -fsSL https://gh.io/copilot-install | bash
+```
+
+Copies installed with npm or Homebrew are not supported. **Sign In** shows a
+GitHub code and a button for GitHub's sign-in page. The models offered are the
+ones your Copilot plan includes; Copilot has no separate effort setting.
 
 ## Harnesses installed by Noodle
 

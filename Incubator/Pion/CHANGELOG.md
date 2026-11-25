@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- GitHub Copilot is a harness, off until turned on in **Settings › Harness**, with its usage reports to GitHub and its self-updates turned off.
+
 ### Changed
 
 - Agents' harnesses run with their usage and error reports to Anthropic, OpenAI, xAI and Meta turned off, using each one's own setting and the standard DO_NOT_TRACK.

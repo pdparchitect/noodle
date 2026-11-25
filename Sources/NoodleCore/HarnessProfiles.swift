@@ -197,6 +197,11 @@ public struct HarnessProfileStore: Sendable {
              "XDG_DATA_HOME": loginHome(profile).appendingPathComponent(".local/share", isDirectory: true).path,
              "XDG_STATE_HOME": loginHome(profile).appendingPathComponent(".local/state", isDirectory: true).path,
              "XDG_CACHE_HOME": loginHome(profile).appendingPathComponent(".cache", isDirectory: true).path]
+        // Copilot keeps logins in the Keychain, out of reach from another home, where it uses this
+        // folder instead. Its package is unpacked once for every login, not into each home.
+        case .copilot:
+            CopilotLaunch.environment.merging(["HOME": loginHome(profile).path,
+                "COPILOT_CACHE_HOME": CopilotLaunch.cacheHome(root: directory.deletingLastPathComponent()).path]) { _, home in home }
         default: [:]
         }
     }
@@ -297,6 +302,7 @@ public struct HarnessProfileStore: Sendable {
         case .claudeCode: ".claude"
         case .fx: ".fx"
         case .openCode: ".local/share/opencode"
+        case .copilot: ".copilot"
         default: ".codex"
         }
     }
@@ -348,11 +354,12 @@ public enum HarnessProfileLogin {
         switch provider {
         case .grokBuild: ["login", "--device-auth"]
         case .muse: ["login"]
+        case .copilot: ["login", "--device-code"]
         default: nil
         }
     }
 
-    /// Grok Build and Muse Code open the browser by themselves as soon as their
+    /// Grok Build, Muse Code and Copilot open the browser by themselves as soon as their
     /// sign-in starts. Kept away from the browser, they only print the page,
     /// which Noodle shows with the code for the person to open when ready.
     /// Claude Code has no code to show, so its sign-in still opens the browser.
@@ -364,6 +371,7 @@ public enum HarnessProfileLogin {
 
     /// A streaming read can end midway through a line; only whole lines count.
     public static func challenge(provider: HarnessProvider, text: String) -> HarnessSignInChallenge? {
+        if provider == .copilot { return CopilotProtocol.loginChallenge(text) }
         for line in text.components(separatedBy: .newlines).dropLast() {
             let candidate = line.trimmingCharacters(in: .whitespaces)
             guard candidate.hasPrefix("https://"), let components = URLComponents(string: candidate) else { continue }
@@ -380,6 +388,7 @@ public enum HarnessProfileLogin {
         switch provider {
         case .grokBuild: page = ("accounts.x.ai", "/oauth2/device")
         case .muse: page = ("auth.meta.com", "/oauth/device")
+        case .copilot: page = ("github.com", "/login/device")
         default: return nil
         }
         // Foundation drops a trailing slash from the path on some releases only.

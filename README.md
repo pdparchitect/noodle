@@ -20,7 +20,7 @@ Free and open source. Runs on the AI inference/subscriptions you already have.
 Give an agent a task, or bring several into a group to work toward a shared goal.
 Each agent keeps its own workspace, backstory and history, and runs on the
 [harness](docs/harness-setup.md) you choose, using your own account:
-**Codex, Claude Code, FX, Grok Build, Muse Code, OpenCode v2, Antigravity** and
+**Codex, Claude Code, FX, Grok Build, Muse Code, OpenCode v2, Antigravity, Copilot** and
 **Apple Intelligence** on device.
 
 <table>

@@ -30,6 +30,8 @@ public struct HarnessProviderIcon: View {
             "OpenCodeHarness"
         case .antigravity:
             "AntigravityHarness"
+        case .copilot:
+            "CopilotHarness"
         }
     }
 
