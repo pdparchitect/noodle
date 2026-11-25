@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-25
+
 ### Added
 
 - **Help › Setup Guide** and **Help › User Guide** open PDF guides published with each release, also linked from the download page: the Setup Guide for whoever prepares Pion's accounts and access, with a chapter for each service that needs the most setting up, and the User Guide for the people using Pion. Both grow as the documentation does.

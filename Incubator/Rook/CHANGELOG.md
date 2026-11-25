@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-25
+
 ### Added
 
 - **Help › Setup Guide** and **Help › User Guide** open PDF guides published with each release, also linked from the download page: the Setup Guide for whoever prepares Rook for a team, and the User Guide for the people using Rook. Both grow as the documentation does.
