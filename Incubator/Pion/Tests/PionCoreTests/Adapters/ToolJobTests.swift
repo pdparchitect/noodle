@@ -59,7 +59,7 @@ final class ToolJobTests: XCTestCase {
                                    "remove-from-group", "revoke-admin-role", "revoke-app-grants", "revoke-api-token", "check-access"],
                 detectionRequests: 8, containmentRequests: 4),
         Service(name: "Cloudflare", operations: Cloudflare.operations, detection: Cloudflare.adapter, containment: Cloudflare.containmentAdapter,
-                detectionTools: ["zones", "zone-dns", "zone-settings", "dns-exposure", "firewall-events", "audit-log", "members", "api-tokens", "access-logs",
+                detectionTools: ["zones", "zone-dns", "zone-settings", "dns-exposure", "firewall-events", "audit-log", "members", "access-logs",
                                  "access-apps", "access-app", "access-users", "access-user", "gateway-activity", "gateway-rules", "gateway-lists", "devices",
                                  "tunnels", "security-events", "check-access"],
                 containmentTools: ["access-user", "device", "action-status", "block-ip", "block-asn", "block-country", "unblock", "revoke-access-sessions",

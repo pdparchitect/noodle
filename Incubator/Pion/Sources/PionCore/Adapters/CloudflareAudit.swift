@@ -11,9 +11,9 @@ import NoodleToolConnections
 /// them. The lookups carry no token and nothing of the connection; they are bounded, and a run says how many it made
 /// and which it left out.
 extension Cloudflare {
-    static let zoneSettingsNeed = Need(title: "Zone settings", permission: "Zone › Zone Settings › Read", zone: true)
-    static let dnssecNeed = Need(title: "DNSSEC", permission: "Zone › DNS › Read", zone: true)
-    static let wafNeed = Need(title: "WAF managed rules", permission: "Zone › Zone WAF › Read", zone: true)
+    static let zoneSettingsNeed = Need(title: "Zone settings", scope: "zone-settings.read", zone: true)
+    static let dnssecNeed = Need(title: "DNSSEC", scope: "dns.read", zone: true)
+    static let wafNeed = Need(title: "WAF managed rules", scope: "zone-waf.read", zone: true)
 
     /// The settings zone-settings reads, by Cloudflare's ID for each
     /// (https://developers.cloudflare.com/api/resources/zones/subresources/settings/methods/get/).
@@ -194,9 +194,9 @@ extension Cloudflare {
         struct Input: Decodable, Sendable { let zone: String?, limit: Int? }
         static let name = "zone-settings"
         static let jobs: Set<ToolJob> = [.audit]
-        static let summary = "Each zone's security settings at the edge, weak ones first: SSL/TLS mode, minimum TLS version, Always Use HTTPS, Automatic HTTPS Rewrites, HSTS, TLS 1.3, DNSSEC, Opportunistic Encryption, Security Level, Browser Integrity Check and the WAF managed rulesets deployed at the zone, led by zones served over Flexible or Off SSL, allowing TLS below 1.2, not enforcing HTTPS or without DNSSEC; one zone, or every zone the token sees. Says what it could not read and which permission that needs."
+        static let summary = "Each zone's security settings at the edge, weak ones first: SSL/TLS mode, minimum TLS version, Always Use HTTPS, Automatic HTTPS Rewrites, HSTS, TLS 1.3, DNSSEC, Opportunistic Encryption, Security Level, Browser Integrity Check and the WAF managed rulesets deployed at the zone, led by zones served over Flexible or Off SSL, allowing TLS below 1.2, not enforcing HTTPS or without DNSSEC; one zone, or every zone the sign-in sees. Says what it could not read and which scope that needs."
         static let input = JSONSchema.object([
-            "zone": .string("Only this zone, by its domain, such as example.com. Every zone the token sees when left out."),
+            "zone": .string("Only this zone, by its domain, such as example.com. Every zone the sign-in sees when left out."),
             "limit": .integer("How many zones to read, at most, when no zone is given. 25 when left out.", minimum: 1, maximum: 100),
         ])
 
@@ -212,7 +212,7 @@ extension Cloudflare {
             if let domain {
                 zones = zones.filter { $0.text("name")?.lowercased() == domain }
                 guard zones.count == 1, zones.count == listing.value.count else {
-                    throw ServiceError.input(zones.isEmpty ? "This account has no zone \(domain) that the token can see: check the name, or that the token's Zone Resources include it."
+                    throw ServiceError.input(zones.isEmpty ? "This account has no zone \(domain) that the sign-in can see: check the name, or that the signed-in member's role reaches it."
                                                            : "Cloudflare's answer for zone \(domain) named other zones too, so which one is meant could not be told.")
                 }
             }
@@ -232,7 +232,7 @@ extension Cloudflare {
             }
             var lines: [String] = []
             if audited.isEmpty {
-                lines.append("The token sees no zone in this account\(listing.complete ? "" : " in what was read").")
+                lines.append("The sign-in sees no zone in this account\(listing.complete ? "" : " in what was read").")
             } else {
                 lines.append(domain == nil ? "The security settings of \(Cloudflare.plural(audited.count, "zone")):" : "The security settings of \(audited[0].zone):")
                 let weak = audited.filter { !$0.weak.isEmpty }

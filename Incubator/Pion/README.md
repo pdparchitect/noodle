@@ -153,9 +153,10 @@ and the containment client only the scopes its actions take, never Real Time Res
 SentinelOne Detection and SentinelOne Containment each use a service user of their own and its API token, on
 one console under `sentinelone.net`: the detection user holds only the Viewer role, and the containment user a
 custom role with only the actions it takes, each sent with the exact IDs approved.
-Cloudflare Detection and Cloudflare Containment each use a scoped API token of their own, sent only to
-`api.cloudflare.com`: the detection token holds only Read permissions, for the edge and Zero Trust, and the
-containment token only the edit permissions its actions take. Vercel Detection and Vercel Containment each use
+Cloudflare Detection and Cloudflare Containment each sign in as an account member of their own through OAuth,
+with a private OAuth client your account makes for each, and reach only `api.cloudflare.com`: the detection
+sign-in's scopes only read, for the edge and Zero Trust, and the containment sign-in holds only the scopes its
+actions take. Vercel Detection and Vercel Containment each use
 an access token of a team member of their own, sent only to `api.vercel.com`: Vercel's tokens cannot be narrowed,
 so the detection member holds only the Viewer role and the containment member the Member role. Duo Detection
 and Duo Containment each use an Admin API application of their own, as Duo's Admin API has no sign-in: its

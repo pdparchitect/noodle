@@ -227,7 +227,7 @@ extension Cloudflare {
     static func safeID(_ prefix: String, _ value: String) -> String { Azure.safeID(prefix, value) }
 
     /// What security-events and the watch say they do not cover.
-    static let unwatched = "Not watched: changes in the audit log of kinds Pion does not recognise from Cloudflare's own names for their action and resource, or that Cloudflare logged as failed; whether a change to an Access policy loosened it, as every change to Access policies and applications is told alike; DNS changes on records other than a zone's apex, MX and NS; firewall and Gateway rules made or loosened without being turned off or deleted; blocked Access logins fewer than \(burst) from one address or for one person within an hour, and allowed logins; Gateway's own DNS, HTTP and network decisions, firewall events at the edge, and Cloudflare's Security Center insights, which this watch does not read; changes made through the account's tokens before they reached the audit log; and anything in zones or accounts the token does not cover."
+    static let unwatched = "Not watched: changes in the audit log of kinds Pion does not recognise from Cloudflare's own names for their action and resource, or that Cloudflare logged as failed; whether a change to an Access policy loosened it, as every change to Access policies and applications is told alike; DNS changes on records other than a zone's apex, MX and NS; firewall and Gateway rules made or loosened without being turned off or deleted; blocked Access logins fewer than \(burst) from one address or for one person within an hour, and allowed logins; Gateway's own DNS, HTTP and network decisions, firewall events at the edge, and Cloudflare's Security Center insights, which this watch does not read; changes made through the account's tokens before they reached the audit log; and anything in zones or accounts the sign-in does not reach."
 
     struct SecurityEvents: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, until: String? }
@@ -293,7 +293,7 @@ extension Cloudflare {
     /// Each feed keeps the oldest of what it owes until it is read whole and all it found returned. Nothing a check
     /// read is kept when it fails.
     ///
-    /// A feed that cannot be read is never dropped unsaid: refused for want of a permission, the token rejected, or the
+    /// A feed that cannot be read is never dropped unsaid: refused for want of a scope or role, the sign-in rejected, or the
     /// account without Access, it is told as an alert of its own, which wakes the agents to read security-events,
     /// whose result names it and why. It is told once each time it starts, and again after a relaunch, dated at the
     /// start of the window read so it never moves the watch past what was not yet read. A page Cloudflare no longer
@@ -324,7 +324,7 @@ extension Cloudflare {
             try await alerts(since: since, on: service, account: account)
         }
 
-        /// Whether Cloudflare turned down the request itself, such as a page it no longer answers, rather than the token
+        /// Whether Cloudflare turned down the request itself, such as a page it no longer answers, rather than the sign-in
         /// or for now.
         static func rejects(_ error: Error) -> Bool {
             switch error {

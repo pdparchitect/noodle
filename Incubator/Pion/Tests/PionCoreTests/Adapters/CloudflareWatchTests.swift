@@ -69,7 +69,7 @@ final class CFLog: ServiceAccess, @unchecked Sendable {
 
 final class CloudflareWatchTests: XCTestCase {
     private func connection() -> ToolConnection {
-        try! Cloudflare.preset.makeConnection(name: "Cloudflare — Kestrel", values: ["account": CFLog.account])
+        try! Cloudflare.preset.makeConnection(name: "Cloudflare — Kestrel", values: ["account": CFLog.account, "clientID": CloudflareTests.clientID])
     }
 
     private func client(_ connection: ToolConnection, _ access: any ServiceAccess) -> ServiceClient {
@@ -263,7 +263,7 @@ final class CloudflareWatchTests: XCTestCase {
         service.mode = .denied
         let data = try await Cloudflare.adapter.run("security-events", arguments: Data("{}".utf8), connection: connection, access: service)
         let text = ((try JSONSerialization.jsonObject(with: data) as? [String: Any])?["content"] as? [[String: Any]])?.first?["text"] as? String ?? ""
-        XCTAssertTrue(text.contains("Nothing could be read") && text.contains("Account › Account Settings › Read") && text.contains("Account › Zero Trust › Read"), text)
+        XCTAssertTrue(text.contains("Nothing could be read") && text.contains("account-settings.read") && text.contains("teams.read"), text)
     }
 
     /// An account without Access is said once to have its logins off, and the audit log is still watched.

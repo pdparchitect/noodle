@@ -2,34 +2,34 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// Cloudflare: one account's edge (its zones with their DNS records and security settings, firewall events, audit log,
-/// members and API tokens) and its Zero Trust (Access authentication logs, applications, policies, users and their
-/// sessions, Gateway activity, rules and lists, WARP devices with their posture, and Cloudflare Tunnels), read with an
-/// API token. Cloudflare Detection
-/// only reads; Cloudflare Containment, a tool of its own with a token of its own, blocks addresses, networks and
-/// countries at the edge, revokes a user's Access sessions, blocks domains and addresses in Gateway, and revokes WARP
-/// devices.
+/// Cloudflare: one account's edge (its zones with their DNS records and security settings, firewall events, audit log
+/// and members) and its Zero Trust (Access authentication logs, applications, policies, users and their sessions,
+/// Gateway activity, rules and lists, WARP devices with their posture, and Cloudflare Tunnels), read as the account
+/// member who signs in. Cloudflare Detection only reads; Cloudflare Containment, a tool of its own with a sign-in of its
+/// own, blocks addresses, networks and countries at the edge, revokes a user's Access sessions, blocks domains and
+/// addresses in Gateway, and revokes WARP devices.
 ///
-/// Cloudflare has no sign-in for an admin: each tool sends its own scoped API token, as `Authorization: Bearer
-/// <token>`, and may do exactly what the token's permissions allow on the resources it names. check-access verifies
-/// the token and tries each read once, and sends no change.
+/// Both sign in through OAuth at Cloudflare's dashboard, with an authorization code and PKCE, through a private OAuth
+/// client the account made, which keeps no client secret. Cloudflare allows a request only when both the sign-in's
+/// scopes and the member's role allow it, and only in the accounts the member chose when signing in, so Cloudflare
+/// Detection's scopes only read, whatever the member may do. check-access tries each read once, and sends no change.
 ///
 /// Every request, and every next page, which Cloudflare gives as a page number or a cursor rather than an address,
 /// goes to api.cloudflare.com under /client/v4, and nowhere else; only dns-exposure also looks the targets of a zone's
 /// records up, at Cloudflare's own DNS-over-HTTPS resolver, cloudflare-dns.com, carrying no token and nothing of the
 /// connection. Cloudflare Radar is a separate tool on Cloudflare's own MCP server.
 ///
-/// Both tools' guide is Incubator/Pion/docs/tools/cloudflare.md. Change it with the setup steps, permissions or
-/// operations here.
+/// Both tools' guide is Incubator/Pion/docs/tools/cloudflare.md. Change it with the setup steps, scopes or operations
+/// here.
 public enum Cloudflare {
     public static let preset = ToolDefinition(
         id: "a975fdab-e1f0-486c-abf6-d941d667d6f7", name: "Cloudflare Detection",
-        summary: "Zones, their DNS and security settings, firewall events, the audit log, members and tokens at the edge, and Access logins, apps, users, Gateway activity and rules, WARP devices and tunnels in Zero Trust, read-only.",
+        summary: "Zones, their DNS and security settings, firewall events, the audit log and members at the edge, and Access logins, apps, users, Gateway activity and rules, WARP devices and tunnels in Zero Trust, read-only.",
         defaultInstructions: """
         Use Cloudflare Detection to see an account from Cloudflare's side. At the edge: zones and zone-dns list zones and \
         their DNS records; firewall-events reads what the WAF and firewall did to requests, by client IP, country, \
         path and rule; audit-log reads who changed what in the account and from where; members lists who holds which \
-        role and whether they use 2FA; api-tokens lists the account's own tokens. To audit how zones are set up, \
+        role and whether they use 2FA. To audit how zones are set up, \
         zone-settings reads each zone's SSL/TLS mode, minimum TLS, HTTPS enforcement, HSTS, DNSSEC and WAF managed rules, \
         weak ones first; dns-exposure groups a zone's records that point outside it by provider, for the champion to \
         confirm each is still in use, and marks CNAMEs whose target doesn't resolve, which is a lead to confirm and never \
@@ -45,15 +45,15 @@ public enum Cloudflare {
         made, and bursts of blocked Access logins. A note may name a feed the watch could not read: security-events \
         says why, so tell the champion and treat that feed's silence as unknown. When a tool is refused or something \
         you need seems missing, run check-access and tell the champion exactly what it says to change: an account may \
-        use only the edge or only Zero Trust, and the token may cover only part. Silence is not proof: every result \
+        use only the edge or only Zero Trust, and the sign-in may cover only part. Silence is not proof: every result \
         says when it stopped before reading everything or matched more than it kept. Record each finding as evidence, \
         citing the zone, application, user or device and the time window. These tools only read: recommend blocking \
         an address or revoking a session to the champion, or use Cloudflare Containment, with the target, why, and \
         how to undo it.
         """,
         iconName: "cloudflare",
-        configuration: .connection(.init(endpointTemplate: "https://api.cloudflare.com/client/v4", fields: [accountField],
-                                         tokenHeader: "Authorization", tokenScheme: "Bearer", adapter: "cloudflare")),
+        configuration: .connection(.init(endpointTemplate: "https://api.cloudflare.com/client/v4", fields: fields,
+                                         oauth: oauth(scopes: auditScopes), oauthClientField: "clientID", adapter: "cloudflare")),
         setup: setup)
 
     /// Cloudflare Radar's MCP server: the Internet as Cloudflare's network sees it, through any Cloudflare account's
@@ -71,26 +71,46 @@ public enum Cloudflare {
         iconName: "cloudflare",
         configuration: .connection(.init(endpoint: URL(string: "https://radar.mcp.cloudflare.com/mcp")!)))
 
-    static let accountField = ToolField(key: "account", title: "Account ID", placeholder: "023e105f4ecef8ad9ca31a8372d0c353", kind: .identifier)
-    static let accountStep = "The Account ID is on the account's **Overview** page, or in the **API** section of any zone's **Overview** page: 32 hexadecimal characters. Then ask an agent to run check-access."
+    static let fields = [ToolField(key: "account", title: "Account ID", placeholder: "023e105f4ecef8ad9ca31a8372d0c353", kind: .identifier),
+                         ToolField(key: "clientID", title: "Client ID", placeholder: "54d11594-84e4-41aa-b438-e81b8fa78ee7", kind: .identifier)]
 
-    /// Detection's token permissions, as the dashboard's Create Custom Token lists them: reads only.
-    static let auditPermissions = [
-        "Account › Account Settings › Read", "Account › Account API Tokens › Read", "Account › Zero Trust › Read",
-        "Account › Account Analytics › Read", "Account › Cloudflare Tunnel › Read", "Zone › Zone › Read", "Zone › DNS › Read", "Zone › Analytics › Read",
-        "Zone › Zone Settings › Read", "Zone › Zone WAF › Read",
-    ]
+    /// Cloudflare's authorization server, the dashboard's, which alone issues tokens for its API. Every sign-in asks for
+    /// the member's password again, so a browser already signed in to the dashboard as someone else never answers for
+    /// them.
+    static func oauth(scopes: [String]) -> MCPOAuthConfiguration {
+        MCPOAuthConfiguration(issuer: URL(string: "https://dash.cloudflare.com")!,
+                              authorizationEndpoint: URL(string: "https://dash.cloudflare.com/oauth2/auth")!,
+                              tokenEndpoint: URL(string: "https://dash.cloudflare.com/oauth2/token")!, clients: [],
+                              scopes: scopes, authorizationParameters: ["prompt": "login"],
+                              usesResourceIndicator: false, revocationEndpoint: URL(string: "https://dash.cloudflare.com/oauth2/revoke")!,
+                              unlistedScopes: ["offline_access"])
+    }
 
-    static let setup = [
-        "In the Cloudflare dashboard, open **Manage Account › Account API Tokens** (or **My Profile › API Tokens**) and choose **Create Token › Create Custom Token**. Name it Pion Detection, kept for this tool alone.",
-        "Give it only these permissions, each **Read**: \(auditPermissions.map { "**\($0)**" }.joined(separator: ", ")). An account that uses only the edge, or only Zero Trust, may leave out the other's; check-access says which parts the token covers. Give it nothing that edits.",
-        "Under **Account Resources** include only this account, and under **Zone Resources** only its zones. Optionally limit **Client IP Address Filtering** and set a **TTL**; then create the token and give it here. Cloudflare shows it only once. Pion sends it as `Authorization: Bearer <token>`.",
-        accountStep,
+    /// Only reading scopes, by Cloudflare's names, which are its API token permissions': the account's settings, with
+    /// its audit log and members; Zero Trust; account analytics, for Gateway activity; tunnels; and each zone, its DNS,
+    /// analytics, settings and WAF.
+    static let auditScopes = ["account-settings.read", "teams.read", "account-analytics.read", "argotunnel.read",
+                              "zone.read", "dns.read", "analytics.read", "zone-settings.read", "zone-waf.read"]
+
+    static func clientSteps(_ name: String, scopes: [String]) -> [String] {
+        [
+            "In the Cloudflare dashboard, open **Manage Account › OAuth clients** and choose **Create client**. Name it \(name), kept for this tool alone. Making one takes the Super Administrator, Administrator or OAuth Client Write role. Keep it private, the default, so only members of this account can sign in through it.",
+            "Choose the response type **code**, the grant types **Authorization Code** and **Refresh Token**, and the token authentication method **None**: Pion signs in with PKCE and keeps no client secret. Give exactly \(Okta.redirects) as the **Redirect URL**.",
+            "Choose **Continue** and add exactly these scopes, marking them required if the dashboard offers it: \(scopes.map { "`\($0)`" }.joined(separator: ", ")). Pion asks for these and `offline_access`, and refuses a sign-in that lacks any of these. Then choose **Create client**.",
+        ]
+    }
+
+    /// The last step of each tool's setup: the account, the client and the member who signs in.
+    static let connectStep = "Give the **Account ID**, on the account's **Overview** page or in the **API** section of any zone's **Overview** page (32 hexadecimal characters), and the client's **Client ID**. Choose **Add & Connect** and sign in as that member; when Cloudflare asks which accounts the client may reach, choose only this one. Then ask an agent to run check-access."
+
+    static let setup = clientSteps("Pion Detection", scopes: auditScopes) + [
+        "Cloudflare allows a request only when both the client's scopes and the signed-in member's role allow it, so Pion Detection's scopes only read, whatever the member may do. Keep a member of this account for Pion Detection alone, such as pion-detection@example.com, with the **Administrator Read Only** role under **Manage Account › Members**. An account that uses only the edge, or only Zero Trust, still adds every scope; check-access says which parts the sign-in reaches.",
+        connectStep,
     ]
 
     /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
     static let operations: [any ServiceOperation] = [
-        Zones(), ZoneDNS(), ZoneSettings(), DNSExposure(), FirewallEvents(), AuditLog(), Members(), APITokens(), AccessLogs(), AccessApps(), AccessApp(), AccessUsers(),
+        Zones(), ZoneDNS(), ZoneSettings(), DNSExposure(), FirewallEvents(), AuditLog(), Members(), AccessLogs(), AccessApps(), AccessApp(), AccessUsers(),
         AccessUser(), GatewayActivity(), GatewayRules(), GatewayLists(), Devices(), Tunnels(), SecurityEvents(), CheckAccess(),
         ContainmentAccessUser(), ContainmentDevice(), ActionStatus(), BlockIP(), BlockASN(), BlockCountry(), Unblock(), RevokeAccessSessions(),
         GatewayBlock(), GatewayUnblock(), RevokeDevice(), ContainmentCheckAccess(),
@@ -583,29 +603,29 @@ public enum Cloudflare {
 
     // MARK: Refusals
 
-    /// What one thing a tool reads or does needs: the token permission, as the dashboard's Create Custom Token lists it.
+    /// What one thing a tool reads or does needs: the sign-in's scope, by Cloudflare's name, which is also its API
+    /// token permission's.
     struct Need: Sendable {
         let title: String
-        let permission: String
+        let scope: String
         /// Whether it belongs to Zero Trust, which an account may not use.
         var zeroTrust = false
-        /// Whether it is read per zone, so the token's Zone Resources must include the zone.
+        /// Whether it is read per zone, so the member's role must reach the zone.
         var zone = false
     }
 
-    static let zonesNeed = Need(title: "Zones", permission: "Zone › Zone › Read", zone: true)
-    static let dnsNeed = Need(title: "DNS records", permission: "Zone › DNS › Read", zone: true)
-    static let firewallNeed = Need(title: "Firewall events", permission: "Zone › Analytics › Read", zone: true)
-    static let auditNeed = Need(title: "The account audit log", permission: "Account › Account Settings › Read")
-    static let membersNeed = Need(title: "Members", permission: "Account › Account Settings › Read")
-    static let tokensNeed = Need(title: "The account's API tokens", permission: "Account › Account API Tokens › Read")
-    static let accessLogsNeed = Need(title: "Access authentication logs", permission: "Account › Zero Trust › Read", zeroTrust: true)
-    static let accessAppsNeed = Need(title: "Access applications and policies", permission: "Account › Zero Trust › Read", zeroTrust: true)
-    static let accessUsersNeed = Need(title: "Access users and their sessions", permission: "Account › Zero Trust › Read", zeroTrust: true)
-    static let gatewayActivityNeed = Need(title: "Gateway activity", permission: "Account › Account Analytics › Read", zeroTrust: true)
-    static let gatewayNeed = Need(title: "Gateway rules and lists", permission: "Account › Zero Trust › Read", zeroTrust: true)
-    static let devicesNeed = Need(title: "WARP devices", permission: "Account › Zero Trust › Read", zeroTrust: true)
-    static let tunnelsNeed = Need(title: "Cloudflare Tunnels", permission: "Account › Cloudflare Tunnel › Read", zeroTrust: true)
+    static let zonesNeed = Need(title: "Zones", scope: "zone.read", zone: true)
+    static let dnsNeed = Need(title: "DNS records", scope: "dns.read", zone: true)
+    static let firewallNeed = Need(title: "Firewall events", scope: "analytics.read", zone: true)
+    static let auditNeed = Need(title: "The account audit log", scope: "account-settings.read")
+    static let membersNeed = Need(title: "Members", scope: "account-settings.read")
+    static let accessLogsNeed = Need(title: "Access authentication logs", scope: "teams.read", zeroTrust: true)
+    static let accessAppsNeed = Need(title: "Access applications and policies", scope: "teams.read", zeroTrust: true)
+    static let accessUsersNeed = Need(title: "Access users and their sessions", scope: "teams.read", zeroTrust: true)
+    static let gatewayActivityNeed = Need(title: "Gateway activity", scope: "account-analytics.read", zeroTrust: true)
+    static let gatewayNeed = Need(title: "Gateway rules and lists", scope: "teams.read", zeroTrust: true)
+    static let devicesNeed = Need(title: "WARP devices", scope: "teams.read", zeroTrust: true)
+    static let tunnelsNeed = Need(title: "Cloudflare Tunnels", scope: "argotunnel.read", zeroTrust: true)
 
     /// Whether Cloudflare refused because the account lacks what is asked for, such as Zero Trust or a plan's
     /// feature, rather than a permission.
@@ -623,12 +643,13 @@ public enum Cloudflare {
     static func fix(for error: Error, _ need: Need) -> String? {
         switch error {
         case ServiceError.rejected:
-            return "Cloudflare did not accept the API token: it expired, was revoked or rolled, or was mistyped. Make a new token as the Setup Steps say, and give it in Settings › Tools."
+            return "Cloudflare did not accept the sign-in: it expired or was revoked, the OAuth client was deleted or lost its Refresh Token grant, or the member left the account. Connect the tool again in Settings › Tools."
         case _ where unlicensed(error):
             return need.zeroTrust ? "the account does not have this part of Zero Trust, or Zero Trust is not set up for it, so it cannot be read."
                 : "the account or zone does not have this on its plan, so it cannot be read."
         case ServiceError.forbidden:
-            return "the token lacks **\(need.permission)**, or its \(need.zone ? "Zone Resources do not include this zone" : "Account Resources do not include this account"). Edit the token in the Cloudflare dashboard to add it, then try again."
+            // Cloudflare does not say which: a scope the sign-in lacks, the member's role, or an account left out at sign-in.
+            return "the sign-in lacks the scope \(need.scope), or the signed-in member's role does not allow this \(need.zone ? "in this zone" : "in this account"), or this account was not chosen when signing in. Add the scope to the Cloudflare OAuth client (Manage Account › OAuth clients) if it is missing and connect the tool again in Settings › Tools, choosing this account; otherwise give the member a role that allows it."
         default: return nil
         }
     }
@@ -641,7 +662,7 @@ public enum Cloudflare {
             case ServiceError.forbidden(let reason), ServiceError.rejected(let reason): reason
             default: nil
             }
-            throw ServiceError.input("Cloudflare refused \(need.title.lowercased())\(said.map { " (it said: \($0))" } ?? ""): \(fix) Running check-access shows which parts the token covers.")
+            throw ServiceError.input("Cloudflare refused \(need.title.lowercased())\(said.map { " (it said: \($0))" } ?? ""): \(fix) Running check-access shows which parts the sign-in reaches.")
         }
     }
 
@@ -703,7 +724,7 @@ public enum Cloudflare {
             throw ServiceError.input("Cloudflare's answer for zone \(domain) named other zones too, so which one is meant could not be told.")
         }
         switch named.count {
-        case 0: throw ServiceError.input("This account has no zone \(domain) that the token can see: check the name, or that the token's Zone Resources include it.")
+        case 0: throw ServiceError.input("This account has no zone \(domain) that the sign-in can see: check the name, or that the signed-in member's role reaches it.")
         case 1:
             guard let id = hex32(named[0].id) else { throw ServiceError.input("Cloudflare gave zone \(domain) an ID Pion does not recognise.") }
             return id
@@ -735,7 +756,7 @@ extension Cloudflare {
         struct Input: Decodable, Sendable { let name: String?, limit: Int? }
         static let name = "zones"
         static let jobs: Set<ToolJob> = [.detection, .audit]
-        static let summary = "The account's zones the token can see, with each one's ID, status, plan, type, whether it is paused, its name servers and when it was activated, saying when more matched than it kept."
+        static let summary = "The account's zones the sign-in can see, with each one's ID, status, plan, type, whether it is paused, its name servers and when it was activated, saying when more matched than it kept."
         static let input = JSONSchema.object([
             "name": .string("Only the zone with this exact domain, such as example.com."),
             "limit": .integer("How many zones, at most. 200 when left out.", minimum: 1, maximum: 1_000),
@@ -757,7 +778,7 @@ extension Cloudflare {
                 parts.append("activated \(zone.text("activated_on") ?? "not given")")
                 return "\(zone.text("name") ?? "unnamed") [\(zone.id)]: " + parts.joined(separator: ", ")
             }
-            let text = (zones.isEmpty ? "The token sees no zone in this account\(listing.complete ? "" : " in what was read")." : "\(Cloudflare.plural(zones.count, "zone")):\n" + lines.joined(separator: "\n")) + notice
+            let text = (zones.isEmpty ? "The sign-in sees no zone in this account\(listing.complete ? "" : " in what was read")." : "\(Cloudflare.plural(zones.count, "zone")):\n" + lines.joined(separator: "\n")) + notice
             struct Kept: Encodable { let zones: [String]; let total: Int?; let complete: Bool }
             return try ServiceResult(text: text, structured: Kept(zones: lines, total: listing.total, complete: listing.complete && !cut))
         }
@@ -953,99 +974,18 @@ extension Cloudflare {
             return try ServiceResult(text: text, structured: Kept(members: lines, total: listing.total, complete: listing.complete))
         }
     }
-
-    /// The account's own API tokens, from Account API Tokens Read: what each may do, from where, and when it was last
-    /// used. Tokens people made under their own profiles are theirs alone and are not listed.
-    struct APITokens: ServiceOperation {
-        struct Input: Decodable, Sendable {}
-        static let name = "api-tokens"
-        static let jobs: Set<ToolJob> = [.detection, .audit]
-        static let summary = "The account's own API tokens: what each may do, from which addresses, when it was issued, last used and expires; tokens people made under their own profiles are not listed. Says when it read only part."
-        static let input = JSONSchema.object([:])
-
-        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let listing = try await Cloudflare.read(Cloudflare.tokensNeed) {
-                try await Cloudflare.list(service, ["accounts", try Cloudflare.account(service), "tokens"], query: [:], as: Item.self, size: 50, pages: 20)
-            }
-            let lines = listing.value.map { token in
-                let policies = token.fields["policies"]?.items ?? []
-                let allowed = policies.filter { $0["effect"]?.text != "deny" }.flatMap { ($0["permission_groups"]?.items ?? []).compactMap { $0["name"]?.text } }
-                let ranges = token.texts("condition.request_ip.in")
-                let from = ranges.isEmpty ? "from anywhere" : "from " + ranges.joined(separator: ", ")
-                return "\(token.text("name") ?? token.id) (\(token.text("status") ?? "status not given")): \(allowed.isEmpty ? "no permissions listed" : allowed.joined(separator: ", ")), \(from), issued \(token.text("issued_on") ?? "at a time not given"), "
-                    + (token.text("last_used_on").map { "last used \($0)" } ?? "never used") + ", " + (token.text("expires_on").map { "expires \($0)" } ?? "never expires") + " [\(token.id)]"
-            }
-            let text = (lines.isEmpty ? "The account has no API tokens of its own\(listing.complete ? "" : " in what was read")." : lines.joined(separator: "\n")) + Cloudflare.stopped(listing, "API tokens")
-            struct Kept: Encodable { let tokens: [String]; let total: Int?; let complete: Bool }
-            return try ServiceResult(text: text, structured: Kept(tokens: lines, total: listing.total, complete: listing.complete))
-        }
-    }
 }
 
 // MARK: - Access
 
 extension Cloudflare {
-    /// The token as Cloudflare verifies it: its ID, whether it is active, when it expires, and whether it is an
-    /// account's own token or a person's.
-    struct Verified: Sendable {
-        let id: String
-        let status: String?, expires: String?, notBefore: String?
-        let ownedByAccount: Bool
-    }
-
-    /// Verifies the token with Cloudflare, as an account's own token first and then as a person's, and says what it
-    /// found as lines. Neither needs a permission, and neither changes anything.
-    static func verify(_ service: ServiceClient) async -> (token: Verified?, lines: [String]) {
-        var said: [String] = []
-        var rejected = false
-        for (path, ownedByAccount) in [(["accounts", (try? account(service)) ?? "", "tokens", "verify"], true), (["user", "tokens", "verify"], false)] {
-            guard !path.contains("") else { continue }
-            do {
-                let answer = try await raw(service, path)
-                if answer.response.statusCode == 401 || answer.response.statusCode == 403 { rejected = true }
-                try check(answer)
-                let envelope: Envelope<Value> = try decode(answer.data)
-                let result = try envelope.value()
-                guard let id = result["id"]?.text else { throw ServiceError.unreadable }
-                let token = Verified(id: id, status: result["status"]?.text, expires: result["expires_on"]?.text, notBefore: result["not_before"]?.text, ownedByAccount: ownedByAccount)
-                var lines = ["✓ Cloudflare verified the token: \(ownedByAccount ? "an account's own token" : "a token a person made under their profile"), ID \(id), status \(token.status ?? "not given")."]
-                if token.status != "active" { lines[0] = "✗ Cloudflare knows the token, but its status is \(token.status ?? "not given"), not active: make a new one as the Setup Steps say." }
-                if let expires = token.expires {
-                    let soon = ServiceAlert.time(expires).map { $0 < Date().addingTimeInterval(14 * 86_400) } ?? false
-                    lines.append("\(soon ? "⚠" : "·") It expires \(expires)\(soon ? ": make a new one before then" : "").")
-                } else { lines.append("· It has no expiry date.") }
-                if !ownedByAccount { lines.append("· An account's own token (Manage Account › Account API Tokens) outlasts the person who made it; one under a person's profile stops when they leave the account.") }
-                return (token, lines)
-            } catch {
-                said.append("\(ownedByAccount ? "as an account's token" : "as a person's token"): \(error.localizedDescription)")
-            }
-        }
-        let fix = rejected ? "Cloudflare did not accept the token: it expired, was revoked or rolled, or was mistyped. Make a new one as the Setup Steps say, and give it in Settings › Tools." : "Cloudflare could not be asked."
-        return (nil, ["✗ The token could not be verified (\(said.joined(separator: "; "))). \(fix)"])
-    }
-
-    /// The token's own permissions, read from its own record, which needs Account API Tokens Read (or, for a person's
-    /// token, their API Tokens Read); nil when it could not be read.
-    static func ownPermissions(_ service: ServiceClient, _ token: Verified) async -> [String]? {
-        do {
-            let path = token.ownedByAccount ? ["accounts", try account(service), "tokens", token.id] : ["user", "tokens", token.id]
-            let record = try await get(service, path, as: Value.self)
-            guard record["id"]?.text == token.id, let policies = record["policies"]?.items else { return nil }
-            let allowed = policies.filter { $0["effect"]?.text?.lowercased() != "deny" }
-            return Array(Set(allowed.flatMap { ($0["permission_groups"]?.items ?? []).compactMap { $0["name"]?.text } })).sorted()
-        } catch { return nil }
-    }
-
-    /// Whether a permission's name says it changes something: anything but Read.
-    static func changes(_ permission: String) -> Bool { !permission.hasSuffix(" Read") && !permission.hasSuffix("Read") }
-
     enum Probe { case works, refused, off, failed }
 
     /// Tries a read once, and says whether it works.
     static func probe(_ need: Need, required: Bool, _ body: () async throws -> Void) async -> (state: Probe, line: String) {
         do {
             try await body()
-            return (.works, "✓ \(need.title) (\(need.permission))")
+            return (.works, "✓ \(need.title) (\(need.scope))")
         } catch {
             if unlicensed(error) { return (.off, "· \(need.title): " + (fix(for: error, need) ?? error.localizedDescription)) }
             let refused = fix(for: error, need)
@@ -1053,38 +993,27 @@ extension Cloudflare {
         }
     }
 
-    /// What one part of the account the token covers, said as a line: edge or Zero Trust.
+    /// What one part of the account the sign-in reaches, said as a line: edge or Zero Trust.
     static func coverage(_ part: String, _ states: [Probe]) -> String {
         if states.allSatisfy({ $0 == .works }) { return "· \(part): every read works." }
         if states.allSatisfy({ $0 == .off }) { return "· \(part): the account does not use it, so it is not read." }
-        if !states.contains(.works) { return "· \(part): no read works, so nothing of it is read; if the account uses it, give the token the permissions above." }
+        if !states.contains(.works) { return "· \(part): no read works, so nothing of it is read; if the account uses it, change what is said above." }
         return "· \(part): only part of it can be read; see above for what to add."
     }
 
-    /// Tries each thing Detection reads once and says what works and what to change, with the token as Cloudflare verifies
-    /// it. It sends only reads.
+    /// Tries each thing Detection reads once and says what works and what to change, and which scopes the sign-in holds.
+    /// It sends only reads. Cloudflare documents no way for an OAuth token to verify itself, so none is tried.
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
         static let jobs: Set<ToolJob> = [.detection, .audit]
-        static let summary = "Verifies the token with Cloudflare (whose it is, whether active, when it expires), lists its own permissions when it may read them and warns of any that change things, tries each thing this tool reads once, at the edge and in Zero Trust, and says which parts the token covers and what to add. It sends only reads."
+        static let summary = "Tries each thing this tool reads once, at the edge and in Zero Trust, and says what works and, for what does not, what to change, in the OAuth client's scopes or the member's role; which parts of the account the sign-in reaches; and which scopes it holds. It sends only reads."
         static let input = JSONSchema.object([:])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             try Cloudflare.api(service)
             let account = try Cloudflare.account(service)
             var lines = ["· Account \(account), reached at https://\(Cloudflare.host)\(Cloudflare.basePath) and nowhere else."]
-            let (token, said) = await Cloudflare.verify(service)
-            lines += said
-            if let token {
-                if let names = await Cloudflare.ownPermissions(service, token) {
-                    let changing = names.filter(Cloudflare.changes)
-                    lines.append("· Its own record lists: \(names.joined(separator: ", ")).")
-                    lines.append(changing.isEmpty ? "✓ Every permission it holds only reads." : "⚠ It holds \(changing.joined(separator: ", ")), which change things: Detection's token should hold only Read permissions. Edit it in the Cloudflare dashboard.")
-                } else {
-                    lines.append("· Its own permissions could not be read (that needs Account API Tokens › Read for an account's token), so whether it holds more than Read is not verified: check it in the dashboard.")
-                }
-            }
             var edge: [Probe] = [], zeroTrust: [Probe] = []
             func record(_ result: (state: Probe, line: String), zt: Bool) { lines.append(result.line); if zt { zeroTrust.append(result.state) } else { edge.append(result.state) } }
             var firstZone: String?
@@ -1103,7 +1032,7 @@ extension Cloudflare {
                     _ = try await Cloudflare.get(service, ["zones", zone, "dnssec"], as: Value.self)
                 }, zt: false)
                 record(await Cloudflare.probe(Cloudflare.wafNeed, required: false) {
-                    // A zone whose managed rules were never deployed answers 404, which the token was allowed to ask.
+                    // A zone whose managed rules were never deployed answers 404, which the sign-in was allowed to ask.
                     do { _ = try await Cloudflare.get(service, ["zones", zone, "rulesets", "phases", "http_request_firewall_managed", "entrypoint"], as: Value.self) }
                     catch ServiceError.notFound {}
                 }, zt: false)
@@ -1114,16 +1043,13 @@ extension Cloudflare {
                                                      variables: Variables(zoneTag: zone, since: Cloudflare.iso(Date().addingTimeInterval(-3_600))), as: Answer.self)
                 }, zt: false)
             } else {
-                lines.append("· DNS records, zone settings, DNSSEC, WAF managed rules and firewall events were not tried: the token sees no zone. If the account has zones, include them under the token's Zone Resources.")
+                lines.append("· DNS records, zone settings, DNSSEC, WAF managed rules and firewall events were not tried: the sign-in sees no zone. If the account has zones, give the signed-in member a role that reads them.")
             }
             record(await Cloudflare.probe(Cloudflare.auditNeed, required: true) {
                 _ = try await Cloudflare.list(service, ["accounts", account, "audit_logs"], query: ["since": Cloudflare.iso(Date().addingTimeInterval(-3_600))], as: Item.self, size: 1, pages: 1)
             }, zt: false)
             record(await Cloudflare.probe(Cloudflare.membersNeed, required: false) {
                 _ = try await Cloudflare.list(service, ["accounts", account, "members"], query: [:], as: Item.self, size: 5, pages: 1)
-            }, zt: false)
-            record(await Cloudflare.probe(Cloudflare.tokensNeed, required: false) {
-                _ = try await Cloudflare.list(service, ["accounts", account, "tokens"], query: [:], as: Item.self, size: 5, pages: 1)
             }, zt: false)
             record(await Cloudflare.probe(Cloudflare.accessLogsNeed, required: false) {
                 _ = try await Cloudflare.accessLogins(service, since: Date().addingTimeInterval(-3_600), until: Date(), pages: 1, size: 1, partial: true)
@@ -1152,8 +1078,15 @@ extension Cloudflare {
             lines.append(Cloudflare.coverage("The edge", edge))
             lines.append(Cloudflare.coverage("Zero Trust", zeroTrust))
             lines.append("· The alert watch reads the account audit log and the Access logins; what it cannot read it says once, and security-events says why.")
-            lines.append("· Pion Detection's token should hold only: \(Cloudflare.auditPermissions.joined(separator: ", ")).")
+            lines.append(Cloudflare.scopesLine(Cloudflare.auditScopes, service))
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
         }
+    }
+
+    /// The scopes a sign-in holds, as a line of check-access: those its tool asks for, as Pion refuses a sign-in
+    /// Cloudflare grants fewer, and the client they are granted to.
+    static func scopesLine(_ scopes: [String], _ service: ServiceClient) -> String {
+        let client = service.settings["clientID"].map { " to the Cloudflare OAuth client \($0)" } ?? ""
+        return "· The sign-in holds the scopes \(scopes.joined(separator: ", ")), granted\(client); Pion refuses a sign-in that lacks any. It also asks for offline_access, which renews the sign-in. Cloudflare allows a request only when the signed-in member's role allows it too, and only in the accounts chosen at sign-in."
     }
 }

@@ -5,7 +5,7 @@ import NoodleToolConnections
 import XCTest
 
 final class CloudflareContainmentTests: XCTestCase {
-    private let cf = try! Cloudflare.containment.makeConnection(name: "Cloudflare Containment — Kestrel", values: ["account": CloudflareTests.accountID])
+    private let cf = try! Cloudflare.containment.makeConnection(name: "Cloudflare Containment — Kestrel", values: ["account": CloudflareTests.accountID, "clientID": CloudflareTests.clientID])
     private let account = "/client/v4/accounts/\(CloudflareTests.accountID)"
     private var rules: String { "\(account)/firewall/access_rules/rules" }
     private let ruleID = "aaaabbbbccccddddeeeeffff00001111"
@@ -51,9 +51,8 @@ final class CloudflareContainmentTests: XCTestCase {
 
     private let pionToken = "0123456789abcdef0123456789abcdef"
 
-    /// The token as Cloudflare verifies it, and the account audit log's entries about the registration.
+    /// The account audit log's entries about the registration.
     private func attribution(_ service: FakeService, _ entries: String...) {
-        service.answers["\(account)/tokens/verify"] = envelope(#"{"id":"\#(pionToken)","status":"active"}"#)
         service.answers["\(account)/logs/audit"] = (200, #"{"success":true,"errors":[],"result":[\#(entries.joined(separator: ","))],"result_info":{"count":"\#(entries.count)","cursor":""}}"#)
     }
 
@@ -68,18 +67,27 @@ final class CloudflareContainmentTests: XCTestCase {
         service.sequences[path ?? rules] = [rulesPage(), envelope(ruleJSON()), rulesPage(ruleJSON())]
     }
 
-    func testContainmentIsItsOwnToolWithATokenOfItsOwn() throws {
+    func testContainmentIsItsOwnToolWithASignInOfItsOwn() throws {
         XCTAssertEqual(Cloudflare.containment.name, "Cloudflare Containment")
         XCTAssertNotEqual(Cloudflare.containment.id, Cloudflare.preset.id)
         XCTAssertNotNil(UUID(uuidString: Cloudflare.containment.id))
         XCTAssertEqual(cf.endpoint.absoluteString, "https://api.cloudflare.com/client/v4")
-        XCTAssertEqual(cf.tokenScheme, "Bearer")
+        XCTAssertNil(cf.tokenScheme, "no API token: it signs in through OAuth")
+        XCTAssertFalse(cf.keepsSecret)
+        guard case .connection(let configuration) = Cloudflare.containment.configuration else { return XCTFail() }
+        XCTAssertEqual(configuration.oauthClientField, "clientID")
+        let oauth = try XCTUnwrap(configuration.oauth(for: cf.settings))
+        XCTAssertEqual(oauth.authorizationEndpoint.absoluteString, "https://dash.cloudflare.com/oauth2/auth")
+        XCTAssertEqual(oauth.tokenEndpoint.absoluteString, "https://dash.cloudflare.com/oauth2/token")
+        XCTAssertEqual(Set(oauth.scopes), ["account-firewall-access-rules.write", "teams.write", "firewall-services.write", "zone.read"],
+                       "only the scopes its actions take")
         XCTAssertEqual(cf.adapter, "cloudflare-containment")
         XCTAssertNotNil(PionAdapters.all["cloudflare-containment"])
         XCTAssertNil(Cloudflare.containmentAdapter.watchedTool)
         XCTAssertTrue(PionCatalogue.entries.contains { $0.id == Cloudflare.containment.id })
         let setup = Cloudflare.containmentSetup.joined(separator: "\n")
-        for permission in Cloudflare.containmentPermissions + Cloudflare.containmentZonePermissions { XCTAssertTrue(setup.contains("**\(permission)**"), permission) }
+        for scope in Cloudflare.containmentScopes { XCTAssertTrue(setup.contains("`\(scope)`"), scope) }
+        XCTAssertTrue(setup.contains("com.pdparchitect.pion:/oauth2callback") && setup.contains("**Client ID**"), setup)
         XCTAssertTrue(setup.contains("Pion Containment") && setup.contains("apart from Pion Detection's"), setup)
     }
 
@@ -495,32 +503,30 @@ final class CloudflareContainmentTests: XCTestCase {
         XCTAssertNil(try Cloudflare.owned(client(service)) { $0.id == ruleID })
         Cloudflare.keepContainmentRecords(at: file)
         XCTAssertNotNil(try Cloudflare.owned(client(service)) { $0.id == ruleID }, "read back after a relaunch")
-        let other = try Cloudflare.containment.makeConnection(name: "Another", values: ["account": CloudflareTests.accountID])
+        let other = try Cloudflare.containment.makeConnection(name: "Another", values: ["account": CloudflareTests.accountID, "clientID": CloudflareTests.clientID])
         let refused = try await call("unblock", #"{"id":"\#(ruleID)"}"#, FakeService(), in: other)
         XCTAssertTrue(refused.isError && refused.text.contains("no record of making"), refused.text)
         Cloudflare.keepContainmentRecords(at: nil)
     }
 
-    /// action-status and check-access only read; check-access says the edit permissions are verified only by the token's
-    /// own record.
+    /// action-status and check-access only read; check-access says the edits themselves are not verified, and which
+    /// scopes the sign-in holds.
     func testActionStatusAndCheckAccessOnlyRead() async throws {
         let service = FakeService()
         service.answers[rules] = rulesPage(ruleJSON(notes: "someone else's"))
         let status = try await call("action-status", #"{"blocked":"203.0.113.77"}"#, service)
         XCTAssertTrue(!status.isError && status.text.contains("Pion has no record of making this one"), status.text)
-        service.answers["\(account)/tokens/verify"] = envelope(#"{"id":"0123456789abcdef0123456789abcdef","status":"active"}"#)
         service.answers["\(account)/gateway/lists"] = (200, #"{"success":true,"errors":[],"result":[]}"#)
         service.answers["\(account)/devices/registrations"] = CloudflareTests.page("", total: 0)
         service.answers["\(account)/access/users"] = CloudflareTests.page("", total: 0)
         let checked = try await call("check-access", "{}", service)
         XCTAssertFalse(checked.isError, checked.text)
-        XCTAssertTrue(checked.text.contains("✓ Cloudflare verified the token") && checked.text.contains("✓ The account's IP Access rules"), checked.text)
-        XCTAssertTrue(checked.text.contains("Not verified: Account › Account Firewall Access Rules › Edit, Account › Zero Trust › Edit"), checked.text)
+        XCTAssertTrue(checked.text.contains("✓ The account's IP Access rules (account-firewall-access-rules.write)") && checked.text.contains("✓ Access users (teams.write)"), checked.text)
+        XCTAssertTrue(checked.text.contains("Not verified: that the member's role lets the actions change"), checked.text)
+        XCTAssertTrue(checked.text.contains("The sign-in holds the scopes account-firewall-access-rules.write, teams.write, firewall-services.write, zone.read")
+                      && checked.text.contains(CloudflareTests.clientID), checked.text)
         XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" }, "only reads")
-        service.answers["\(account)/tokens/0123456789abcdef0123456789abcdef"] = envelope(#"{"id":"0123456789abcdef0123456789abcdef","policies":[{"effect":"allow","permission_groups":[{"name":"Account Firewall Access Rules Write"},{"name":"Zero Trust Write"},{"name":"DNS Write"}]}]}"#)
-        let proven = try await call("check-access", "{}", service)
-        XCTAssertFalse(service.requests.contains { $0.url?.path.hasSuffix("/logs/audit") == true }, "check-access no longer reads the audit log")
-        XCTAssertTrue(proven.text.contains("✓ Its own record shows Account › Account Firewall Access Rules › Edit and Account › Zero Trust › Edit") && proven.text.contains("⚠ It also holds DNS Write"), proven.text)
-        XCTAssertFalse(proven.text.contains("Not verified"), proven.text)
+        XCTAssertFalse(service.requests.contains { $0.url?.path.contains("tokens") == true }, "no token is verified or read")
+        XCTAssertFalse(service.requests.contains { $0.url?.path.hasSuffix("/logs/audit") == true }, "check-access does not read the audit log")
     }
 }

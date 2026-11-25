@@ -3,10 +3,10 @@ import NoodleCore
 import NoodleToolConnections
 import Synchronization
 
-/// Cloudflare Containment: responding in one account, with a token of its own holding only the edit permissions its
-/// actions take, kept apart from Detection's so the detection token stays read-only. Every action that blocks or unblocks
-/// traffic, revokes sessions or devices, or gives them back waits for the champion's approval, and each says what
-/// recovering from it involves.
+/// Cloudflare Containment: responding in one account, with an OAuth sign-in of its own, through a client of its own
+/// holding only the scopes its actions take, as a member of its own whose role limits it, kept apart from Detection's
+/// so the detection sign-in stays read-only. Every action that blocks or unblocks traffic, revokes sessions or devices,
+/// or gives them back waits for the champion's approval, and each says what recovering from it involves.
 ///
 /// Pion reads what it acts on whole first, by its exact ID or value, and refuses what is already as asked. It removes
 /// only what it made: an IP Access rule, or an item in its own Gateway list, is Pion's only by Pion's own record of
@@ -41,30 +41,29 @@ extension Cloudflare {
         tell the champion exactly what it says to change.
         """,
         iconName: "cloudflare",
-        configuration: .connection(.init(endpointTemplate: "https://api.cloudflare.com/client/v4", fields: [accountField],
-                                         tokenHeader: "Authorization", tokenScheme: "Bearer", adapter: "cloudflare-containment")),
+        configuration: .connection(.init(endpointTemplate: "https://api.cloudflare.com/client/v4", fields: fields,
+                                         oauth: oauth(scopes: containmentScopes), oauthClientField: "clientID",
+                                         adapter: "cloudflare-containment")),
         setup: containmentSetup)
 
-    /// Containment's token permissions, as the dashboard's Create Custom Token lists them: only what its actions take.
-    static let containmentPermissions = ["Account › Account Firewall Access Rules › Edit", "Account › Zero Trust › Edit"]
-    /// Needed only to block or unblock in one zone rather than the whole account.
-    static let containmentZonePermissions = ["Zone › Firewall Services › Edit", "Zone › Zone › Read"]
+    /// The scopes its actions take, by Cloudflare's names, each of which also reads what it covers: the account's IP
+    /// Access rules; Zero Trust, for Access sessions, Gateway lists and rules and WARP devices, as Cloudflare has nothing
+    /// narrower; and, to block in one zone, the zone's IP Access rules and finding the zone by its name.
+    static let containmentScopes = ["account-firewall-access-rules.write", "teams.write", "firewall-services.write", "zone.read"]
 
-    static let containmentSetup = [
-        "In the Cloudflare dashboard, open **Manage Account › Account API Tokens** and choose **Create Token › Create Custom Token**. Name it Pion Containment, kept for this tool alone, apart from Pion Detection's.",
-        "Give it only \(containmentPermissions.map { "**\($0)**" }.joined(separator: " and ")). Cloudflare accepts nothing narrower for Gateway lists and WARP devices, and Zero Trust › Edit can change all of Zero Trust, so leave it out if agents should not block in Gateway, revoke devices or sessions. To block in one zone rather than the whole account, add \(containmentZonePermissions.map { "**\($0)**" }.joined(separator: " and ")) for that zone.",
-        "Under **Account Resources** include only this account, and under **Zone Resources** only the zones it may act on. Optionally limit **Client IP Address Filtering** and set a **TTL**; then create the token and give it here. Pion sends it as `Authorization: Bearer <token>`.",
-        accountStep,
+    static let containmentSetup = clientSteps("Pion Containment", scopes: containmentScopes) + [
+        "Cloudflare allows a request only when both the client's scopes and the signed-in member's role allow it, and `teams.write` can change all of Zero Trust, so the role is what limits this tool. Keep a member for Pion Containment alone, such as pion-containment@example.com, apart from Pion Detection's, with only roles that allow what it does, such as **Firewall** for IP Access rules and **Cloudflare Zero Trust** for Gateway, devices and Access sessions (still to be confirmed on a live account); leave the latter out if agents should not act in Zero Trust. Never make it a Super Administrator or Administrator.",
+        connectStep,
     ]
 
     public static let containmentAdapter = OperationAdapter(operations: operations, job: .containment, simultaneousRequests: 2)
 
     // MARK: What it needs
 
-    static let accountRulesNeed = Need(title: "The account's IP Access rules", permission: "Account › Account Firewall Access Rules › Edit")
-    static let zoneRulesNeed = Need(title: "The zone's IP Access rules", permission: "Zone › Firewall Services › Edit", zone: true)
-    static let zoneLookupNeed = Need(title: "Zones", permission: "Zone › Zone › Read", zone: true)
-    static let editZeroTrustNeed = Need(title: "Zero Trust", permission: "Account › Zero Trust › Edit", zeroTrust: true)
+    static let accountRulesNeed = Need(title: "The account's IP Access rules", scope: "account-firewall-access-rules.write")
+    static let zoneRulesNeed = Need(title: "The zone's IP Access rules", scope: "firewall-services.write", zone: true)
+    static let zoneLookupNeed = Need(title: "Zones", scope: "zone.read", zone: true)
+    static let editZeroTrustNeed = Need(title: "Zero Trust", scope: "teams.write", zeroTrust: true)
 
     /// How long to wait between reads of something just asked for, before saying where it stands.
     @TaskLocal static var pauses: [Double] = [1, 2, 3]
@@ -267,7 +266,7 @@ extension Cloudflare {
         let id: String
         do { id = try await Cloudflare.zone(domain, on: service) } catch let error as ServiceError {
             if case .input(let reason) = error, reason.hasPrefix("Cloudflare refused") {
-                throw ServiceError.input("Nothing was changed: " + reason.replacingOccurrences(of: zonesNeed.permission, with: zoneLookupNeed.permission))
+                throw ServiceError.input("Nothing was changed: " + reason.replacingOccurrences(of: zonesNeed.scope, with: zoneLookupNeed.scope))
             }
             throw ServiceError.input("Nothing was changed: \(error.localizedDescription)")
         }
@@ -1034,49 +1033,28 @@ extension Cloudflare {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
         static let jobs: Set<ToolJob> = [.containment]
-        static let summary = "Verifies the token with Cloudflare (whose it is, whether active, when it expires), lists its own permissions when it may read them, tries what the actions read first (the account's IP Access rules, Gateway lists and rules, WARP registrations and Access users), and says what it reaches. It sends only reads, so the actions' edit permissions are verified only when the token's own record lists them."
+        static let summary = "Tries what the actions read first (the account's IP Access rules, Gateway lists and rules, WARP registrations and Access users), says what it reaches and what to change, and which scopes the sign-in holds. It sends only reads, so the edits themselves are not verified: an action refused for want of one says what to change."
         static let input = JSONSchema.object([:])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             try Cloudflare.api(service)
             let account = try Cloudflare.account(service)
             var lines = ["· Account \(account), reached at https://\(Cloudflare.host)\(Cloudflare.basePath) and nowhere else."]
-            let (token, said) = await Cloudflare.verify(service)
-            lines += said
-            var proven: [String] = []
-            if let token {
-                if let names = await Cloudflare.ownPermissions(service, token) {
-                    lines.append("· Its own record lists: \(names.joined(separator: ", ")).")
-                    let wanted = ["Account Firewall Access Rules Write", "Account Firewall Access Rules Edit", "Zero Trust Write", "Zero Trust Edit", "Firewall Services Write", "Firewall Services Edit"]
-                    proven = Cloudflare.containmentPermissions.filter { permission in
-                        let group = permission.split(separator: "›").dropFirst().first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
-                        return names.contains("\(group) Write") || names.contains("\(group) Edit")
-                    }
-                    let extra = names.filter { Cloudflare.changes($0) && !wanted.contains($0) }
-                    if !extra.isEmpty { lines.append("⚠ It also holds \(extra.joined(separator: ", ")), which Containment does not use: remove them in the dashboard.") }
-                } else {
-                    lines.append("· Its own permissions could not be read (that needs Account API Tokens › Read, which Containment does not ask for).")
-                }
-            }
             lines.append(await Cloudflare.probe(Cloudflare.accountRulesNeed, required: true) {
                 _ = try await Cloudflare.list(service, ["accounts", account, "firewall", "access_rules", "rules"], query: [:], as: Item.self, size: 1, pages: 1)
             }.line)
-            lines.append(await Cloudflare.probe(Need(title: "Gateway lists and rules", permission: "Account › Zero Trust › Edit", zeroTrust: true), required: false) {
+            lines.append(await Cloudflare.probe(Need(title: "Gateway lists and rules", scope: "teams.write", zeroTrust: true), required: false) {
                 _ = try await Cloudflare.list(service, ["accounts", account, "gateway", "lists"], query: [:], as: Item.self, paging: .single, size: 0)
             }.line)
-            lines.append(await Cloudflare.probe(Need(title: "WARP registrations", permission: "Account › Zero Trust › Edit", zeroTrust: true), required: false) {
+            lines.append(await Cloudflare.probe(Need(title: "WARP registrations", scope: "teams.write", zeroTrust: true), required: false) {
                 _ = try await Cloudflare.list(service, ["accounts", account, "devices", "registrations"], query: ["status": "all"], as: Item.self, paging: .cursor, size: 1, pages: 1)
             }.line)
-            lines.append(await Cloudflare.probe(Need(title: "Access users", permission: "Account › Zero Trust › Edit", zeroTrust: true), required: false) {
+            lines.append(await Cloudflare.probe(Need(title: "Access users", scope: "teams.write", zeroTrust: true), required: false) {
                 _ = try await Cloudflare.list(service, ["accounts", account, "access", "users"], query: [:], as: Item.self, size: 1, pages: 1)
             }.line)
-            let unproven = Cloudflare.containmentPermissions.filter { !proven.contains($0) }
-            if !proven.isEmpty { lines.append("✓ Its own record shows \(proven.joined(separator: " and ")), which the actions take.") }
-            if !unproven.isEmpty {
-                lines.append("· Not verified: \(unproven.joined(separator: ", ")). Reads above succeed with Read as well as Edit, and check-access sends no change; an action refused for want of one says which.")
-            }
-            lines.append("· Blocking in one zone also takes \(Cloudflare.containmentZonePermissions.joined(separator: " and ")) for that zone, tried only when an action names one.")
-            lines.append("· Pion Containment's token should hold only \(Cloudflare.containmentPermissions.joined(separator: " and ")), plus the zone permissions to block in one zone.")
+            lines.append("· Not verified: that the member's role lets the actions change what these reads reach. check-access sends no change; an action refused for want of a scope or role says which.")
+            lines.append("· Blocking in one zone takes firewall-services.write and zone.read, and a role that reaches that zone, tried only when an action names one.")
+            lines.append(Cloudflare.scopesLine(Cloudflare.containmentScopes, service))
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
         }
     }

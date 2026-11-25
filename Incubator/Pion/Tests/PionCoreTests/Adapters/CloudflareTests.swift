@@ -8,7 +8,8 @@ import XCTest
 final class CloudflareTests: XCTestCase {
     static let accountID = "023e105f4ecef8ad9ca31a8372d0c353"
     static let zoneID = "4b2f1a0c9d8e7f6a5b4c3d2e1f0a9b8c"
-    private let cloudflare = try! Cloudflare.preset.makeConnection(name: "Cloudflare — Kestrel", values: ["account": CloudflareTests.accountID])
+    static let clientID = "54d11594-84e4-41aa-b438-e81b8fa78ee7"
+    private let cloudflare = try! Cloudflare.preset.makeConnection(name: "Cloudflare — Kestrel", values: ["account": CloudflareTests.accountID, "clientID": CloudflareTests.clientID])
     private let account = "/client/v4/accounts/\(CloudflareTests.accountID)"
 
     private func call(_ tool: String, _ arguments: String, _ service: FakeService) async throws -> AdapterResult {
@@ -28,22 +29,50 @@ final class CloudflareTests: XCTestCase {
         return (200, #"{"success":true,"errors":[],"messages":[],"result":[\#(items)],"result_info":{\#(info.joined(separator: ","))}}"#)
     }
 
-    func testAuditIsItsOwnReadOnlyToolWithABearerTokenAndRadarStaysApart() async throws {
+    func testDetectionIsItsOwnReadOnlyToolSignedInThroughOAuthAndRadarStaysApart() async throws {
         XCTAssertEqual(Cloudflare.preset.name, "Cloudflare Detection")
         XCTAssertEqual(Cloudflare.preset.id, "a975fdab-e1f0-486c-abf6-d941d667d6f7", "the catalogue entry keeps its ID")
         XCTAssertEqual(cloudflare.endpoint.absoluteString, "https://api.cloudflare.com/client/v4")
-        XCTAssertEqual(cloudflare.tokenHeader, "Authorization")
-        XCTAssertEqual(cloudflare.tokenScheme, "Bearer")
+        XCTAssertNil(cloudflare.tokenHeader, "no API token: it signs in through OAuth")
+        XCTAssertNil(cloudflare.tokenScheme)
+        XCTAssertFalse(cloudflare.keepsSecret)
+        XCTAssertEqual(cloudflare.settings?["clientID"], Self.clientID)
+        XCTAssertEqual(cloudflare.settings?["account"], Self.accountID)
         XCTAssertEqual(cloudflare.adapter, "cloudflare")
+        guard case .connection(let configuration) = Cloudflare.preset.configuration else { return XCTFail() }
+        XCTAssertNil(configuration.tokenRevocation)
+        XCTAssertEqual(configuration.oauthClientField, "clientID")
+        XCTAssertNil(configuration.oauthHostField, "Cloudflare's sign-in server is the same for every account")
+        XCTAssertNil(configuration.oauthPathField)
+        let oauth = try XCTUnwrap(configuration.oauth(for: cloudflare.settings))
+        XCTAssertEqual(oauth.issuer.absoluteString, "https://dash.cloudflare.com")
+        XCTAssertEqual(oauth.authorizationEndpoint.absoluteString, "https://dash.cloudflare.com/oauth2/auth")
+        XCTAssertEqual(oauth.tokenEndpoint.absoluteString, "https://dash.cloudflare.com/oauth2/token")
+        XCTAssertEqual(oauth.revocationEndpoint?.absoluteString, "https://dash.cloudflare.com/oauth2/revoke")
+        XCTAssertNil(oauth.deviceAuthorizationEndpoint, "an authorization code with PKCE, not a device code")
+        XCTAssertFalse(oauth.usesResourceIndicator)
+        XCTAssertEqual(oauth.authorizationParameters, ["prompt": "login"], "the member signs in afresh, never as whoever the browser is signed in as")
+        XCTAssertTrue(oauth.scopes.allSatisfy { $0.hasSuffix(".read") || $0 == "offline_access" }, "Cloudflare Detection only reads")
+        XCTAssertEqual(Set(oauth.scopes), ["account-settings.read", "teams.read", "account-analytics.read", "argotunnel.read", "zone.read", "dns.read",
+                                           "analytics.read", "zone-settings.read", "zone-waf.read"])
+        XCTAssertEqual(oauth.unlistedScopes, ["offline_access"])
+        XCTAssertFalse(oauth.scopes.contains { $0.contains("token") }, "no scope reads API tokens, so no operation lists them")
+        XCTAssertFalse(Cloudflare.operations.contains { type(of: $0).name == "api-tokens" })
+        XCTAssertTrue(Cloudflare.setup.contains { $0.contains("com.pdparchitect.pion:/oauth2callback") }, "the setup names the redirect URI Pion uses")
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use(PionCatalogue.entries)
+        XCTAssertTrue(ToolConnectionService.signsInThroughBrowser(cloudflare))
+        XCTAssertFalse(ToolConnectionService.signsInWithCode(cloudflare))
+        XCTAssertEqual(ToolConnectionService.configuredRedirectURI(for: cloudflare, bundleIdentifier: "com.pdparchitect.pion")?.absoluteString,
+                       "com.pdparchitect.pion:/oauth2callback")
+        XCTAssertEqual(ToolConnectionService.configuredRedirectURI(for: cloudflare, bundleIdentifier: "com.pdparchitect.pion.local")?.absoluteString,
+                       "com.pdparchitect.pion.local:/oauth2callback")
         XCTAssertNotNil(PionAdapters.all["cloudflare"])
         XCTAssertEqual(Cloudflare.adapter.watchedTool, "security-events")
         XCTAssertEqual(Cloudflare.radar.name, "Cloudflare Radar")
         XCTAssertEqual(Cloudflare.radar.id, "1a8b84b4-61cf-489c-9674-7dd239072a2e")
         let setup = Cloudflare.setup.joined(separator: "\n")
-        for permission in Cloudflare.auditPermissions {
-            XCTAssertTrue(setup.contains("**\(permission)**"), permission)
-            XCTAssertTrue(permission.hasSuffix("› Read"), permission)
-        }
+        XCTAssertTrue(Cloudflare.auditScopes.allSatisfy { setup.contains("`\($0)`") }, "the setup adds every scope asked for: \(setup)")
         let listed = try JSONSerialization.jsonObject(with: try await Cloudflare.adapter.tools(for: cloudflare)) as! [String: Any]
         for tool in try XCTUnwrap(listed["tools"] as? [[String: Any]]) {
             XCTAssertEqual((tool["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool, true, "\(tool["name"] ?? "")")
@@ -59,7 +88,7 @@ final class CloudflareTests: XCTestCase {
             do { _ = try await Cloudflare.Zones().run(.init(name: nil, limit: nil), on: client); XCTFail(base) }
             catch { XCTAssertTrue(error.localizedDescription.contains("Nothing was sent"), "\(base): \(error.localizedDescription)") }
         }
-        let wrong = try Cloudflare.preset.makeConnection(name: "Cloudflare", values: ["account": "not-an-account"])
+        let wrong = try Cloudflare.preset.makeConnection(name: "Cloudflare", values: ["account": "not-an-account", "clientID": Self.clientID])
         let refused = try await callTool(Cloudflare.adapter, "members", "{}", on: service, in: wrong)
         XCTAssertTrue(refused.isError && refused.text.contains("32 hexadecimal"), refused.text)
         XCTAssertTrue(service.requests.isEmpty)
@@ -128,7 +157,7 @@ final class CloudflareTests: XCTestCase {
         XCTAssertEqual(result.structured?["weakZones"] as? Int, 1)
         XCTAssertEqual(queryItems(service.requests.first)["account.id"], Self.accountID)
 
-        // One zone by name; a token without Zone WAF Read still reads the rest, and says what it could not.
+        // One zone by name; a sign-in without zone-waf.read still reads the rest, and says what it could not.
         let partial = FakeService()
         Self.zone(partial)
         partial.answers["\(weak)/settings"] = service.answers["\(weak)/settings"]
@@ -137,15 +166,15 @@ final class CloudflareTests: XCTestCase {
         let one = try await call("zone-settings", #"{"zone":"kestrel.example"}"#, partial)
         XCTAssertFalse(one.isError, one.text)
         XCTAssertTrue(one.text.hasPrefix("The security settings of kestrel.example:") && one.text.contains("DNSSEC pending"), one.text)
-        XCTAssertTrue(one.text.contains("Not read for kestrel.example: WAF managed rules: the token lacks **Zone › Zone WAF › Read**"), one.text)
+        XCTAssertTrue(one.text.contains("Not read for kestrel.example: WAF managed rules: the sign-in lacks the scope zone-waf.read"), one.text)
         XCTAssertEqual(one.structured?["complete"] as? Bool, false)
 
-        // A token without Zone Settings Read reads no zone's settings, and is told the permission to add.
+        // A sign-in without zone-settings.read reads no zone's settings, and is told the scope to add.
         let refused = FakeService()
         Self.zone(refused)
         refused.answers["\(weak)/settings"] = (403, #"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#)
         let denied = try await call("zone-settings", #"{"zone":"kestrel.example"}"#, refused)
-        XCTAssertTrue(denied.isError && denied.text.contains("**Zone › Zone Settings › Read**"), denied.text)
+        XCTAssertTrue(denied.isError && denied.text.contains("the scope zone-settings.read"), denied.text)
         let unknown = try await call("zone-settings", #"{"zone":"nowhere.example"}"#, refused)
         XCTAssertTrue(unknown.isError && unknown.text.contains("no zone nowhere.example"), unknown.text)
     }
@@ -346,9 +375,9 @@ final class CloudflareTests: XCTestCase {
         XCTAssertEqual(result.structured?["complete"] as? Bool, false)
     }
 
-    /// The rate limit is waited out once when Cloudflare says it is soon, and said otherwise; a refusal names the token
-    /// permission to add.
-    func testRateLimitIsWaitedOutAndRefusalsNameThePermission() async throws {
+    /// The rate limit is waited out once when Cloudflare says it is soon, and said otherwise; a refusal names the scope
+    /// to add and the role it may be instead; a sign-in Cloudflare no longer accepts asks for the tool to be connected again.
+    func testRateLimitIsWaitedOutAndRefusalsNameTheScope() async throws {
         let soon = FakeService()
         soon.sequences["\(account)/members"] = [(429, #"{"success":false,"errors":[{"code":971,"message":"Please wait"}]}"#), Self.page(#"{"id":"m1","roles":[]}"#, total: 1)]
         soon.sequenceHeaders["\(account)/members"] = [["Retry-After": "5"], [:]]
@@ -366,11 +395,13 @@ final class CloudflareTests: XCTestCase {
         let forbidden = FakeService()
         forbidden.answers["\(account)/access/apps"] = (403, #"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#)
         let refused = try await call("access-apps", "{}", forbidden)
-        XCTAssertTrue(refused.isError && refused.text.contains("**Account › Zero Trust › Read**") && refused.text.contains("Authentication error"), refused.text)
+        XCTAssertTrue(refused.isError && refused.text.contains("lacks the scope teams.read") && refused.text.contains("member's role")
+                      && refused.text.contains("OAuth clients") && refused.text.contains("Authentication error"), refused.text)
         let malformed = FakeService()
         malformed.answers["\(account)/members"] = (400, #"{"success":false,"errors":[{"code":6003,"message":"Invalid request headers"}]}"#)
         let rejected = try await call("members", "{}", malformed)
-        XCTAssertTrue(rejected.isError && rejected.text.contains("did not accept the API token"), rejected.text)
+        XCTAssertTrue(rejected.isError && rejected.text.contains("did not accept the sign-in") && rejected.text.contains("Connect the tool again in Settings › Tools")
+                      && !rejected.text.contains("API token"), rejected.text)
     }
 
     /// Firewall events ask for one more than kept, so a result says when more matched; GraphQL errors, with a message or
@@ -398,7 +429,7 @@ final class CloudflareTests: XCTestCase {
         }
     }
 
-    func testTheAuditLogMembersAndTokens() async throws {
+    func testTheAuditLogAndMembers() async throws {
         let service = FakeService()
         service.answers["\(account)/audit_logs"] = (200, #"{"success":true,"errors":[],"result":[{"id":"0b7d4a7c-1c3d-4e5f-8a9b-0c1d2e3f4a5b","when":"2026-11-24T08:00:00Z","action":{"type":"rec_add","result":true},"actor":{"email":"ops@kestrel.example","ip":"198.51.100.4","type":"user"},"interface":"API","resource":{"type":"DNS_record","id":"r1"},"metadata":{"zone_name":"kestrel.example","name":"kestrel.example","type":"MX"}}]}"#)
         let log = try await call("audit-log", #"{"since":"2026-11-23T00:00:00Z","actor":"ops@kestrel.example","zone":"kestrel.example"}"#, service)
@@ -420,11 +451,6 @@ final class CloudflareTests: XCTestCase {
         let lines = people.text.split(separator: "\n").map(String.init)
         XCTAssertTrue(lines[0].contains("ops@kestrel.example") && lines[0].contains("Super Administrator") && lines[0].contains("no 2FA"), people.text)
         XCTAssertEqual(members.requests.map { queryItems($0)["page"] }, ["1", "2"])
-
-        let tokens = FakeService()
-        tokens.answers["\(account)/tokens"] = Self.page(#"{"id":"0123456789abcdef0123456789abcdef","name":"ci-deploy","status":"active","issued_on":"2025-01-01T00:00:00Z","last_used_on":"2026-11-14T09:00:00Z","expires_on":null,"policies":[{"effect":"allow","permission_groups":[{"name":"DNS Write"}]}],"condition":{"request_ip":{"in":["203.0.113.0/24"]}}}"#, total: 1)
-        let listed = try await call("api-tokens", "{}", tokens)
-        XCTAssertTrue(listed.text.contains("ci-deploy (active): DNS Write, from 203.0.113.0/24") && listed.text.contains("never expires"), listed.text)
     }
 
     /// Access logins are read by time, as Cloudflare gives no paging: each next request asks up to a second after the
@@ -534,13 +560,10 @@ final class CloudflareTests: XCTestCase {
         XCTAssertEqual(queryItems(service.requests.last)["is_deleted"], "false")
     }
 
-    /// check-access verifies the token, reads its own permissions, warns of any that change things, tries each read
-    /// once, and says which parts the token covers; it sends nothing but reads.
-    func testCheckAccessVerifiesTheTokenAndSaysWhichPartsItCovers() async throws {
-        let token = "0123456789abcdef0123456789abcdef"
+    /// check-access tries each read once, says which parts the sign-in reaches and which scopes it holds, and sends
+    /// nothing but reads; it asks Cloudflare to verify no token, as an OAuth sign-in has no such check.
+    func testCheckAccessSaysWhichPartsTheSignInReachesAndItsScopes() async throws {
         let service = FakeService()
-        service.answers["\(account)/tokens/verify"] = (200, #"{"success":true,"errors":[],"messages":[{"code":10000,"message":"This API Token is valid and active"}],"result":{"id":"\#(token)","status":"active","expires_on":"2030-01-01T00:00:00Z"}}"#)
-        service.answers["\(account)/tokens/\(token)"] = (200, #"{"success":true,"errors":[],"result":{"id":"\#(token)","policies":[{"effect":"allow","permission_groups":[{"name":"Zone Read"},{"name":"DNS Write"}]}]}}"#)
         Self.zone(service)
         service.answers["/client/v4/zones/\(Self.zoneID)/dns_records"] = Self.page("", total: 0)
         service.answers["/client/v4/zones/\(Self.zoneID)/settings/ssl"] = (200, #"{"success":true,"errors":[],"result":{"id":"ssl","value":"strict"}}"#)
@@ -548,31 +571,29 @@ final class CloudflareTests: XCTestCase {
         service.sequences["/client/v4/graphql"] = [(200, #"{"data":{"viewer":{}},"errors":null}"#), (200, #"{"data":null,"errors":[{"message":"Zero Trust is not enabled for this account"}]}"#)]
         service.answers["\(account)/audit_logs"] = (200, #"{"success":true,"errors":[],"result":[]}"#)
         service.answers["\(account)/members"] = Self.page("", total: 0)
-        service.answers["\(account)/tokens"] = Self.page("", total: 0)
         for path in ["access/logs/access_requests", "access/apps", "access/users", "gateway/rules", "devices/registrations", "cfd_tunnel"] {
             service.answers["\(account)/\(path)"] = (403, #"{"success":false,"errors":[{"code":9999,"message":"Zero Trust is not enabled for this account"}]}"#)
         }
         let checked = try await call("check-access", "{}", service)
         XCTAssertFalse(checked.isError, checked.text)
-        XCTAssertTrue(checked.text.contains("✓ Cloudflare verified the token: an account's own token, ID \(token), status active"), checked.text)
-        XCTAssertTrue(checked.text.contains("⚠ It holds DNS Write, which change things"), checked.text)
-        XCTAssertTrue(checked.text.contains("✓ Zones (Zone › Zone › Read)") && checked.text.contains("✓ DNS records"), checked.text)
-        XCTAssertTrue(checked.text.contains("✓ Zone settings (Zone › Zone Settings › Read)") && checked.text.contains("✓ DNSSEC (Zone › DNS › Read)"), checked.text)
-        XCTAssertTrue(checked.text.contains("✓ WAF managed rules (Zone › Zone WAF › Read)"), "a zone without managed rules answers 404, which the token may ask: \(checked.text)")
+        XCTAssertTrue(checked.text.contains("✓ Zones (zone.read)") && checked.text.contains("✓ DNS records (dns.read)"), checked.text)
+        XCTAssertTrue(checked.text.contains("✓ Zone settings (zone-settings.read)") && checked.text.contains("✓ DNSSEC (dns.read)"), checked.text)
+        XCTAssertTrue(checked.text.contains("✓ WAF managed rules (zone-waf.read)"), "a zone without managed rules answers 404, which the sign-in may ask: \(checked.text)")
+        XCTAssertTrue(checked.text.contains("✓ The account audit log (account-settings.read)") && checked.text.contains("✓ Members"), checked.text)
         XCTAssertTrue(checked.text.contains("· The edge: every read works.") && checked.text.contains("· Zero Trust: the account does not use it"), checked.text)
+        XCTAssertTrue(checked.text.contains("The sign-in holds the scopes account-settings.read, teams.read") && checked.text.contains("offline_access")
+                      && checked.text.contains(Self.clientID), "it reports the sign-in's scopes and the client they are granted to: \(checked.text)")
+        XCTAssertFalse(checked.text.contains("API token") || checked.text.contains("Token"), checked.text)
         XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" || $0.url?.path == "/client/v4/graphql" }, "only reads")
-        XCTAssertFalse(service.requests.contains { $0.url?.path == "/client/v4/user/tokens/verify" }, "an account's token is verified as one")
+        XCTAssertFalse(service.requests.contains { $0.url?.path.contains("tokens") == true }, "no token is verified or listed")
 
-        let personal = FakeService()
-        personal.answers["\(account)/tokens/verify"] = (401, #"{"success":false,"errors":[{"code":1000,"message":"Invalid API Token"}]}"#)
-        personal.answers["/client/v4/user/tokens/verify"] = (200, #"{"success":true,"errors":[],"result":{"id":"\#(token)","status":"active"}}"#)
-        let user = try await call("check-access", "{}", personal)
-        XCTAssertTrue(user.text.contains("a token a person made under their profile") && user.text.contains("no expiry date") && user.text.contains("could not be read"), user.text)
-        XCTAssertTrue(user.text.contains("✗ Zones"), user.text)
+        let refused = FakeService()
+        refused.answers["/client/v4/zones"] = (403, #"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#)
+        let lacking = try await call("check-access", "{}", refused)
+        XCTAssertTrue(lacking.text.contains("✗ Zones: the sign-in lacks the scope zone.read"), lacking.text)
         let dead = FakeService()
-        dead.answers["\(account)/tokens/verify"] = (401, #"{"success":false,"errors":[{"code":1000,"message":"Invalid API Token"}]}"#)
-        dead.answers["/client/v4/user/tokens/verify"] = (401, #"{"success":false,"errors":[{"code":1000,"message":"Invalid API Token"}]}"#)
+        dead.answers["\(account)/audit_logs"] = (401, #"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#)
         let rejected = try await call("check-access", "{}", dead)
-        XCTAssertTrue(rejected.text.contains("✗ The token could not be verified") && rejected.text.contains("did not accept the token"), rejected.text)
+        XCTAssertTrue(rejected.text.contains("✗ The account audit log: Cloudflare did not accept the sign-in"), rejected.text)
     }
 }
