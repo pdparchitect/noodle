@@ -16,6 +16,7 @@
 ### Changed
 
 - Each service's Detection and Containment tools now draw on one list of its operations, each naming whether it serves detection, audit or containment, so an Audit tool of its own can later offer its share; until then Detection keeps the audit reads it has, but never one that needs Containment's access, such as Google Workspace's tokens. Every tool offers exactly what it did.
+- Markdown attachments open in a window of their own, laid out with headings, lists, tables and code; Preview and Source in its header switch between that and the text as written. Metal shaders open there too, playing or as their source. Both annotate as any other preview.
 
 ### Fixed
 

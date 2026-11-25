@@ -502,8 +502,8 @@ extension RookModel: BotBudgetHost {}
 
 extension RookModel: AttachmentOpeningHost {}
 
-/// Noodle's patch review windows, one per patch, kept for the whole app.
-@MainActor let patchReviews = PatchReviewWindows()
+/// Noodle's patch review and document windows, one per attachment, kept for the whole app.
+@MainActor let attachmentWindows = AttachmentWindows()
 
 extension RookModel: AgentTaskHost {
     func taskAgentName(_ id: UUID) -> String? { agent(id)?.displayName }

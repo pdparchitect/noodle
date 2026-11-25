@@ -169,7 +169,7 @@ struct ConversationView: View {
 
     /// Noodle's way of opening an attachment and the screen capture.
     private var opening: AttachmentOpening {
-        AttachmentOpening(preview: attachmentPreview, capture: screenCapturePreview, patchReviews: patchReviews)
+        AttachmentOpening(preview: attachmentPreview, capture: screenCapturePreview, windows: attachmentWindows)
     }
 
     private func showPreview(_ attachment: ConversationAttachment, among group: [ConversationAttachment] = []) {

@@ -490,8 +490,8 @@ extension PionModel: BotBudgetHost {}
 
 extension PionModel: AttachmentOpeningHost {}
 
-/// Noodle's patch review windows, one per patch, kept for the whole app.
-@MainActor let patchReviews = PatchReviewWindows()
+/// Noodle's patch review and document windows, one per attachment, kept for the whole app.
+@MainActor let attachmentWindows = AttachmentWindows()
 
 extension PionModel: AgentApprovalHost {
     func openConversation(for approval: AgentApproval, of agentID: UUID) {
