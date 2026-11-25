@@ -9,6 +9,7 @@
 ### Changed
 
 - The welcome stamps PION on the screen letter by letter, in the blue lettering of Pion's artwork, each letter landing with a jolt, before the steps to get started appear.
+- A new Pion starts with the Grid background moving behind its window; View › Background still turns it off. A background picked before is kept.
 
 ## [0.13.0] - 2026-11-25
 

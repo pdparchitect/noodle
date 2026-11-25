@@ -14,6 +14,7 @@
 ### Changed
 
 - The welcome stamps ROOK on the screen letter by letter, in the red lettering of Rook's artwork, each letter landing with a jolt, before the steps to get started appear.
+- A new Rook starts with the Grid background moving behind its window; View › Background still turns it off. A background picked before is kept.
 
 ## [0.7.0] - 2026-11-25
 

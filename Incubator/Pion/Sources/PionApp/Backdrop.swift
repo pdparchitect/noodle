@@ -12,8 +12,8 @@ enum BackdropEffect: String, CaseIterable, Identifiable {
     static let key = "PionBackdropEffect"
     /// What View › Background offers, in its order. Scanlines, Chess and Chase are kept but not offered.
     static let offered: [BackdropEffect] = [.none, .grid, .network, .glyphs]
-    /// What a new Pion starts with: nothing moving until the person picks an effect. Scenarios set their own.
-    static let standard = BackdropEffect.none
+    /// What a new Pion starts with, until the person picks another effect. Scenarios set their own.
+    static let standard = BackdropEffect.grid
     var id: String { rawValue }
 
     var title: String {
