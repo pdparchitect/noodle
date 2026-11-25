@@ -334,12 +334,23 @@ struct AttachmentInlinePreview: View {
         .accessibilityHidden(true)
     }
 
+    private var isShader: Bool { ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.originalFilename)) }
+
     private var documentPreview: some View {
         VStack(alignment: .leading, spacing: 7) {
             ZStack {
                 Color.black.opacity(0.16)
 
-                if let thumbnail {
+                if let thumbnail, isShader {
+                    // A shader's still is a picture of the card's own shape: it fills the card to its rounded corners,
+                    // with no page margin around it.
+                    Image(nsImage: thumbnail)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
+                        .transition(.opacity)
+                } else if let thumbnail {
                     Image(nsImage: thumbnail)
                         .resizable()
                         .scaledToFit()

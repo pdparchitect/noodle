@@ -371,6 +371,15 @@ struct AttachmentView: View {
     }
 
     private func thumbnail(of file: URL) async -> UIImage? {
+        // A shader shows as a still of what it draws, as on the Mac; Quick Look would show its source as a page.
+        if ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.filename)) {
+            let pixels = Int(88 * displayScale)
+            guard let still = try? await ShaderPipeline.still(of: file, width: pixels, height: pixels, scale: Float(displayScale))
+            else { return nil }
+            let image = UIImage(cgImage: still, scale: displayScale, orientation: .up)
+            DecodedImages.keep(image, of: file, at: shownPixels)
+            return image
+        }
         let request = QLThumbnailGenerator.Request(fileAt: file, size: CGSize(width: 88, height: 88), scale: displayScale,
                                                    representationTypes: .thumbnail)
         guard let image = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request).uiImage else { return nil }

@@ -14,6 +14,7 @@ All notable changes to Noodle are documented here, following
 ### Fixed
 
 - Run on Hub, Run on This Mac and Sign In… in the header of a noodlet or live view window take clicks instead of dragging the window, and show in grey like the rest of the header.
+- A shader's card in a conversation fills to its rounded corners, without square edges or a dark rim around the still.
 
 ## [0.96.0] - 2026-11-25
 
