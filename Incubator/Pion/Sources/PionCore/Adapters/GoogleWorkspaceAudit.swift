@@ -2,7 +2,7 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// Google Workspace Detection's reads for assessing how the organisation is set up, through Cloud Identity rather than
+/// Google Workspace Detection's reads for auditing how the organisation is set up, through Cloud Identity rather than
 /// the Admin SDK: the organisation's current settings, such as 2-step verification enforcement and Drive sharing.
 extension GoogleWorkspace {
     /// One page of a Cloud Identity list, whichever list it is.
@@ -28,7 +28,7 @@ extension GoogleWorkspace {
     }
 
     /// The organisation's current settings from Cloud Identity's Policy API, by setting and the organisational unit or
-    /// group each applies to: those an assessment asks about first, said plainly, such as whether 2-step verification
+    /// group each applies to: those an audit asks about first, said plainly, such as whether 2-step verification
     /// is enforced and who files can be shared with, then every other as Google gives it. Google lists only settings
     /// with a value set, by an admin or by Google for the edition, and lets only a super admin read them.
     struct PolicySettings: ServiceOperation {
@@ -39,7 +39,7 @@ extension GoogleWorkspace {
         static let input = JSONSchema.object([
             "settingType": .string("Only settings whose type starts with this, such as security.two_step_verification or drive_and_docs."),
             "orgUnit": .string("Only settings that apply to this organisational unit, by its ID, with or without orgUnits/ before it."),
-            "limit": .integer("How many settings to list, at most, those an assessment asks about first; the rest are counted.", minimum: 1, maximum: 2000),
+            "limit": .integer("How many settings to list, at most, those an audit asks about first; the rest are counted.", minimum: 1, maximum: 2000),
         ])
 
         struct Policy: Codable, Sendable {
@@ -102,7 +102,7 @@ extension GoogleWorkspace {
                               orgUnit: orgUnit, group: group, sortOrder: policy.policyQuery?.sortOrder, policyType: policy.type,
                               value: policy.setting?.value, said: policy.setting?.value.map { value in known?.say(value) ?? [] } ?? [], policy: policy.name)
             }
-            // Those an assessment asks about first, in the order below, then the rest by type; within one setting,
+            // Those an audit asks about first, in the order below, then the rest by type; within one setting,
             // the highest sort order first, as Google applies that one where several reach someone.
             let rank = Dictionary(Self.keySettings.enumerated().map { ($1.type, $0) }, uniquingKeysWith: { first, _ in first })
             let ordered = items.sorted { a, b in
@@ -130,7 +130,7 @@ extension GoogleWorkspace {
             }
             var heading: String?
             for item in listed {
-                let section = item.title == nil ? "Other settings:" : "Settings an assessment checks first:"
+                let section = item.title == nil ? "Other settings:" : "Settings an audit checks first:"
                 if section != heading { lines.append(section); heading = section }
                 let value = item.said.isEmpty ? (item.value?.compact(300) ?? "no value given") : item.said.joined(separator: "; ")
                 lines.append("\(item.title.map { "\($0) (\(item.settingType))" } ?? item.settingType), \(item.appliesTo): \(value)")
@@ -199,7 +199,7 @@ extension GoogleWorkspace {
             let say: @Sendable (GoogleCloud.JSON) -> [String]
         }
 
-        /// The settings an assessment asks about first, each said plainly from its fields as Google's list of
+        /// The settings an audit asks about first, each said plainly from its fields as Google's list of
         /// supported settings names them (https://cloud.google.com/identity/docs/concepts/supported-policy-api-settings).
         static let keySettings: [Known] = [
             Known(type: "security.two_step_verification_enforcement", title: "2-step verification enforcement") { value in

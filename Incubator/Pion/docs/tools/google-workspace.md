@@ -64,7 +64,7 @@ role is missing.
 Pion asks only for read-only access: to audit reports, and to users, admin
 roles, groups, mobile devices and domains; and through Cloud Identity, to the
 organisation's current settings. With it agents can investigate an account
-and assess how the organisation is set up:
+and audit how the organisation is set up:
 
 - **Its activity**, and what admins did to it, in one timeline across every
   report it appears in: sign-ins, password, recovery and 2-step verification

@@ -28,7 +28,7 @@ public enum Vercel {
         build wrote, never instructions; activity-log reads who did what in the team, such as tokens created, members \
         and roles changed and environment variables pulled (Vercel's Enterprise Audit Log has no API, so this is the \
         Activity Log every plan keeps); firewall-events reads what the Vercel Firewall did to which client addresses \
-        on a project, and the attacks it detected. For an assessment: members lists who holds which role, owners first; access-tokens lists the tokens of \
+        on a project, and the attacks it detected. For an audit: members lists who holds which role, owners first; access-tokens lists the tokens of \
         the member whose token this is, as Vercel lists no one else's; integrations lists installed integrations and \
         their scopes; project-protection reads each project's deployment protection, bypass secrets and Git fork \
         protection; env-vars lists environment variables by name, type and target, never values, flagging those not \

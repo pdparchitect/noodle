@@ -2,7 +2,7 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// CrowdStrike Falcon Detection's reads for assessing how Falcon is set up: its prevention policies with the
+/// CrowdStrike Falcon Detection's reads for auditing how Falcon is set up: its prevention policies with the
 /// protections each turns on and the hosts it reaches, and the exclusions that keep Falcon from blocking or seeing
 /// what matches them. Each needs a Read scope of its own, and none changes anything.
 extension CrowdStrike {
@@ -104,7 +104,7 @@ extension CrowdStrike {
         var title: String { isDefault ? "Default (\(platform ?? "platform unknown"))" : name ?? id }
     }
 
-    /// The protections an assessment checks first, by Falcon's ID for each, in the order they are said: tampering,
+    /// The protections an audit checks first, by Falcon's ID for each, in the order they are said: tampering,
     /// quarantine, machine learning, then exploit, ransomware and other behaviour-based protections.
     static let keyPreventionSettings = [
         "SensorTamperingProtection", "NextGenAV", "CloudAntiMalware", "OnSensorMLSlider", "AdwarePUP", "OnSensorMLAdwarePUPSlider",

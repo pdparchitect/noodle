@@ -319,12 +319,12 @@ final class EntraTests: XCTestCase {
         XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" }, "it changes nothing")
     }
 
-    // MARK: Assessment
+    // MARK: Audit
 
     /// Conditional Access policies read page after page, led by whether MFA is required of everyone and of admins,
     /// whether legacy authentication is blocked, which policies only report, whom enforcing ones exclude and broad
     /// trusted locations, with groups, roles, apps and locations named.
-    func testConditionalAccessLeadsWithWhatAnAssessmentAsks() async throws {
+    func testConditionalAccessLeadsWithWhatAnAuditAsks() async throws {
         let path = "/v1.0/identity/conditionalAccess/policies"
         let first = #"{"value":[{"id":"11111111-0000-4000-8000-000000000001","displayName":"CA01 Require MFA for everyone","state":"enabled","modifiedDateTime":"2026-10-01T00:00:00Z","conditions":{"clientAppTypes":["all"],"applications":{"includeApplications":["All"],"excludeApplications":[]},"users":{"includeUsers":["All"],"excludeUsers":[],"includeGroups":[],"excludeGroups":["22222222-0000-4000-8000-000000000002"],"includeRoles":[],"excludeRoles":[]},"locations":null},"grantControls":{"operator":"OR","builtInControls":["mfa"],"authenticationStrength":null},"sessionControls":null},{"id":"11111111-0000-4000-8000-000000000002","displayName":"CA02 Block legacy authentication","state":"enabledForReportingButNotEnforced","conditions":{"clientAppTypes":["exchangeActiveSync","other"],"applications":{"includeApplications":["All"]},"users":{"includeUsers":["All"]}},"grantControls":{"operator":"OR","builtInControls":["block"]}}],"@odata.nextLink":"https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies?$skiptoken=page2"}"#
         let second = #"{"value":[{"id":"11111111-0000-4000-8000-000000000003","displayName":"CA03 Admins phishing-resistant","state":"enabled","conditions":{"clientAppTypes":["all"],"applications":{"includeApplications":["All"]},"users":{"includeRoles":["62e90394-69f5-4237-9190-012177145e10"]},"locations":{"includeLocations":["All"],"excludeLocations":["AllTrusted"]}},"grantControls":{"operator":"OR","builtInControls":[],"authenticationStrength":{"id":"00000000-0000-0000-0000-000000000004","displayName":"Phishing-resistant MFA"}},"sessionControls":{"signInFrequency":{"isEnabled":true,"value":4,"type":"hours"},"persistentBrowser":{"isEnabled":true,"mode":"never"}}},{"id":"11111111-0000-4000-8000-000000000004","displayName":"CA04 Old","state":"disabled","conditions":{"users":{"includeUsers":["None"]},"applications":{"includeApplications":["00000003-0000-0ff1-ce00-000000000000"]}},"grantControls":{"operator":"OR","builtInControls":["compliantDevice","mfa"]}}]}"#

@@ -20,7 +20,7 @@ public enum Duo {
         user, result (success, denied or fraud), reason, factor, application and time, with where each attempt came from \
         and the device that approved it; user reads one user's status, phones, hardware tokens, security keys, groups, \
         bypass codes (counted, never shown) and last login; admin-logs reads what administrators changed, and \
-        telephony-logs the SMS and calls Duo sent. To assess the account, users leads with users in bypass status, not \
+        telephony-logs the SMS and calls Duo sent. To audit the account, users leads with users in bypass status, not \
         enrolled or locked out, admins with owners and admins who sign in without a hardware token or security key, \
         integrations with the applications Duo protects and the Admin API applications that can change Duo, phones \
         with tampered, unencrypted or unlocked devices, and policies, settings and bypass-codes with what they let \
@@ -55,7 +55,7 @@ public enum Duo {
 
     static let keysStep = "Give the **API hostname**, such as `api-xxxxxxxx.duosecurity.com`, and the application's **Integration key** and **Secret key**, then choose **Add & Connect** and ask an agent to run check-access. Duo's Admin API has no OAuth, so these keys are a long-lived secret: Pion keeps them in this Mac's Keychain and uses them only to sign each request, never sending the secret key. Delete the application in Duo to revoke them."
 
-    static let setup = applicationSteps("Pion Detection", permissions: "tick only **Grant read log** and **Grant resource - Read**, which read the logs, users, phones, policies, bypass codes and applications. Add **Grant administrators - Read** to audit admins and **Grant read information** for the account summary check-access shows. **Grant settings** lets agents read the global settings, but Duo has no read-only setting for it: it also lets these keys change them, though Pion only reads, so leave it off unless you want settings assessed. Leave every write permission off.") + [keysStep]
+    static let setup = applicationSteps("Pion Detection", permissions: "tick only **Grant read log** and **Grant resource - Read**, which read the logs, users, phones, policies, bypass codes and applications. Add **Grant administrators - Read** to audit admins and **Grant read information** for the account summary check-access shows. **Grant settings** lets agents read the global settings, but Duo has no read-only setting for it: it also lets these keys change them, though Pion only reads, so leave it off unless you want settings audited. Leave every write permission off.") + [keysStep]
 
     /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
     static let operations: [any ServiceOperation] = [
@@ -337,7 +337,7 @@ public enum Duo {
         struct Owner: Codable, Sendable { let user_id: String?; let username: String? }
         let users: [Owner]?
 
-        /// What Duo reports of the device's health that an assessment asks about, the worst first.
+        /// What Duo reports of the device's health that an audit asks about, the worst first.
         var concerns: [String] {
             var found: [String] = []
             if tampered?.lowercased() == "tampered" { found.append("jailbroken or rooted") }

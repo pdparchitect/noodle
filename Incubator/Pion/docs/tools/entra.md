@@ -7,7 +7,7 @@ its own:
   user is, their groups, roles and sign-in methods, the sign-in log, Identity
   Protection's risky users, who holds which directory role, which apps hold
   which Microsoft Graph permissions and credentials, the directory audit log,
-  and, to assess how the tenant is set up, its Conditional Access policies,
+  and, to audit how the tenant is set up, its Conditional Access policies,
   which sign-in methods are allowed, and security defaults. It wakes the agents it is assigned to when the audit log shows the
   tenant being handed over, a way back in being opened or its defences
   weakened, and when Identity Protection rates a user or a sign-in at high

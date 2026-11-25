@@ -28,7 +28,7 @@ public enum CrowdStrike {
         command lines, hashes, user and MITRE technique. rtr-sessions \
         lists who opened Real Time Response sessions on which host and every command they ran. host-groups lists host \
         groups and their members, container-images the container images Falcon assessed with their vulnerabilities, \
-        and users who can use the Falcon console with their roles. To assess how Falcon is set up, prevention-policies \
+        and users who can use the Falcon console with their roles. To audit how Falcon is set up, prevention-policies \
         lists each platform's prevention policies with their protections and the hosts they reach, led by disabled \
         policies, hosts on a default policy and protections turned off; exclusions lists machine learning, IOA and \
         sensor visibility exclusions, led by those for every host or with broad patterns. Each host's 32-character \

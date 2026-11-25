@@ -2,8 +2,8 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// Duo Detection's reads for an assessment: what exists, its users, admins, applications and phones; and what is
-/// allowed, its global settings, policies and bypass codes. Each leads with the gaps an assessment asks about.
+/// Duo Detection's reads for an audit: what exists, its users, admins, applications and phones; and what is
+/// allowed, its global settings, policies and bypass codes. Each leads with the gaps an audit asks about.
 extension Duo {
     /// Lines for a result, at most `most`, saying how many more the structured result keeps.
     static func capped(_ lines: [String], _ most: Int) -> [String] {
@@ -216,7 +216,7 @@ extension Duo {
         struct Input: Decodable, Sendable {}
         static let name = "settings"
         static let jobs: Set<ToolJob> = [.audit]
-        static let summary = "Duo's global settings, led by the gaps an assessment asks about: lockout threshold and automatic unlock, fraud alert emails, who may give bypass codes or bypass status and for how long, device change notifications, inactive and unenrolled users, telephony limits, log retention and admin password rules. Needs Grant settings, which Duo gives only with the right to change them."
+        static let summary = "Duo's global settings, led by the gaps an audit asks about: lockout threshold and automatic unlock, fraud alert emails, who may give bypass codes or bypass status and for how long, device change notifications, inactive and unenrolled users, telephony limits, log retention and admin password rules. Needs Grant settings, which Duo gives only with the right to change them."
         static let input = JSONSchema.object([:])
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
@@ -292,7 +292,7 @@ extension Duo {
             return (value as? [Any])?.compactMap { $0 as? String } ?? []
         }
 
-        /// What it lets through that an assessment asks about. A section a custom policy leaves out follows the global one.
+        /// What it lets through that an audit asks about. A section a custom policy leaves out follows the global one.
         var gaps: [String] {
             var found: [String] = []
             let methods = section("authentication_methods")

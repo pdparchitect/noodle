@@ -29,7 +29,7 @@ public enum Cloudflare {
         Use Cloudflare Detection to see an account from Cloudflare's side. At the edge: zones and zone-dns list zones and \
         their DNS records; firewall-events reads what the WAF and firewall did to requests, by client IP, country, \
         path and rule; audit-log reads who changed what in the account and from where; members lists who holds which \
-        role and whether they use 2FA; api-tokens lists the account's own tokens. To assess how zones are set up, \
+        role and whether they use 2FA; api-tokens lists the account's own tokens. To audit how zones are set up, \
         zone-settings reads each zone's SSL/TLS mode, minimum TLS, HTTPS enforcement, HSTS, DNSSEC and WAF managed rules, \
         weak ones first; dns-exposure groups a zone's records that point outside it by provider, for the champion to \
         confirm each is still in use, and marks CNAMEs whose target doesn't resolve, which is a lead to confirm and never \

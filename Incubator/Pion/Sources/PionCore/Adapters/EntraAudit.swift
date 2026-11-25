@@ -2,8 +2,8 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// Microsoft Entra ID Detection's reads for assessing how the tenant is set up: its Conditional Access policies, and
-/// its authentication methods policy with security defaults, each said plainly with the facts an assessment asks about
+/// Microsoft Entra ID Detection's reads for auditing how the tenant is set up: its Conditional Access policies, and
+/// its authentication methods policy with security defaults, each said plainly with the facts an audit asks about
 /// first. They read through Policy.Read.All, which only reads, and Global Reader may read them.
 extension Entra {
     /// The most apps named by asking for each, one request each.
@@ -96,7 +96,7 @@ extension Entra {
         }
     }
 
-    /// Conditional Access policies with every condition and control, and the facts an assessment asks first: whether
+    /// Conditional Access policies with every condition and control, and the facts an audit asks first: whether
     /// MFA is required of everyone and of admins, whether legacy authentication is blocked, which policies only report,
     /// and whom enforcing policies leave out.
     struct ConditionalAccess: ServiceOperation {

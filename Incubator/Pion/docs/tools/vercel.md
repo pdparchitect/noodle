@@ -4,7 +4,7 @@ Pion has three Vercel tools:
 
 - **Vercel Detection** reads one team: recent deployments with who made each and
   how, a deployment's build log, the team's Activity Log, what the Vercel
-  Firewall did and the attacks it detected, and, for an assessment, members and
+  Firewall did and the attacks it detected, and, for an audit, members and
   their roles, access tokens, integrations, each project's deployment
   protection and Git fork protection, environment variable names, domains with
   their DNS records, and firewall rules. It wakes the agents it is assigned to

@@ -2,7 +2,7 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// Cloudflare Detection's reads for assessing how the account is set up: each zone's security settings at the edge,
+/// Cloudflare Detection's reads for auditing how the account is set up: each zone's security settings at the edge,
 /// with DNSSEC and the WAF's managed rules, and a zone's DNS records that point outside it, by provider, with those
 /// whose target no longer resolves.
 ///
@@ -17,7 +17,7 @@ extension Cloudflare {
 
     /// The settings zone-settings reads, by Cloudflare's ID for each
     /// (https://developers.cloudflare.com/api/resources/zones/subresources/settings/methods/get/).
-    static let assessedSettings = ["ssl", "ssl_automatic_mode", "min_tls_version", "always_use_https", "automatic_https_rewrites", "security_header",
+    static let auditedSettings = ["ssl", "ssl_automatic_mode", "min_tls_version", "always_use_https", "automatic_https_rewrites", "security_header",
                                    "tls_1_3", "opportunistic_encryption", "security_level", "browser_check"]
 
     /// Cloudflare's managed rulesets by ID (https://developers.cloudflare.com/waf/managed-rules/).
@@ -25,7 +25,7 @@ extension Cloudflare {
                                   "77454fe2d30c4220b5701f6fdfb893ba": "Cloudflare Free Managed Ruleset", "c2e184081120413c86c3ab7e14069605": "Exposed Credentials Check"]
 
     /// One zone's settings as read: what each part said, what is weak, what is worth a look, and what could not be read.
-    struct ZoneAssessment: Encodable, Sendable {
+    struct ZoneAudit: Encodable, Sendable {
         let zone: String, id: String, status: String?, plan: String?, type: String?, paused: Bool
         var settings: [String: String] = [:]
         var hsts: String?
@@ -65,7 +65,7 @@ extension Cloudflare {
 
     /// What is weak and what is worth a look in a zone's settings as read. Weak is what lets traffic go unencrypted,
     /// on old TLS or with unsigned DNS; worth a look is what is commonly tightened.
-    static func judge(_ zone: inout ZoneAssessment) {
+    static func judge(_ zone: inout ZoneAudit) {
         var weak: [String] = [], notes: [String] = []
         if zone.paused { weak.append("paused, so Cloudflare passes its traffic through without its protection") }
         switch zone.settings["ssl"]?.lowercased() {
@@ -136,21 +136,21 @@ extension Cloudflare {
     /// One zone's settings, DNSSEC and managed rules, each read on its own so one refused leaves the others. The
     /// settings are asked for all at once, which Cloudflare still answers though it marks it deprecated; any not in
     /// that answer, or all of them when it fails for anything but a refusal, are asked for one by one.
-    static func assess(_ zone: Item, _ service: ServiceClient) async -> (ZoneAssessment, settingsError: Error?) {
-        var read = ZoneAssessment(zone: zone.text("name") ?? zone.id, id: zone.id, status: zone.text("status"), plan: zone.text("plan.name"),
+    static func audit(_ zone: Item, _ service: ServiceClient) async -> (ZoneAudit, settingsError: Error?) {
+        var read = ZoneAudit(zone: zone.text("name") ?? zone.id, id: zone.id, status: zone.text("status"), plan: zone.text("plan.name"),
                                   type: zone.text("type"), paused: zone.flag("paused") == true)
         var values: [String: Value] = [:]
         var settingsError: Error?
         do {
             let all = try await get(service, ["zones", zone.id, "settings"], as: Value.self)
             for setting in all.items ?? [] {
-                if let id = setting["id"]?.text, assessedSettings.contains(id), let value = setting["value"] { values[id] = value }
+                if let id = setting["id"]?.text, auditedSettings.contains(id), let value = setting["value"] { values[id] = value }
             }
         } catch where refusal(error) {
             settingsError = error
         } catch {}
         if settingsError == nil {
-            for id in assessedSettings where values[id] == nil {
+            for id in auditedSettings where values[id] == nil {
                 do {
                     let one = try await get(service, ["zones", zone.id, "settings", id], as: Value.self)
                     if let value = one["value"] { values[id] = value }
@@ -217,58 +217,58 @@ extension Cloudflare {
                 }
             }
             let read = Array(zones.prefix(limit))
-            let results = await withTaskGroup(of: (Int, ZoneAssessment, Error?).self) { group in
+            let results = await withTaskGroup(of: (Int, ZoneAudit, Error?).self) { group in
                 for (index, zone) in read.enumerated() {
-                    group.addTask { let (assessed, error) = await Cloudflare.assess(zone, service); return (index, assessed, error) }
+                    group.addTask { let (audited, error) = await Cloudflare.audit(zone, service); return (index, audited, error) }
                 }
-                return await group.reduce(into: [(Int, ZoneAssessment, Error?)]()) { $0.append($1) }
+                return await group.reduce(into: [(Int, ZoneAudit, Error?)]()) { $0.append($1) }
             }.sorted { $0.0 < $1.0 }
             // When no zone's settings could be read for a refusal, the whole read is refused, in the same words as any other.
             if !results.isEmpty, results.allSatisfy({ !$0.1.settingsRead }), let refused = results.compactMap(\.2).first {
                 _ = try await Cloudflare.read(Cloudflare.zoneSettingsNeed) { () async throws -> Int in throw refused }
             }
-            let assessed = results.map(\.1).sorted { a, b in
+            let audited = results.map(\.1).sorted { a, b in
                 a.weak.count != b.weak.count ? a.weak.count > b.weak.count : a.zone < b.zone
             }
             var lines: [String] = []
-            if assessed.isEmpty {
+            if audited.isEmpty {
                 lines.append("The token sees no zone in this account\(listing.complete ? "" : " in what was read").")
             } else {
-                lines.append(domain == nil ? "The security settings of \(Cloudflare.plural(assessed.count, "zone")):" : "The security settings of \(assessed[0].zone):")
-                let weak = assessed.filter { !$0.weak.isEmpty }
+                lines.append(domain == nil ? "The security settings of \(Cloudflare.plural(audited.count, "zone")):" : "The security settings of \(audited[0].zone):")
+                let weak = audited.filter { !$0.weak.isEmpty }
                 if weak.isEmpty {
                     lines.append("No zone shows a weak setting of those checked first: SSL/TLS Off or Flexible, minimum TLS below 1.2, HTTPS not enforced, DNSSEC not in force, or paused"
-                                 + (assessed.contains { !$0.notRead.isEmpty } ? ", in what could be read." : "."))
+                                 + (audited.contains { !$0.notRead.isEmpty } ? ", in what could be read." : "."))
                 } else {
-                    lines.append("Weak settings in \(weak.count) of \(Cloudflare.plural(assessed.count, "zone")):")
+                    lines.append("Weak settings in \(weak.count) of \(Cloudflare.plural(audited.count, "zone")):")
                     lines += weak.map { "⚠ \($0.zone): " + $0.weak.joined(separator: "; ") }
                 }
-                let notes = assessed.filter { !$0.notes.isEmpty }
+                let notes = audited.filter { !$0.notes.isEmpty }
                 if !notes.isEmpty {
                     lines.append("Worth a look:")
                     lines += notes.map { "· \($0.zone): " + $0.notes.joined(separator: "; ") }
                 }
                 lines.append("Zone by zone:")
-                lines += assessed.map(\.line)
+                lines += audited.map(\.line)
                 // The same part refused for many zones is said once, with the zones it was refused for.
                 var refused: [(String, [String])] = []
-                for zone in assessed {
+                for zone in audited {
                     for said in zone.notRead {
                         if let index = refused.firstIndex(where: { $0.0 == said }) { refused[index].1.append(zone.zone) } else { refused.append((said, [zone.zone])) }
                     }
                 }
                 for (said, zones) in refused {
-                    lines.append("Not read for \(zones.count == assessed.count && zones.count > 1 ? "any zone" : zones.prefix(10).joined(separator: ", ") + (zones.count > 10 ? " and \(zones.count - 10) more" : "")): \(said)")
+                    lines.append("Not read for \(zones.count == audited.count && zones.count > 1 ? "any zone" : zones.prefix(10).joined(separator: ", ") + (zones.count > 10 ? " and \(zones.count - 10) more" : "")): \(said)")
                 }
                 lines.append("Edge settings reach only the hostnames Cloudflare proxies; a DNS-only record reaches its origin directly.")
             }
             let cut = listing.value.count > read.count || (listing.more && listing.stopped == nil)
             if cut { lines.append("More zones match than the \(read.count) read\(listing.total.map { " (Cloudflare says \($0))" } ?? ""): give a zone, or raise limit.") }
             else if !listing.complete { lines.append(Cloudflare.stopped(listing, "zones").trimmingCharacters(in: .whitespacesAndNewlines)) }
-            struct Kept: Encodable { let zones: [ZoneAssessment]; let weakZones: Int; let total: Int?; let complete: Bool }
+            struct Kept: Encodable { let zones: [ZoneAudit]; let weakZones: Int; let total: Int?; let complete: Bool }
             return try ServiceResult(text: lines.joined(separator: "\n"),
-                                     structured: Kept(zones: assessed, weakZones: assessed.filter { !$0.weak.isEmpty }.count, total: listing.total,
-                                                      complete: listing.complete && !cut && assessed.allSatisfy { $0.notRead.isEmpty }))
+                                     structured: Kept(zones: audited, weakZones: audited.filter { !$0.weak.isEmpty }.count, total: listing.total,
+                                                      complete: listing.complete && !cut && audited.allSatisfy { $0.notRead.isEmpty }))
         }
     }
 }

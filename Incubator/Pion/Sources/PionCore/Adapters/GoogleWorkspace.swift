@@ -1538,7 +1538,7 @@ extension GoogleWorkspace {
     }
 
     /// Every phone and tablet that syncs an account in the domain, whose it is and when it last synced, longest unsynced
-    /// first, so an assessment finds devices still allowed in long after anyone used them, such as a phone sold or lost
+    /// first, so an audit finds devices still allowed in long after anyone used them, such as a phone sold or lost
     /// but never removed. Google keeps a device approved however long it has not synced. Laptops and desktops are not
     /// listed, as for user-devices. Only the fields shown are asked for, as a device's full record lists its apps.
     struct AllDevices: ServiceOperation {

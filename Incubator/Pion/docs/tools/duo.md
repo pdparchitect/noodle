@@ -5,7 +5,7 @@ Pion has two Duo tools, each added per Duo account with keys of its own:
 - **Duo Detection** reads an account the way a defender does: the
   authentication log, with where each attempt came from and the device that
   approved it; what administrators changed; the SMS and calls Duo sent; one
-  user's status, devices and bypass codes; and, to assess how the account is
+  user's status, devices and bypass codes; and, to audit how the account is
   set up, its users, administrators, applications, phones, policies, bypass
   codes and global settings. It wakes the agents it is assigned to when users
   report fraud, Duo denies attempts from where it should not be reached, or
@@ -53,7 +53,7 @@ What an application may do is set by the **permissions** ticked on it:
 
 Duo has **no read-only form of Grant settings**: it also lets the keys change
 the global settings. Duo Detection only reads them, but leave it off unless you
-want the settings assessed. Leave every other permission off, above all
+want the settings audited. Leave every other permission off, above all
 **Grant applications**, **Grant administrators - Write** and **Grant set Admin
 API permissions**, which would let the keys make new keys or change
 administrators.
@@ -73,7 +73,7 @@ Federal) before sending anything.
 2. **Set its permissions.** Tick only **Grant read log** and **Grant resource -
    Read**. Add **Grant administrators - Read** to audit administrators and
    **Grant read information** for the account summary. Add **Grant settings**
-   only if you want the global settings assessed, knowing it can change them.
+   only if you want the global settings audited, knowing it can change them.
    Under **Networks for API access** you can limit the application to the
    networks this Mac uses. Save.
 3. **Add the tool** with the **API hostname**, the **Integration key** and the

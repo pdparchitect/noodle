@@ -26,7 +26,7 @@ public enum Entra {
         role's active and eligible holders, Global Administrator first; app-permissions which apps hold which Microsoft \
         Graph permissions; app-credentials the secrets and certificates apps sign in with, newest first, with each one's \
         keyId, as one added lately may be an attacker's way back in; directory-audit who changed what, and from where. \
-        To assess how the tenant is set up, conditional-access reads every Conditional Access policy, leading with whether \
+        To audit how the tenant is set up, conditional-access reads every Conditional Access policy, leading with whether \
         MFA is required of all users and of each privileged role, whether legacy authentication is blocked, which \
         policies only report and whom enforcing ones exclude; auth-methods-policy reads which sign-in methods are on for \
         whom, such as SMS or passkeys, the registration campaign and whether security defaults are on. They say what the \

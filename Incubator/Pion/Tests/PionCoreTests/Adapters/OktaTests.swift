@@ -360,7 +360,7 @@ final class OktaTests: XCTestCase {
         XCTAssertTrue(none.text.contains("in no groups"), none.text)
     }
 
-    // MARK: Assessment
+    // MARK: Audit
 
     /// The global session and authentication policies, each rule said plainly with its groups, users and zones named,
     /// led by the gaps in active policies and rules: sessions that never end, a password alone letting people in from
@@ -383,7 +383,7 @@ final class OktaTests: XCTestCase {
         let lines = read.text.split(separator: "\n").map(String.init)
         XCTAssertEqual(lines.first, "1 global session policy and 2 authentication policies, with 5 rules.")
         XCTAssertEqual(Array(lines.dropFirst().prefix(6)), [
-            "Gaps an assessment asks about first, in active policies and rules (5):",
+            "Gaps an audit asks about first, in active policies and rules (5):",
             #"- Global session policy "Default Policy" › rule "Default Rule": sessions never end by time"#,
             #"- Global session policy "Default Policy" › rule "Default Rule": idle sessions last 12 hours"#,
             #"- Global session policy "Default Policy" › rule "Default Rule": sessions survive closing the browser"#,
@@ -453,7 +453,7 @@ final class OktaTests: XCTestCase {
         let lines = read.text.split(separator: "\n").map(String.init)
         XCTAssertEqual(Array(lines.prefix(6)), [
             "3 of the org's 4 authenticators are active, and 2 authenticator enrollment policies.",
-            "Gaps an assessment asks about first (4):",
+            "Gaps an audit asks about first (4):",
             "- Phone (SMS or voice codes) is active and may be used to sign in",
             "- Security Question (a security question) is active for account recovery",
             #"- Authenticator enrollment policy "Default Policy" lets people enroll phone_number (SMS or voice codes)"#,
@@ -495,7 +495,7 @@ final class OktaTests: XCTestCase {
         let lines = read.text.split(separator: "\n").map(String.init)
         XCTAssertEqual(Array(lines.prefix(8)), [
             "2 password policies.",
-            "Gaps an assessment asks about first (6):",
+            "Gaps an audit asks about first (6):",
             #"- Password policy "Default Policy": passwords may be as short as 8 characters, under 12"#,
             #"- Password policy "Default Policy": common passwords are allowed"#,
             #"- Password policy "Default Policy": no lockout after failed sign-in attempts"#,
@@ -515,14 +515,14 @@ final class OktaTests: XCTestCase {
         service.sequences[path] = [(200, first), (200, second)]
         service.sequenceHeaders[path] = [link("after=00pPw1&limit=200&type=PASSWORD", path: path), [:]]
         let lenient = try await call("password-policies", #"{"minLength":8}"#, on: service)
-        XCTAssertTrue(lenient.text.contains("Gaps an assessment asks about first (5):") && !lenient.text.contains("as short as"), lenient.text)
+        XCTAssertTrue(lenient.text.contains("Gaps an audit asks about first (5):") && !lenient.text.contains("as short as"), lenient.text)
         let wrong = FakeService()
         let refused = try await call("password-policies", #"{"minLength":2}"#, on: wrong)
         XCTAssertTrue(refused.isError && wrong.requests.isEmpty, refused.text)
     }
 
     /// check-access tries the policies, authenticators and zones too, saying which scope or role each needs.
-    func testCheckAccessTriesTheAssessmentReads() async throws {
+    func testCheckAccessTriesTheAuditReads() async throws {
         let service = FakeService()
         service.answers["/api/v1/policies"] = (200, "[]")
         service.answers["/api/v1/zones"] = (200, "[]")

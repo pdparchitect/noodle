@@ -22,9 +22,9 @@ public enum Okta {
         user-factors and user-grants (the apps a user let act for them, which keep working after a password change); \
         sign-in-events searches the System Log by the user who acted, the user acted on (target), IP address, event \
         type, failures and time; admin-roles says who holds which admin role, api-tokens every API token, who made it \
-        and where it works from. To assess how the org is set up, sign-on-policies reads the global session and \
+        and where it works from. To audit how the org is set up, sign-on-policies reads the global session and \
         authentication policies with every rule, mfa-policies the authenticators and who must enroll which, and \
-        password-policies the password, lockout and recovery rules, each leading with the gaps an assessment asks about, \
+        password-policies the password, lockout and recovery rules, each leading with the gaps an audit asks about, \
         such as a password alone letting people in, sessions that never end, SMS or a security question allowed, or no \
         lockout; they say what the rules allow, not who signed in under them, which sign-in-events shows. The alert \
         watch checks every five minutes and wakes you with a note naming security-events, which reads what it reads for \

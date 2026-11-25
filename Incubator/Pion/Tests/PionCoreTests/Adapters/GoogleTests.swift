@@ -564,10 +564,10 @@ final class GoogleTests: XCTestCase {
         XCTAssertTrue(wrong.isError && wrong.text.contains("APPROVED"), wrong.text)
     }
 
-    /// The organisation's current settings, read page after page: those an assessment asks about first, said plainly
+    /// The organisation's current settings, read page after page: those an audit asks about first, said plainly
     /// and in Google's order where several apply, then the rest as Google gives them, and which it asks about were not
     /// listed at all.
-    func testPolicySettingsSayTheSettingsAnAssessmentChecksFirst() async throws {
+    func testPolicySettingsSayTheSettingsAnAuditChecksFirst() async throws {
         let path = "/v1/policies"
         let first = #"{"policies":[{"name":"policies/a","customer":"customers/C01","type":"ADMIN","policyQuery":{"orgUnit":"orgUnits/root1","sortOrder":1},"setting":{"type":"settings/security.two_step_verification_enforcement","value":{"enforcedFrom":"2025-01-01T00:00:00Z"}}},{"name":"policies/b","type":"ADMIN","policyQuery":{"orgUnit":"orgUnits/eng","group":"groups/contractors","sortOrder":2},"setting":{"type":"settings/security.two_step_verification_enforcement","value":{"enforcedFrom":"2099-01-01T00:00:00Z"}}},{"name":"policies/c","type":"ADMIN","policyQuery":{"orgUnit":"orgUnits/root1","sortOrder":1},"setting":{"type":"settings/drive_and_docs.external_sharing","value":{"externalSharingMode":"ALLOWED","allowPublishingFiles":true,"warnForExternalSharing":false}}}],"nextPageToken":"p2"}"#
         let second = #"{"policies":[{"name":"policies/d","type":"SYSTEM","policyQuery":{"orgUnit":"orgUnits/root1"},"setting":{"type":"settings/security.less_secure_apps","value":{"allowLessSecureApps":true}}},{"name":"policies/e","type":"ADMIN","policyQuery":{"orgUnit":"orgUnits/root1"},"setting":{"type":"settings/gmail.mail_delegation","value":{"enableMailDelegation":false}}},{"name":"policies/f","type":"ADMIN","policyQuery":{"orgUnit":"orgUnits/root1"},"setting":{"type":"settings/drive_and_docs.general_access_default","value":{"default_file_access":"PRIMARY_AUDIENCE_WITH_LINK"}}}]}"#
@@ -582,7 +582,7 @@ final class GoogleTests: XCTestCase {
         XCTAssertEqual(queryItems(service.requests.last)["pageToken"], "p2")
         let lines = all.text.split(separator: "\n").map(String.init)
         XCTAssertTrue(lines.first?.hasPrefix("6 settings of 5 kinds.") == true, all.text)
-        XCTAssertEqual(lines.dropFirst().first, "Settings an assessment checks first:")
+        XCTAssertEqual(lines.dropFirst().first, "Settings an audit checks first:")
         let enforcement = "2-step verification enforcement (security.two_step_verification_enforcement), "
         XCTAssertEqual(Array(lines[2...6]), [
             enforcement + "group groups/contractors: not enforced yet: enforced from 2099-01-01T00:00:00Z",

@@ -6,7 +6,7 @@ Pion has two Okta tools, each added per org with a sign-in of its own:
   groups, apps, sign-in factors and the apps they let act for them, who holds
   which admin role, every API token, the
   [System Log](https://developer.okta.com/docs/reference/api/system-log/), and,
-  to assess how the org is set up, its sign-on, MFA and password policies. It
+  to audit how the org is set up, its sign-on, MFA and password policies. It
   wakes the agents it is assigned to when the System Log shows the org being
   handed over or its defences weakened. It only reads.
 - **Okta Containment** acts on the same org to contain an account: it suspends

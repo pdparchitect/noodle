@@ -2,9 +2,9 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// Okta Detection's reads for assessing how the org is set up: its global session and authentication policies with
+/// Okta Detection's reads for auditing how the org is set up: its global session and authentication policies with
 /// their rules, its authenticators and the policies that enrol them, and its password policies, each said plainly with
-/// the gaps an assessment asks about first. Okta lets the Read-Only Administrator view them; the sign-in reads them
+/// the gaps an audit asks about first. Okta lets the Read-Only Administrator view them; the sign-in reads them
 /// through okta.policies.read, okta.authenticators.read and okta.networkZones.read, which only read.
 extension Okta {
     /// The most policies whose rules are read, one request each, and the most groups and users named, one request each.
@@ -233,7 +233,7 @@ extension Okta {
 extension Okta {
     /// The global session policies, which say how a session with Okta starts and how long it lasts, and the
     /// authentication policies, which say what each app asks for, with every rule: whom it reaches, from where, and
-    /// what it requires. Gaps an assessment asks about first lead.
+    /// what it requires. Gaps an audit asks about first lead.
     struct SignOnPolicies: ServiceOperation {
         struct Input: Decodable, Sendable { let type: String?, sessionHours: Int?, limit: Int? }
         static let name = "sign-on-policies"
@@ -279,7 +279,7 @@ extension Okta {
             if flagged.isEmpty {
                 lines.append(read.isEmpty ? "No policies were read." : "No gaps found in the active policies and rules read: every one requires more than a password, keeps sessions within \(hours) hours and idle sessions within \(Okta.spoken(minutes: Self.idleMinutes)), or denies.")
             } else {
-                lines.append("Gaps an assessment asks about first, in active policies and rules (\(flagged.count)):")
+                lines.append("Gaps an audit asks about first, in active policies and rules (\(flagged.count)):")
                 lines += flagged.map { "- " + $0 }
             }
             lines.append("Policies, in the order Okta applies them; within each, the first rule that matches applies:")
@@ -517,7 +517,7 @@ extension Okta {
             if gaps.isEmpty {
                 text.append("No gaps found in what was read: no SMS, voice or security question is active or offered, and every active enrollment policy requires an authenticator besides a password and email.")
             } else {
-                text.append("Gaps an assessment asks about first (\(gaps.count)):")
+                text.append("Gaps an audit asks about first (\(gaps.count)):")
                 text += gaps.map { "- " + $0 }
             }
             if let authenticators {
@@ -569,7 +569,7 @@ extension Okta {
         static let jobs: Set<ToolJob> = [.audit]
         static let summary = "The password policies, in the order Okta applies them, for whom each applies: minimum length and character classes, common passwords and the username refused or not, maximum and minimum age, history, lockout after failed attempts and unlock, breached-password protection, recovery by email, SMS, voice call or security question, and each rule's self-service change, reset and unlock; gaps first, such as passwords shorter than asked, no lockout, common passwords allowed, or recovery by SMS or a security question. Inactive policies are listed but not counted."
         static let input = JSONSchema.object([
-            "minLength": .integer("The shortest password an assessment accepts; shorter minimums are gaps. 12 when left out.", minimum: 4, maximum: 64),
+            "minLength": .integer("The shortest password an audit accepts; shorter minimums are gaps. 12 when left out.", minimum: 4, maximum: 64),
         ])
         /// The most failed attempts before a lockout that does not count as a gap.
         static let attempts = 10.0
@@ -607,7 +607,7 @@ extension Okta {
             if gaps.isEmpty {
                 text.append(policies.isEmpty ? "No password policies were read." : "No gaps found in the active policies read: passwords of at least \(shortest) characters, common passwords refused, a lockout within \(Int(Self.attempts)) attempts, and no recovery by SMS, voice call or security question.")
             } else {
-                text.append("Gaps an assessment asks about first (\(gaps.count)):")
+                text.append("Gaps an audit asks about first (\(gaps.count)):")
                 text += gaps.map { "- " + $0 }
             }
             text.append("Password policies, in the order Okta applies them; within each, the first rule that matches applies:")
