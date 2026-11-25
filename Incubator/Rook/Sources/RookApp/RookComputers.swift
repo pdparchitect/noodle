@@ -34,8 +34,6 @@ import SwiftUI
     private(set) var runningGateways: Set<UUID> = []
     /// Which Mission's gateway each running computer is cabled to; absent while it uses NAT.
     @ObservationIgnored private var placements: [UUID: UUID] = [:]
-    /// What each gateway's audit lines have already said, so a scan of a thousand ports is one line per address.
-    @ObservationIgnored private var reported: [UUID: Set<String>] = [:]
     @ObservationIgnored private var reconciling: Task<Void, Never>?
     @ObservationIgnored private var gatewayWatch: Task<Void, Never>?
     /// Each Mission's network and DNS logs as Noodle's activity windows show them: loaded from its files when first
@@ -205,13 +203,11 @@ extension RookComputers {
             await gateway.stop()
             gateways[id] = nil
             appliedPolicies[id] = nil
-            reported[id] = nil
             runningGateways.remove(id)
         }
     }
 
-    /// Copies each gateway's firewall and DNS logs into its Mission's folder, and what it stopped into the audit log,
-    /// while any runs.
+    /// Copies each gateway's firewall and DNS logs into its Mission's folder while any runs.
     private func watchGateways() {
         guard gatewayWatch == nil else { return }
         gatewayWatch = Task { [weak self] in
@@ -262,22 +258,8 @@ extension RookComputers {
         } catch { model.problem = "Could not keep the gateway's log: \(error.localizedDescription)" }
         follow(network, in: .network, of: mission)
         follow(dns, in: .dns, of: mission)
-        // The audit log says once per address what the gateway stopped; the network log has every attempt.
-        var details: [String] = []
-        for entry in records.firewall where entry.verdict != .allowed {
-            let key = "\(entry.destination) \(entry.port ?? 0) \(entry.protocol)"
-            guard reported[mission, default: []].insert(key).inserted else { continue }
-            let computer = entry.slot.flatMap { computers[$0]?.name } ?? "A computer"
-            let destination = entry.destination + (entry.name.map { " (\($0))" } ?? "")
-            details.append("The gateway stopped \(computer) reaching \(destination)\(entry.port.map { " port \($0)" } ?? "") (\(entry.protocol)): "
-                           + (entry.verdict == .denied ? "the scope denies it." : "it is outside the scope."))
-        }
-        details += records.conflicts.map { "\($0) answers for names both in and out of scope, so the gateway keeps it closed." }
-        for detail in details {
-            // TODO: Gateway lines are audited in the champion's name; the audit log has no actor for Rook itself.
-            do { try model.store.record("network", detail: detail, in: mission, by: .champion(model.champion)) }
-            catch { model.problem = error.localizedDescription }
-        }
+        // The gateway reports each closed address once.
+        model.gatewayClosed(records.conflicts, in: mission)
     }
 }
 

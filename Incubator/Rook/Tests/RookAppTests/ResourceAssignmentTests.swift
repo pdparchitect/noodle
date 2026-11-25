@@ -122,6 +122,17 @@ import XCTest
                        ["Added Linux.", "Added Jump box.", "Removed Linux."])
     }
 
+    /// An address the gateway has to close, because it serves names both in and out of scope, is said in the
+    /// Mission's conversation, where the team sees why a target does not answer; the audit log stays the test's own.
+    func testGatewayClosingASharedAddressIsSaidInTheMissionNotAudited() throws {
+        let mission = try model.open(RookModel.Draft(title: "Beacon", lead: try agent().id))
+        let audited = model.store.audit(mission.id)
+        model.gatewayClosed(["104.16.132.229"], in: mission.id)
+        XCTAssertEqual(model.messages(in: mission.id).filter { $0.author == .system }.last?.body,
+                       "The gateway keeps 104.16.132.229 closed: it serves names both in and out of the scope, so no computer in this Mission can reach it.")
+        XCTAssertEqual(model.store.audit(mission.id), audited)
+    }
+
     /// The scope is set in the Mission's sheet and reaches the agents in the group's description, with the objective.
     func testMissionScopeIsToldToTheTeamWithTheObjective() throws {
         let lead = try agent()

@@ -151,12 +151,6 @@ public final class RookStore: @unchecked Sendable {
         }
     }
 
-    /// Adds a line to the Mission's audit log without changing it, such as what its gateway stopped.
-    public func record(_ event: String, detail: String, in id: UUID, by actor: CaseActor, now: Date = Date()) throws {
-        try lock.withLock { try unlockedAppend(AuditEntry(at: now, actor: actor, event: event, detail: detail), to: id) }
-        onChange?()
-    }
-
     /// Appends lines, such as its gateway's JSON log entries, to a log file in the Mission's folder, which its export carries.
     public func appendLog(_ lines: [String], to name: String, in id: UUID) throws {
         guard !name.isEmpty, !name.contains("/"), !name.hasPrefix(".") else { throw CaseError("A Mission's log needs a plain file name.") }

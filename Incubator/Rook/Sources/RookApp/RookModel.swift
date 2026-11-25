@@ -505,6 +505,20 @@ import UniformTypeIdentifiers
         } catch { problem = "Could not add the harness change to the conversation: \(error.localizedDescription)" }
     }
 
+    /// Says in a Mission's conversation which addresses its gateway keeps closed because each serves names both in
+    /// and out of scope, so the team sees why a target in scope does not answer. Nothing else the gateway does is
+    /// said here or audited; every connection is in the Mission's Network Log.
+    func gatewayClosed(_ addresses: [String], in mission: UUID) {
+        guard !addresses.isEmpty, conversation(mission) != nil else { return }
+        do {
+            for address in addresses {
+                try repository.append(ChatMessage(conversationID: mission, author: .system, body: "The gateway keeps \(address) closed: "
+                    + "it serves names both in and out of the scope, so no computer in this Mission can reach it.", delivery: .delivered))
+            }
+        } catch { problem = "Could not say in the Mission what its gateway closed: \(error.localizedDescription)" }
+        readTranscript(mission)
+    }
+
     func stop(in conversationID: UUID?) {
         guard let agent = stoppableAgent(in: conversationID) else { return }
         if isScripted { scriptedPhases[agent.id] = .ready }
