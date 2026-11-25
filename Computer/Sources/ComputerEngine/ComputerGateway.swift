@@ -196,8 +196,8 @@ public actor ComputerGateway {
             return named
         }
         records.more = dns.more || firewall.more
-        let sets = try await run("nft list set inet gateway allowed4; echo '--denied--'; nft list set inet gateway denied4")
-            .components(separatedBy: "--denied--")
+        let sets = try await run("nft list set inet gateway allowed4; echo '==denied=='; nft list set inet gateway denied4")
+            .components(separatedBy: "==denied==")
         if sets.count == 2 {
             let shared = Self.addresses(in: sets[0]).intersection(Self.addresses(in: sets[1])).subtracting(reportedConflicts)
             reportedConflicts.formUnion(shared)
