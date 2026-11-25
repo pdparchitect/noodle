@@ -2,7 +2,11 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// VirusTotal's reputation lookups for files, domains, IP addresses and URLs, with the person's API key.
+/// VirusTotal's reputation lookups for files, domains, IP addresses and URLs, with the person's API key. VirusTotal
+/// reads a key's quotas only by its user or the key itself in the address, which the connection never shows an
+/// operation, so check-access looks an address up, spending one lookup.
+///
+/// The tool's guide is Incubator/Pion/docs/tools/threat-intel.md. Change it with the setup steps or operations here.
 public enum VirusTotal {
     public static let preset = ToolDefinition(
         id: "8a5c79c3-25c7-4aec-b6fb-2b3b3b6865fc", name: "VirusTotal", summary: "Reputation of files, domains, IP addresses and URLs.",
@@ -10,7 +14,8 @@ public enum VirusTotal {
         Use VirusTotal to check the reputation of a file hash, domain, IP address or URL you met in the evidence. \
         A verdict is how many security engines flag something, not proof: say how many, and weigh it with what else you found. \
         Record each lookup as evidence, citing the tool and the value looked up. Lookups never submit anything for scanning. \
-        Public keys allow only a few lookups a minute; look up what matters, and wait when told the service is rate limiting.
+        Public keys allow only a few lookups a minute; look up what matters, and wait when told the service is rate limiting. \
+        When a lookup is refused, run check-access and tell the champion exactly what it says to change.
         """,
         iconName: "virustotal",
         configuration: .connection(.init(endpoint: URL(string: "https://www.virustotal.com/api/v3")!, tokenHeader: "x-apikey",
@@ -20,10 +25,10 @@ public enum VirusTotal {
     static let setup = [
         "Sign in at [virustotal.com](https://www.virustotal.com), or create a free account.",
         "Open your profile menu at the top right and choose **API key**.",
-        "Copy the key and paste it here. The free public API allows 4 lookups a minute and 500 a day, and is not for commercial use.",
+        "Copy the key and paste it here. The free public API allows 4 lookups a minute and 500 a day, and is not for commercial use. Then ask an agent to run check-access.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [FileReport(), DomainReport(), AddressReport(), URLReport()])
+    public static let adapter = OperationAdapter(operations: [FileReport(), DomainReport(), AddressReport(), URLReport(), CheckAccess()])
 
     /// What VirusTotal reports for any object: how the engines judged it, the community's score and its tags.
     struct Common: Decodable {
@@ -186,6 +191,32 @@ extension VirusTotal {
             if let final = own.final_url, final != url { text += " It ends up at \(final)." }
             if let title = own.title { text += " Page title: \(title)." }
             return try ServiceResult(text: text, structured: report)
+        }
+    }
+}
+
+extension VirusTotal {
+    static let fixes = AccessCheck.Fixes(
+        rejected: "VirusTotal did not accept the key: it is wrong, or its user is not active. Copy the API key again from your VirusTotal profile and enter it in Settings › Tools.",
+        forbidden: "VirusTotal refused the key for this: it may need a premium key.",
+        rateLimited: "the key's quota is used up: a public key allows 4 lookups a minute and 500 a day, renewed at midnight UTC. Wait, or use a premium key.")
+
+    /// Looks one address up, the only read that tries the key without knowing its user, spending one lookup.
+    struct CheckAccess: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection]
+        static let summary = "Tries the key with one lookup of 8.8.8.8 and says whether it works, or what to change. That lookup spends one of the key's quota."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            var check = AccessCheck(VirusTotal.fixes)
+            await check.probe("API key (a lookup of 8.8.8.8, which spent one)") {
+                _ = try await service.data(["ip_addresses", "8.8.8.8"])
+                return "it works"
+            }
+            check.note("VirusTotal shows the key's quotas and what is used of them on your profile's API key page.")
+            return try check.result()
         }
     }
 }

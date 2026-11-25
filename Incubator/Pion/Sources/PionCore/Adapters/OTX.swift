@@ -2,14 +2,18 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// AlienVault OTX: the community threat reports, called pulses, that mention an indicator.
+/// AlienVault OTX: the community threat reports, called pulses, that mention an indicator. check-access reads the
+/// key's own user.
+///
+/// The tool's guide is Incubator/Pion/docs/tools/threat-intel.md. Change it with the setup steps or operations here.
 public enum OTX {
     public static let preset = ToolDefinition(
         id: "2e9c0952-23e1-469c-8b2a-a4b29b67635b", name: "AlienVault OTX", summary: "Community threat reports that mention an IP address, domain, hostname or file hash.",
         defaultInstructions: """
         Use AlienVault OTX to see which community threat reports, called pulses, mention an IP address, domain, hostname \
         or file hash, with their names, tags, adversaries and malware families. Pulses are shared by anyone and vary in \
-        quality: cite them as leads, not proof. Record each lookup as evidence.
+        quality: cite them as leads, not proof. Record each lookup as evidence. When a lookup is refused, run \
+        check-access and tell the champion exactly what it says to change.
         """,
         iconName: "otx",
         configuration: .connection(.init(endpoint: URL(string: "https://otx.alienvault.com/api/v1")!, tokenHeader: "X-OTX-API-KEY", adapter: "otx")),
@@ -17,10 +21,10 @@ public enum OTX {
 
     static let setup = [
         "Sign in at [otx.alienvault.com](https://otx.alienvault.com), or create a free account.",
-        "Open the [API page](https://otx.alienvault.com/api), copy **Your OTX Key** and paste it here.",
+        "Open the [API page](https://otx.alienvault.com/api), copy **Your OTX Key** and paste it here. Then ask an agent to run check-access.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [Indicator()])
+    public static let adapter = OperationAdapter(operations: [Indicator(), CheckAccess()])
 }
 
 extension OTX {
@@ -65,6 +69,32 @@ extension OTX {
                 }.joined(separator: "; ") + "."
             }
             return try ServiceResult(text: text, structured: answer)
+        }
+    }
+}
+
+extension OTX {
+    /// OTX answers a key it does not know with 403, so both refusals say the key is wrong.
+    static let wrongKey = "OTX did not accept the key: it is wrong, or was replaced. Copy Your OTX Key again from otx.alienvault.com/api and enter it in Settings › Tools."
+    static let fixes = AccessCheck.Fixes(rejected: wrongKey, forbidden: wrongKey,
+                                         rateLimited: "OTX is rate limiting this key: wait before trying again.")
+
+    /// Reads the user the key belongs to, which looks nothing up.
+    struct CheckAccess: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection]
+        static let summary = "Tries the key once with a read of the OTX user it belongs to, which looks nothing up, and says whose it is, or what to change."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            var check = AccessCheck(OTX.fixes)
+            struct User: Decodable { let username: String? }
+            await check.probe("API key") {
+                let user = try await service.get(["users", "me"], as: User.self)
+                return "it belongs to the OTX user \(user.username ?? "?")"
+            }
+            return try check.result()
         }
     }
 }

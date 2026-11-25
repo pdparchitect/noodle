@@ -3,7 +3,9 @@ import NoodleCore
 import NoodleToolConnections
 
 /// Wiz: the cloud security issues it found, and read-only GraphQL queries over its graph, reached as a service
-/// account. Each account is one tenant, in its region.
+/// account. Each account is one tenant, in its region. check-access asks for one issue and one cloud resource.
+///
+/// The tool's guide is Incubator/Pion/docs/tools/wiz.md. Change it with the setup steps or operations here.
 public enum Wiz {
     public static let preset = ToolDefinition(
         id: "6351153d-b484-4629-8a9b-37ed096300a8", name: "Wiz", summary: "Cloud security issues and queries over the Wiz security graph.",
@@ -11,7 +13,8 @@ public enum Wiz {
         Use Wiz to see the cloud as its security graph does: list issues by severity and status, with the resource each \
         concerns, its cloud and subscription; and run read-only GraphQL queries for anything else, such as cloud \
         resources or vulnerability findings. Record each finding as evidence, citing the issue or resource. These tools \
-        only read; mutations are refused.
+        only read; mutations are refused. When a tool is refused, run check-access and tell the champion exactly what it \
+        says to change.
         """,
         iconName: "wiz",
         configuration: .connection(.init(endpointTemplate: "https://api.{region}.app.wiz.io/graphql",
@@ -25,10 +28,10 @@ public enum Wiz {
         "In Wiz, open **Settings › Access Management › Service Accounts** and choose **Add Service Account**.",
         "Choose the type **Custom Integration (GraphQL API)**, leave **Projects** empty for the whole tenant, and give it only `read:issues` and `read:resources`.",
         "Copy the **Client ID** and **Client Secret** here; the secret is shown only once.",
-        "For the data center, open **User Settings › Tenant** and take the part of the API endpoint after `api.`: `https://api.us17.app.wiz.io/graphql` is `us17`.",
+        "For the data center, open **User Settings › Tenant** and take the part of the API endpoint after `api.`: `https://api.us17.app.wiz.io/graphql` is `us17`. Then ask an agent to run check-access.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [Issues(), Query()], trigger: SevereIssues())
+    public static let adapter = OperationAdapter(operations: [Issues(), Query(), CheckAccess()], trigger: SevereIssues())
 
     /// New open critical and high issues.
     struct SevereIssues: ServiceTrigger {
@@ -126,6 +129,48 @@ extension Wiz {
             let data = try await service.graphQL(query: query, variables: NoVariables(), as: CellValueTree.self)
             let text = String(data: try JSONEncoder().encode(data), encoding: .utf8) ?? ""
             return try ServiceResult(text: String(text.prefix(4_000)) + (text.count > 4_000 ? "…" : ""), structured: ["data": data])
+        }
+    }
+}
+
+extension Wiz {
+    static let fixes = AccessCheck.Fixes(
+        rejected: "Wiz did not accept the service account's token: the client secret is wrong or was rotated, the service account was deleted, or the data center is not the tenant's. Check the data center, or enter the Client ID and a new Client Secret again in Settings › Tools.",
+        forbidden: "the service account may not read this: give it the scope named here.",
+        rateLimited: "Wiz is rate limiting this service account: wait before trying again.",
+        unreachable: "Pion could not reach the Wiz API at this data center: check the data center in Settings › Tools against the API endpoint under User Settings › Tenant.")
+
+    /// Asks for one issue and one cloud resource, each with only its ID, to try each scope the tools read with.
+    struct CheckAccess: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
+        static let summary = "Tries the service account once for each thing it reads, an issue and a cloud resource, and says what works and, for what does not, which scope to give or what else to change. It sends only queries, each asking for one item's ID."
+        static let input = JSONSchema.object([:])
+
+        struct NoVariables: Encodable {}
+
+        /// A query, with Wiz's refusal of it, which comes as an error in the answer, said as the scope it needs.
+        static func ask(_ service: ServiceClient, _ query: String, scope: String) async throws {
+            do { _ = try await service.graphQL(query: query, variables: NoVariables(), as: CellValueTree.self) }
+            catch ServiceError.refused(let said) {
+                throw ServiceError.input("Wiz refused it (it said: \(said)): give the service account \(scope).")
+            }
+        }
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            var check = AccessCheck(Wiz.fixes)
+            check.note("Wiz data center \(service.base.host?.split(separator: ".").dropFirst().first.map(String.init) ?? "?").")
+            await check.probe("Issues (read:issues)", forbidden: "the service account may not read issues: give it read:issues.") {
+                try await Self.ask(service, "query { issuesV2(first: 1) { nodes { id } } }", scope: "read:issues")
+                return ""
+            }
+            await check.probe("Cloud resources (read:resources)", forbidden: "the service account may not read cloud resources: give it read:resources.") {
+                try await Self.ask(service, "query { cloudResources(first: 1) { nodes { id } } }", scope: "read:resources")
+                return ""
+            }
+            check.note("Queries reach only what the service account's scopes and projects allow; one asking for more says which scope it needs.")
+            return try check.result()
         }
     }
 }

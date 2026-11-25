@@ -64,4 +64,21 @@ final class CrowdSecTests: XCTestCase {
         XCTAssertTrue(result.isError)
         XCTAssertTrue(result.text.contains("rejected this connection's credentials"), result.text)
     }
+
+    func testCheckAccessTakesAnAddressCrowdSecHasNotSeenAsAWorkingKey() async throws {
+        let service = FakeService()
+        service.answers["/v2/smoke/192.0.2.1"] = (404, #"{"message":"IP address information not found"}"#)
+        let access = try await callTool(CrowdSec.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertFalse(access.isError, access.text)
+        XCTAssertTrue(access.text.contains("✓ API key: it works"), access.text)
+        XCTAssertEqual(service.requests.count, 1)
+    }
+
+    func testCheckAccessSaysWhatToChangeForAKeyCrowdSecRefuses() async throws {
+        let service = FakeService()
+        service.answers["/v2/smoke/192.0.2.1"] = (403, #"{"message":"Forbidden"}"#)
+        let access = try await callTool(CrowdSec.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertTrue(access.text.contains("✗ API key: CrowdSec did not accept the key"), access.text)
+        XCTAssertTrue(access.text.contains("Settings › CTI API Keys"), access.text)
+    }
 }

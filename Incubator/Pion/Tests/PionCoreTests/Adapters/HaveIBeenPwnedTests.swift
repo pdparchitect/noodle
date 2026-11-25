@@ -23,4 +23,20 @@ final class HaveIBeenPwnedTests: XCTestCase {
         XCTAssertTrue(refused.isError)
         XCTAssertNotNil(PionAdapters.all["haveibeenpwned"])
     }
+
+    func testCheckAccessReadsTheSubscription() async throws {
+        let service = FakeService()
+        service.answers["/api/v3/subscription/status"] = (200, #"{"SubscriptionName":"Pwned 1","Description":"","SubscribedUntil":"2027-03-01T00:00:00","Rpm":10,"DomainSearchMaxBreachedAccounts":25}"#)
+        let access = try await callTool(HaveIBeenPwned.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertFalse(access.isError, access.text)
+        XCTAssertTrue(access.text.contains("✓ API key: the Pwned 1 subscription, until 2027-03-01, 10 requests a minute"), access.text)
+    }
+
+    func testCheckAccessSaysWhatToChangeForAKeyHaveIBeenPwnedRefuses() async throws {
+        let service = FakeService()
+        service.answers["/api/v3/subscription/status"] = (401, #"{"statusCode":401,"message":"Access denied due to invalid hibp-api-key."}"#)
+        let access = try await callTool(HaveIBeenPwned.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertTrue(access.text.contains("✗ API key: Have I Been Pwned did not accept the key"), access.text)
+        XCTAssertTrue(access.text.contains("haveibeenpwned.com/API/Key"), access.text)
+    }
 }

@@ -62,4 +62,25 @@ final class WizTests: XCTestCase {
         _ = try await callTool(Wiz.adapter, "issues", #"{"since":"2026-11-19T09:00:00Z"}"#, on: service, in: wiz)
         XCTAssertEqual(((try variables(service.requests.last)["filterBy"] as? [String: Any])?["createdAt"] as? [String: String])?["after"], "2026-11-19T09:00:00Z")
     }
+
+    func testCheckAccessTriesEachScopeWithOneItem() async throws {
+        let service = FakeService()
+        service.sequences["/graphql"] = [(200, #"{"data":{"issuesV2":{"nodes":[{"id":"i1"}]}}}"#),
+                                         (200, #"{"data":null,"errors":[{"message":"Unauthorized: missing scope read:resources","extensions":{"code":"UNAUTHORIZED"}}]}"#)]
+        let access = try await callTool(Wiz.adapter, "check-access", "{}", on: service, in: wiz)
+        XCTAssertFalse(access.isError, access.text)
+        XCTAssertTrue(access.text.contains("Wiz data center us17"), access.text)
+        XCTAssertTrue(access.text.contains("✓ Issues (read:issues)"), access.text)
+        XCTAssertTrue(access.text.contains("✗ Cloud resources (read:resources): Wiz refused it (it said: Unauthorized: missing scope read:resources): give the service account read:resources."), access.text)
+        let first = try JSONSerialization.jsonObject(with: try XCTUnwrap(service.requests.first?.httpBody)) as? [String: Any]
+        XCTAssertEqual(first?["query"] as? String, "query { issuesV2(first: 1) { nodes { id } } }")
+    }
+
+    func testCheckAccessSaysWhatToChangeWhenWizRefusesTheToken() async throws {
+        let service = FakeService()
+        service.answers["/graphql"] = (401, #"{"message":"unauthorized"}"#)
+        let access = try await callTool(Wiz.adapter, "check-access", "{}", on: service, in: wiz)
+        XCTAssertTrue(access.text.contains("✗ Issues (read:issues): Wiz did not accept the service account's token"), access.text)
+        XCTAssertTrue(access.text.contains("data center"), access.text)
+    }
 }

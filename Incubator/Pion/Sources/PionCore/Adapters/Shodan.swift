@@ -3,14 +3,17 @@ import NoodleCore
 import NoodleToolConnections
 
 /// Shodan's view of what an internet address exposes, and DNS both ways, with the person's API key, which
-/// Shodan takes only in the address.
+/// Shodan takes only in the address. check-access reads the key's plan and credits.
+///
+/// The tool's guide is Incubator/Pion/docs/tools/threat-intel.md. Change it with the setup steps or operations here.
 public enum Shodan {
     public static let preset = ToolDefinition(
         id: "6ca1686e-ba46-4e5c-90ad-e78c5ad4e171", name: "Shodan", summary: "What an internet-facing address exposes: open ports, services and known vulnerabilities.",
         defaultInstructions: """
         Use Shodan to see what an IP address exposes to the internet: its open ports, the software on them, known \
         vulnerabilities, its hostnames and owner; and to resolve hostnames and addresses both ways. Shodan reports what its \
-        scanners last saw, which may be days old: say when. Record each lookup as evidence. These lookups never scan anything.
+        scanners last saw, which may be days old: say when. Record each lookup as evidence. These lookups never scan anything. \
+        When a lookup is refused, run check-access and tell the champion exactly what it says to change.
         """,
         iconName: "shodan",
         configuration: .connection(.init(endpoint: URL(string: "https://api.shodan.io")!, tokenParameter: "key", adapter: "shodan")),
@@ -18,10 +21,10 @@ public enum Shodan {
 
     static let setup = [
         "Sign in at [account.shodan.io](https://account.shodan.io), or create an account.",
-        "Copy the **API Key** shown on the account page and paste it here.",
+        "Copy the **API Key** shown on the account page and paste it here. Then ask an agent to run check-access.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [HostReport(), Resolve(), Reverse()])
+    public static let adapter = OperationAdapter(operations: [HostReport(), Resolve(), Reverse(), CheckAccess()])
 }
 
 extension Shodan {
@@ -107,4 +110,43 @@ extension Shodan {
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: Answers(hostnames: answers))
         }
     }
+}
+
+extension Shodan {
+    static let fixes = AccessCheck.Fixes(
+        rejected: "Shodan did not accept the key: it is wrong, or was reset. Copy the API Key again from account.shodan.io and enter it in Settings › Tools.",
+        forbidden: "Shodan refused the key for this: the account's plan may not include API access to it. A free account reaches little of the API; a membership or paid plan reaches more.",
+        rateLimited: "Shodan is rate limiting this key, about one request a second: wait before trying again.")
+
+    /// Reads the key's plan and the credits left this month, which spends none.
+    struct CheckAccess: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection]
+        static let summary = "Tries the key once with a read of its plan and credits, which looks nothing up, and says the plan and the query credits left this month, or what to change."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            var check = AccessCheck(Shodan.fixes)
+            await check.probe("API key") {
+                let info = try await Shodan.info(service)
+                var found = "it works, on the \(info.plan ?? "?") plan"
+                if let left = info.query_credits {
+                    found += "; \(left)\(info.usage_limits?.query_credits.map { " of \($0)" } ?? "") query credits are left this month"
+                }
+                return found
+            }
+            check.note("Whether the plan includes host reports and DNS lookups shows when they are first tried: one it does not include is refused with HTTP 403.")
+            return try check.result()
+        }
+    }
+
+    /// The key's plan and credits, as Shodan reports them.
+    struct Info: Decodable {
+        struct Limits: Decodable { let query_credits: Int? }
+        let plan: String?, query_credits: Int?, usage_limits: Limits?
+    }
+
+    /// Reads them, which spends no credit.
+    static func info(_ service: ServiceClient) async throws -> Info { try await service.get(["api-info"], as: Info.self) }
 }

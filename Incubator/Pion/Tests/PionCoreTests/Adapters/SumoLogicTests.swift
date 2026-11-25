@@ -27,4 +27,29 @@ final class SumoLogicTests: XCTestCase {
         XCTAssertEqual(service.requests.last?.httpMethod, "DELETE")
         XCTAssertNotNil(PionAdapters.all["sumologic"])
     }
+
+    func testCheckAccessStartsOneSearchOverTheLastMinuteAndRemovesIt() async throws {
+        let service = FakeService()
+        service.answers["/api/v1/search/jobs"] = (202, #"{"id":"6F1B2C3D","link":{"rel":"self","href":"https://api.eu.sumologic.com/api/v1/search/jobs/6F1B2C3D"}}"#)
+        service.answers["/api/v1/search/jobs/6F1B2C3D"] = (200, "{}")
+        let access = try await callTool(SumoLogic.adapter, "check-access", "{}", on: service, in: sumo)
+        XCTAssertFalse(access.isError, access.text)
+        XCTAssertTrue(access.text.contains("Sumo Logic deployment EU"), access.text)
+        XCTAssertTrue(access.text.contains("✓ Search jobs: the key may search"), access.text)
+        XCTAssertEqual(service.requests.map(\.httpMethod), ["POST", "DELETE"])
+        let body = try JSONSerialization.jsonObject(with: try XCTUnwrap(service.requests.first?.httpBody)) as? [String: Any]
+        XCTAssertEqual(body?["query"] as? String, "* | limit 1")
+    }
+
+    func testCheckAccessSaysWhatToChangeWhenSumoRefusesTheKeyOrSearching() async throws {
+        let service = FakeService()
+        service.answers["/api/v1/search/jobs"] = (401, #"{"status":401,"id":"X","code":"unauthorized","message":"Credential could not be verified."}"#)
+        let wrong = try await callTool(SumoLogic.adapter, "check-access", "{}", on: service, in: sumo)
+        XCTAssertTrue(wrong.text.contains("✗ Search jobs: Sumo Logic did not accept the access ID and key"), wrong.text)
+        service.answers["/api/v1/search/jobs"] = (403, #"{"status":403,"code":"forbidden","message":"Forbidden"}"#)
+        let plan = try await callTool(SumoLogic.adapter, "check-access", "{}", on: service, in: sumo)
+        XCTAssertTrue(plan.text.contains("✗ Search jobs: Sumo Logic refused searching through the API"), plan.text)
+        XCTAssertTrue(plan.text.contains("Enterprise"), plan.text)
+        XCTAssertEqual(service.requests.count, 2, "nothing to remove when no job started")
+    }
 }

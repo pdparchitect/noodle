@@ -22,4 +22,20 @@ final class OTXTests: XCTestCase {
         }
         XCTAssertNotNil(PionAdapters.all["otx"])
     }
+
+    func testCheckAccessSaysWhoseKeyItIs() async throws {
+        let service = FakeService()
+        service.answers["/api/v1/users/me"] = (200, #"{"username":"kestrel-soc","pulse_count":0}"#)
+        let access = try await callTool(OTX.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertFalse(access.isError, access.text)
+        XCTAssertTrue(access.text.contains("✓ API key: it belongs to the OTX user kestrel-soc"), access.text)
+    }
+
+    func testCheckAccessTakesARefusalAsAWrongKey() async throws {
+        let service = FakeService()
+        service.answers["/api/v1/users/me"] = (403, #"{"detail":"Authentication required"}"#)
+        let access = try await callTool(OTX.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertTrue(access.text.contains("✗ API key: OTX did not accept the key"), access.text)
+        XCTAssertTrue(access.text.contains("otx.alienvault.com/api"), access.text)
+    }
 }

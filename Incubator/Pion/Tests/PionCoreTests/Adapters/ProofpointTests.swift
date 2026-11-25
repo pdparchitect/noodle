@@ -34,4 +34,25 @@ final class ProofpointTests: XCTestCase {
         XCTAssertEqual(queryItems(service.requests.last)["sinceSeconds"], "3600", "Proofpoint gives an hour at most")
         XCTAssertEqual(Proofpoint.adapter.watchedTool, "siem-events")
     }
+
+    func testCheckAccessReadsTheLastMinuteOnce() async throws {
+        let service = FakeService()
+        service.answers["/v2/siem/all"] = (200, #"{"queryEndTime":"2026-11-25T10:00:00Z","messagesDelivered":[],"messagesBlocked":[{"GUID":"g1"}],"clicksPermitted":[],"clicksBlocked":[]}"#)
+        let access = try await callTool(Proofpoint.adapter, "check-access", "{}", on: service, in: tap)
+        XCTAssertFalse(access.isError, access.text)
+        XCTAssertTrue(access.text.contains("✓ SIEM API: 1 threat message and 0 clicks in the last minute"), access.text)
+        XCTAssertEqual(service.requests.count, 1)
+        XCTAssertEqual(queryItems(service.requests.first)["sinceSeconds"], "60")
+    }
+
+    func testCheckAccessSaysWhatToChangeWhenProofpointRefusesTheCredential() async throws {
+        let service = FakeService()
+        service.answers["/v2/siem/all"] = (401, "Unauthorized")
+        let wrong = try await callTool(Proofpoint.adapter, "check-access", "{}", on: service, in: tap)
+        XCTAssertTrue(wrong.text.contains("✗ SIEM API: Proofpoint did not accept the service principal and secret"), wrong.text)
+        XCTAssertTrue(wrong.text.contains("Connected Applications"), wrong.text)
+        service.answers["/v2/siem/all"] = (429, "Too many requests")
+        let limited = try await callTool(Proofpoint.adapter, "check-access", "{}", on: service, in: tap)
+        XCTAssertTrue(limited.text.contains("1,800 requests in the last 24 hours"), limited.text)
+    }
 }

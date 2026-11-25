@@ -29,7 +29,7 @@ final class VirusTotalTests: XCTestCase {
     func testItOffersLookupsForFilesDomainsAddressesAndURLs() async throws {
         let list = try JSONSerialization.jsonObject(with: try await VirusTotal.adapter.tools(for: connection)) as! [String: Any]
         XCTAssertEqual(Set((list["tools"] as! [[String: Any]]).compactMap { $0["name"] as? String }),
-                       ["file-report", "domain-report", "ip-report", "url-report"])
+                       ["file-report", "domain-report", "ip-report", "url-report", "check-access"])
     }
 
     func testAFileReportSaysHowManyEnginesFlagItAndKeepsTheFileDetails() async throws {
@@ -79,5 +79,24 @@ final class VirusTotalTests: XCTestCase {
         let result = try await call("file-report", #"{"hash":"\#(sha256)"}"#, on: FakeService())
         XCTAssertTrue(result.isError)
         XCTAssertTrue(result.text.contains("not found"), result.text)
+    }
+
+    func testCheckAccessSpendsOneLookup() async throws {
+        let service = FakeService()
+        service.answers["/api/v3/ip_addresses/8.8.8.8"] = (200, #"{"data":{"id":"8.8.8.8","attributes":{}}}"#)
+        let access = try await callTool(VirusTotal.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertFalse(access.isError, access.text)
+        XCTAssertTrue(access.text.contains("✓ API key (a lookup of 8.8.8.8, which spent one): it works"), access.text)
+        XCTAssertEqual(service.requests.count, 1)
+    }
+
+    func testCheckAccessSaysWhatToChangeForAKeyVirusTotalRefusesOrASpentQuota() async throws {
+        let service = FakeService()
+        service.answers["/api/v3/ip_addresses/8.8.8.8"] = (401, #"{"error":{"code":"WrongCredentialsError","message":"Wrong API key"}}"#)
+        let wrong = try await callTool(VirusTotal.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertTrue(wrong.text.contains("✗ API key (a lookup of 8.8.8.8, which spent one): VirusTotal did not accept the key"), wrong.text)
+        service.answers["/api/v3/ip_addresses/8.8.8.8"] = (429, #"{"error":{"code":"QuotaExceededError","message":"Quota exceeded"}}"#)
+        let spent = try await callTool(VirusTotal.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertTrue(spent.text.contains("500 a day, renewed at midnight UTC"), spent.text)
     }
 }

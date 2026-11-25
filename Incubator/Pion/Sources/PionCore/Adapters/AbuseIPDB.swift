@@ -2,7 +2,10 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// AbuseIPDB: how often an IP address has been reported for abuse, with the person's API key.
+/// AbuseIPDB: how often an IP address has been reported for abuse, with the person's API key. AbuseIPDB has no read
+/// of the key's own account, so check-access looks up a loopback address, spending one check of the day's quota.
+///
+/// The tool's guide is Incubator/Pion/docs/tools/threat-intel.md. Change it with the setup steps or operations here.
 public enum AbuseIPDB {
     public static let preset = ToolDefinition(
         id: "a1d168df-eb3c-4c66-927b-e552f7bb62c0", name: "AbuseIPDB", summary: "How often an IP address has been reported for abuse, and by how many.",
@@ -10,7 +13,7 @@ public enum AbuseIPDB {
         Use AbuseIPDB to see whether an IP address has been reported for abuse: its confidence score, how many reports \
         and reporters, when last reported, and its ISP, usage type and whether it is a Tor exit. A score reflects other \
         people's reports, not proof: weigh it with what else you found. Record each lookup as evidence. Lookups never \
-        report anything.
+        report anything. When a lookup is refused, run check-access and tell the champion exactly what it says to change.
         """,
         iconName: "abuseipdb",
         configuration: .connection(.init(endpoint: URL(string: "https://api.abuseipdb.com/api/v2")!, tokenHeader: "Key", adapter: "abuseipdb")),
@@ -18,10 +21,10 @@ public enum AbuseIPDB {
 
     static let setup = [
         "Sign in at [abuseipdb.com](https://www.abuseipdb.com), or create a free account.",
-        "Open [Account › API](https://www.abuseipdb.com/account/api), choose **Create Key**, and paste the key here.",
+        "Open [Account › API](https://www.abuseipdb.com/account/api), choose **Create Key**, and paste the key here. Then ask an agent to run check-access.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [Check()])
+    public static let adapter = OperationAdapter(operations: [Check(), CheckAccess()])
 }
 
 extension AbuseIPDB {
@@ -51,6 +54,34 @@ extension AbuseIPDB {
             let about = [report.isp, report.usageType, report.countryCode, report.isTor == true ? "Tor exit" : nil].compactMap { $0 }
             if !about.isEmpty { text += " " + about.joined(separator: ", ") + "." }
             return try ServiceResult(text: text, structured: report)
+        }
+    }
+}
+
+extension AbuseIPDB {
+    static let fixes = AccessCheck.Fixes(
+        rejected: "AbuseIPDB did not accept the key: it is wrong or was deleted. Create a new key under Account › API and enter it again in Settings › Tools.",
+        forbidden: "AbuseIPDB refused the key: the account may be suspended or unverified. Check it at abuseipdb.com.",
+        rateLimited: "the account's checks for today are used up. They renew at midnight UTC; a paid plan raises the limit.")
+
+    /// Looks up a loopback address once, the only way to try the key, and reports the day's quota from the answer's headers.
+    struct CheckAccess: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection]
+        static let summary = "Tries the key with one lookup of 127.0.0.1 and says whether it works and how many of today's checks are left, or what to change. That lookup spends one check of the day's quota."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            var check = AccessCheck(AbuseIPDB.fixes)
+            await check.probe("API key") {
+                // AbuseIPDB may refuse an address that is not public, which still shows the key was taken.
+                let answer = try await service.exchange(["check"], query: ["ipAddress": "127.0.0.1", "maxAgeInDays": "1"], returning: [400, 422])
+                let limit = answer.response.value(forHTTPHeaderField: "X-RateLimit-Limit"), left = answer.response.value(forHTTPHeaderField: "X-RateLimit-Remaining")
+                guard let limit, let left else { return "it works" }
+                return "it works; \(left) of today's \(limit) checks are left, after the one this spent"
+            }
+            return try check.result()
         }
     }
 }

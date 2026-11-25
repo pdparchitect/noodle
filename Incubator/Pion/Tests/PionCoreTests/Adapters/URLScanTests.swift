@@ -21,4 +21,20 @@ final class URLScanTests: XCTestCase {
                       "without the slash urlscan redirects, which is not followed")
         XCTAssertNotNil(PionAdapters.all["urlscan"])
     }
+
+    func testCheckAccessSaysHowManySearchesAreLeft() async throws {
+        let service = FakeService()
+        service.answers["/api/v1/quotas"] = (200, #"{"scope":"user","limits":{"search":{"minute":{"limit":120,"used":1,"remaining":119},"hour":{"limit":1000,"used":10,"remaining":990},"day":{"limit":1000,"used":10,"remaining":990}},"public":{"day":{"limit":5000,"used":0,"remaining":5000}}}}"#)
+        let access = try await callTool(URLScan.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertFalse(access.isError, access.text)
+        XCTAssertTrue(access.text.contains("✓ API key: it works; searches left: 119 of 120 this minute, 990 of 1000 this hour, 990 of 1000 this day"), access.text)
+    }
+
+    func testCheckAccessSaysWhatToChangeForAKeyURLScanRefuses() async throws {
+        let service = FakeService()
+        service.answers["/api/v1/quotas"] = (401, #"{"message":"Unauthorized","status":401}"#)
+        let access = try await callTool(URLScan.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertTrue(access.text.contains("✗ API key: urlscan.io did not accept the key"), access.text)
+        XCTAssertTrue(access.text.contains("Settings & API › API Keys"), access.text)
+    }
 }

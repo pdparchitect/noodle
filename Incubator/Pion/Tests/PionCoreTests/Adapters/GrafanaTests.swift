@@ -111,4 +111,32 @@ final class GrafanaTests: XCTestCase {
         let from = try XCTUnwrap(Double(try XCTUnwrap(sent["from"])))
         XCTAssertEqual(from / 1000, Date().timeIntervalSince1970 - 2 * 86_400, accuracy: 60, "now-2d went as epoch milliseconds")
     }
+
+    func testCheckAccessTriesEachReadOnceAndSaysWhatToChangeForThoseRefused() async throws {
+        let service = FakeService()
+        service.answers["/api/org"] = (200, #"{"id":1,"name":"Main Org."}"#)
+        service.answers["/api/search"] = (200, #"[{"uid":"web-01"}]"#)
+        service.answers["/api/datasources"] = (403, #"{"message":"You'll need additional permissions to perform this action. Permissions needed: datasources:read"}"#)
+        service.answers["/api/alertmanager/grafana/api/v2/alerts"] = (200, "[]")
+        service.answers["/api/annotations"] = (200, "[]")
+        let access = try await callTool(Grafana.adapter, "check-access", "{}", on: service, in: local)
+        XCTAssertFalse(access.isError, access.text)
+        XCTAssertTrue(access.text.contains("✓ Token: it belongs to the organisation Main Org. (ID 1)"), access.text)
+        XCTAssertTrue(access.text.contains("✓ Dashboards"), access.text)
+        XCTAssertTrue(access.text.contains("✗ Data sources: the service account's role may not list data sources"), access.text)
+        XCTAssertTrue(access.text.contains("datasources:read"), access.text)
+        XCTAssertTrue(access.text.contains("✓ Firing alerts"), access.text)
+        XCTAssertTrue(access.text.contains("✓ Annotations"), access.text)
+        XCTAssertEqual(service.requests.first?.url?.absoluteString, "http://localhost:3000/api/org/")
+        XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" })
+    }
+
+    func testCheckAccessStopsAtATokenGrafanaRefuses() async throws {
+        let service = FakeService()
+        service.answers["/api/org"] = (401, #"{"message":"invalid API key"}"#)
+        let access = try await callTool(Grafana.adapter, "check-access", "{}", on: service, in: cloud)
+        XCTAssertTrue(access.text.contains("✗ Token: Grafana did not accept the token"), access.text)
+        XCTAssertTrue(access.text.contains("Settings › Tools"), access.text)
+        XCTAssertEqual(service.requests.count, 1)
+    }
 }

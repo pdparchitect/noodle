@@ -20,4 +20,23 @@ final class AbuseIPDBTests: XCTestCase {
         XCTAssertTrue(refused.isError)
         XCTAssertNotNil(PionAdapters.all["abuseipdb"])
     }
+
+    func testCheckAccessSpendsOneCheckAndSaysHowManyAreLeft() async throws {
+        let service = FakeService()
+        service.answers["/api/v2/check"] = (200, #"{"data":{"ipAddress":"127.0.0.1","isPublic":false,"abuseConfidenceScore":0}}"#)
+        service.responseHeaders = ["X-RateLimit-Limit": "1000", "X-RateLimit-Remaining": "998"]
+        let access = try await callTool(AbuseIPDB.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertFalse(access.isError, access.text)
+        XCTAssertTrue(access.text.contains("✓ API key: it works; 998 of today's 1000 checks are left"), access.text)
+        XCTAssertEqual(queryItems(service.requests.first)["ipAddress"], "127.0.0.1")
+        XCTAssertEqual(service.requests.count, 1)
+    }
+
+    func testCheckAccessSaysWhatToChangeForAKeyAbuseIPDBRefuses() async throws {
+        let service = FakeService()
+        service.answers["/api/v2/check"] = (401, #"{"errors":[{"detail":"Authentication failed. Your API key is either missing, incorrect, or revoked.","status":401}]}"#)
+        let access = try await callTool(AbuseIPDB.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertTrue(access.text.contains("✗ API key: AbuseIPDB did not accept the key"), access.text)
+        XCTAssertTrue(access.text.contains("Account › API"), access.text)
+    }
 }

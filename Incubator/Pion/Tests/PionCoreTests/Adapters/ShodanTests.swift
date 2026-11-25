@@ -53,4 +53,21 @@ final class ShodanTests: XCTestCase {
         }
         XCTAssertTrue(service.requests.isEmpty)
     }
+
+    func testCheckAccessReadsThePlanAndCreditsLeft() async throws {
+        let service = FakeService()
+        service.answers["/api-info"] = (200, #"{"plan":"dev","query_credits":95,"scan_credits":100,"usage_limits":{"query_credits":100,"scan_credits":100,"monitored_ips":16}}"#)
+        let access = try await callTool(Shodan.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertFalse(access.isError, access.text)
+        XCTAssertTrue(access.text.contains("✓ API key: it works, on the dev plan; 95 of 100 query credits are left this month"), access.text)
+        XCTAssertEqual(service.requests.count, 1)
+    }
+
+    func testCheckAccessSaysWhatToChangeForAKeyShodanRefuses() async throws {
+        let service = FakeService()
+        service.answers["/api-info"] = (401, #"{"error":"Invalid API key"}"#)
+        let access = try await callTool(Shodan.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertTrue(access.text.contains("✗ API key: Shodan did not accept the key"), access.text)
+        XCTAssertTrue(access.text.contains("account.shodan.io"), access.text)
+    }
 }

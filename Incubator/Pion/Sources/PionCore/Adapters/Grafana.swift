@@ -4,14 +4,18 @@ import NoodleToolConnections
 
 /// Grafana, read through its HTTP API with a service account's token: dashboards and the queries behind their
 /// panels, queries over its data sources, firing alerts and annotations. Grafana Cloud and a Grafana the person runs,
-/// on this Mac, the local network or anywhere over HTTPS, are two entries over the same operations.
+/// on this Mac, the local network or anywhere over HTTPS, are two entries over the same operations. check-access tries
+/// each read once.
+///
+/// Both tools' guide is Incubator/Pion/docs/tools/grafana.md. Change it with the setup steps or operations here.
 public enum Grafana {
     static let instructions = """
         Use Grafana to see what its data sources show around the incident: find dashboards, read the queries and data \
         source UIDs behind their panels, run a query over a data source (PromQL or LogQL for Prometheus and Loki, the \
         data source's own query language otherwise) over a time range, list firing alerts, and read annotations such as \
         deploys. Record each query and what it returned as evidence, with the query, data source and time range as the \
-        method. These tools only read.
+        method. These tools only read. When a tool is refused, run check-access and tell the champion exactly what it \
+        says to change.
         """
 
     public static let cloud = ToolDefinition(
@@ -32,7 +36,7 @@ public enum Grafana {
 
     static let token = [
         "Choose **Add service account token**, give it an expiry date, then copy the token and paste it here; it is shown only once.",
-        "Viewer reads dashboards, alerts and annotations and queries data sources. If agents cannot list data sources, they find each one's UID in dashboards' panels.",
+        "Viewer reads dashboards, alerts and annotations and queries data sources. If agents cannot list data sources, they find each one's UID in dashboards' panels. Then ask an agent to run check-access.",
     ]
 
     static let cloudSetup = [
@@ -47,7 +51,7 @@ public enum Grafana {
         "For the address, give the one you open Grafana at, such as `http://localhost:3000` or `https://grafana.example.com`. Plain `http` works only on this Mac or the local network.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [Dashboards(), Dashboard(), DataSources(), Query(), Alerts(), Annotations()])
+    public static let adapter = OperationAdapter(operations: [Dashboards(), Dashboard(), DataSources(), Query(), Alerts(), Annotations(), CheckAccess()])
 
     /// A time as Grafana takes it: now, now-6h and the like, or ISO 8601, which goes as epoch milliseconds.
     static func time(_ value: String?, default fallback: String) throws -> String {
@@ -324,5 +328,51 @@ extension Grafana {
         }
         if labelled { columns.insert("series", at: 0) }
         return ServiceTable(columns: columns, rows: rows.map { row in columns.map { row[$0] ?? .none } })
+    }
+}
+
+extension Grafana {
+    static let fixes = AccessCheck.Fixes(
+        rejected: "Grafana did not accept the token: it is wrong, has expired or was deleted, or its service account was disabled. Add a new token to the service account and enter it again in Settings › Tools.",
+        forbidden: "the service account's role may not read this: give it the Viewer role, or a role that holds the matching read permission.",
+        unreachable: "Pion could not reach Grafana: check the address in Settings › Tools, and that this Mac may reach it.",
+        notFound: "Grafana does not offer this at this address: check that the address is the one you open Grafana at, with any path it is served under.")
+
+    /// Tries each thing the tools read once: the organisation the token belongs to, dashboards, data sources, firing
+    /// alerts and annotations. Queries over a data source are not tried, as they need one and a query for it.
+    struct CheckAccess: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
+        static let summary = "Tries each thing this tool reads once, the organisation, dashboards, data sources, firing alerts and annotations, and says what works and, for what does not, what to change. It sends only reads."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            var check = AccessCheck(Grafana.fixes)
+            check.note("Grafana at \(service.base.deletingLastPathComponent().absoluteString).")
+            struct Organisation: Decodable { let id: Int?; let name: String? }
+            struct Item: Decodable {}
+            guard await check.probe("Token", { () async throws -> String in
+                let org = try await service.get(["org"], trailingSlash: true, as: Organisation.self)
+                return "it belongs to the organisation \(org.name ?? "?")\(org.id.map { " (ID \($0))" } ?? "")"
+            }) else { return try check.result() }
+            await check.probe("Dashboards") {
+                _ = try await service.get(["search"], query: ["type": "dash-db", "limit": "1"], as: [Item].self)
+                return ""
+            }
+            await check.probe("Data sources", forbidden: "the service account's role may not list data sources, as Viewer may not on some Grafanas. Agents can still query one, by the UID in a dashboard's panel; to list them, give it a role with datasources:read.") {
+                AccessCheck.count(try await service.get(["datasources"], as: [Item].self).count, "data source", "data sources")
+            }
+            await check.probe("Firing alerts", forbidden: "the service account's role may not read alerts: give it Viewer, or a role with alert.instances:read.") {
+                _ = try await service.get(["alertmanager", "grafana", "api", "v2", "alerts"], query: ["active": "true", "silenced": "false", "inhibited": "false"], as: [Item].self)
+                return ""
+            }
+            await check.probe("Annotations", forbidden: "the service account's role may not read annotations: give it Viewer, or a role with annotations:read.") {
+                _ = try await service.get(["annotations"], query: ["limit": "1"], as: [Item].self)
+                return ""
+            }
+            check.note("Queries over a data source are not tried: each takes a data source and a query. Viewer may query data sources, unless a data source's own permissions keep it out.")
+            return try check.result()
+        }
     }
 }

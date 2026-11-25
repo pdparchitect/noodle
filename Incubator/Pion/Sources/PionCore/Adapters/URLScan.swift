@@ -3,7 +3,9 @@ import NoodleCore
 import NoodleToolConnections
 
 /// urlscan.io: earlier scans of pages, searched by domain, IP address, URL or hash, with the person's API key.
-/// Nothing is submitted for scanning.
+/// Nothing is submitted for scanning. check-access reads the key's quotas.
+///
+/// The tool's guide is Incubator/Pion/docs/tools/threat-intel.md. Change it with the setup steps or operations here.
 public enum URLScan {
     public static let preset = ToolDefinition(
         id: "1c56a13d-c7fe-4905-ab05-732e0351c0a5", name: "urlscan.io", summary: "Search earlier scans of web pages: what a URL showed, where it was hosted, and its verdict.",
@@ -11,7 +13,7 @@ public enum URLScan {
         Use urlscan.io to search scans other people already made of web pages, by domain, IP address, URL or hash, such \
         as domain:example.com or page.ip:203.0.113.77: what each page showed, where it was hosted, and urlscan's verdict. \
         Record each search as evidence. Searches never submit anything for scanning, so they never reveal what you are \
-        looking at.
+        looking at. When a search is refused, run check-access and tell the champion exactly what it says to change.
         """,
         iconName: "urlscan",
         configuration: .connection(.init(endpoint: URL(string: "https://urlscan.io/api/v1")!, tokenHeader: "API-Key", adapter: "urlscan")),
@@ -19,10 +21,10 @@ public enum URLScan {
 
     static let setup = [
         "Sign in at [urlscan.io](https://urlscan.io), or create a free account.",
-        "Open **Settings & API › API Keys**, choose **New API key**, and paste the key here.",
+        "Open **Settings & API › API Keys**, choose **New API key**, and paste the key here. Then ask an agent to run check-access.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [Search()])
+    public static let adapter = OperationAdapter(operations: [Search(), CheckAccess()])
 }
 
 extension URLScan {
@@ -57,6 +59,39 @@ extension URLScan {
                 return line
             }.joined(separator: "\n")
             return try ServiceResult(text: text, structured: Scans(total: answer.total, scans: scans))
+        }
+    }
+}
+
+extension URLScan {
+    static let fixes = AccessCheck.Fixes(
+        rejected: "urlscan.io did not accept the key: it is wrong or was deleted. Make a new one under Settings & API › API Keys and enter it again in Settings › Tools.",
+        forbidden: "urlscan.io refused the key for this: the account's plan may not include it.",
+        rateLimited: "the key's searches for this minute, hour or day are used up: wait for the window to pass, or use a paid plan.")
+
+    /// Reads the key's quotas, which searches nothing, and says how many searches are left in each window.
+    struct CheckAccess: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection]
+        static let summary = "Tries the key once with a read of its quotas, which searches nothing, and says how many searches are left this minute, hour and day, or what to change."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            var check = AccessCheck(URLScan.fixes)
+            struct Window: Decodable { let limit: Double?; let used: Double?; let remaining: Double? }
+            struct Quotas: Decodable { let limits: [String: [String: Window]]? }
+            await check.probe("API key") {
+                let quotas = try await service.get(["quotas"], as: Quotas.self)
+                guard let search = quotas.limits?["search"], !search.isEmpty else { return "it works" }
+                let windows = ["minute", "hour", "day"].compactMap { period -> String? in
+                    guard let window = search[period], let limit = AccessCheck.whole(window.limit) else { return nil }
+                    let left = AccessCheck.whole(window.remaining ?? window.limit.map { $0 - (window.used ?? 0) }) ?? "?"
+                    return "\(left) of \(limit) this \(period)"
+                }
+                return "it works; searches left: " + (windows.isEmpty ? "not reported" : windows.joined(separator: ", "))
+            }
+            return try check.result()
         }
     }
 }

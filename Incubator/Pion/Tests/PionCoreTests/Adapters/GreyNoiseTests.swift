@@ -20,4 +20,24 @@ final class GreyNoiseTests: XCTestCase {
         XCTAssertTrue(unseen.text.contains("has not seen"), unseen.text)
         XCTAssertNotNil(PionAdapters.all["greynoise"])
     }
+
+    func testCheckAccessPingsWithoutSpendingALookup() async throws {
+        let service = FakeService()
+        service.answers["/ping"] = (200, #"{"message":"pong","expiration":"2027-01-31","offering":"enterprise","plan":"community"}"#)
+        let access = try await callTool(GreyNoise.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertFalse(access.isError, access.text)
+        XCTAssertTrue(access.text.contains("✓ API key: it works, on the community plan, until 2027-01-31"), access.text)
+        XCTAssertEqual(service.requests.map { $0.url?.absoluteString }, ["https://api.greynoise.io/ping"])
+    }
+
+    func testCheckAccessTellsAWrongKeyFromOneThePingDoesNotTake() async throws {
+        let service = FakeService()
+        service.answers["/ping"] = (401, #"{"message":"Unauthorized"}"#)
+        service.answers["/v3/community/8.8.8.8"] = (401, #"{"message":"Unauthorized"}"#)
+        let wrong = try await callTool(GreyNoise.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertTrue(wrong.text.contains("✗ API key (a Community lookup of 8.8.8.8, which spent one): GreyNoise did not accept the key"), wrong.text)
+        service.answers["/v3/community/8.8.8.8"] = (200, #"{"ip":"8.8.8.8","noise":false,"riot":true,"name":"Google Public DNS"}"#)
+        let community = try await callTool(GreyNoise.adapter, "check-access", "{}", on: service, in: connection)
+        XCTAssertTrue(community.text.contains("it works for Community lookups; GreyNoise's ping does not take it"), community.text)
+    }
 }

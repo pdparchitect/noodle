@@ -3,7 +3,10 @@ import NoodleCore
 import NoodleToolConnections
 
 /// CrowdSec's CTI: what the machines in CrowdSec's network have seen an IP address do, from the behaviours and attacks
-/// that caught it to how aggressive it has been lately.
+/// that caught it to how aggressive it has been lately. check-access looks up an address reserved for documentation,
+/// which CrowdSec has not seen.
+///
+/// The tool's guide is Incubator/Pion/docs/tools/threat-intel.md. Change it with the setup steps or operations here.
 public enum CrowdSec {
     public static let cti = ToolDefinition(
         id: "5f0d3c2a-8e4b-4a91-b7c6-2d9e1f8a6b34", name: "CrowdSec CTI",
@@ -12,7 +15,8 @@ public enum CrowdSec {
         Use CrowdSec CTI to see what the machines in CrowdSec's network have seen an IP address do: its reputation, \
         the behaviours and attacks that caught it, the MITRE ATT&CK techniques and CVEs involved, whether it is background \
         noise, and when it was first and last seen. Look up several addresses at once when you have them. An address \
-        CrowdSec has not seen is a finding too. Record each lookup as evidence.
+        CrowdSec has not seen is a finding too. Record each lookup as evidence. When a lookup is refused, run check-access \
+        and tell the champion exactly what it says to change.
         """,
         iconName: "crowdsec",
         configuration: .connection(.init(endpoint: URL(string: "https://cti.api.crowdsec.net/v2")!, tokenHeader: "x-api-key", adapter: "crowdsec-cti")),
@@ -20,10 +24,10 @@ public enum CrowdSec {
 
     static let setup = [
         "Sign in to the [CrowdSec Console](https://app.crowdsec.net), or create a free account.",
-        "Open **Settings › CTI API Keys**, create a key, then copy it and paste it here; it is shown only once.",
+        "Open **Settings › CTI API Keys**, create a key, then copy it and paste it here; it is shown only once. Then ask an agent to run check-access.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [Lookup(), Lookups()])
+    public static let adapter = OperationAdapter(operations: [Lookup(), Lookups(), CheckAccess()])
 
     struct Named: Codable { let name: String?; let label: String? }
     struct Classifications: Codable { let classifications: [Named]?; let false_positives: [Named]? }
@@ -116,6 +120,34 @@ extension CrowdSec {
             if !unseen.isEmpty { text += (text.isEmpty ? "" : "\n\n") + "Not seen: " + unseen.joined(separator: ", ") }
             struct Kept: Encodable { let items: [Item]; let unseen: [String] }
             return try ServiceResult(text: text, structured: Kept(items: items, unseen: unseen))
+        }
+    }
+}
+
+extension CrowdSec {
+    static let fixes = AccessCheck.Fixes(
+        rejected: "CrowdSec did not accept the key: it is wrong or was deleted. Create a new key under Settings › CTI API Keys in the CrowdSec Console and enter it again in Settings › Tools.",
+        forbidden: "CrowdSec refused the key for this.",
+        rateLimited: "the key's lookups are used up for now: a free Community key allows a small monthly quota. Wait for it to renew, or use a paid plan.")
+
+    /// Looks up 192.0.2.1, reserved for documentation, which CrowdSec has not seen: a key it takes answers that, and
+    /// one it does not is refused.
+    struct CheckAccess: ServiceOperation {
+        struct Input: Decodable, Sendable {}
+        static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection]
+        static let summary = "Tries the key with one lookup of 192.0.2.1, an address reserved for documentation, and says whether it works, or what to change. CrowdSec counts lookups that return an address against the key's quota; this one should return none."
+        static let input = JSONSchema.object([:])
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            var check = AccessCheck(CrowdSec.fixes)
+            await check.probe("API key") {
+                do { _ = try await CrowdSec.asked { try await service.data(["smoke", "192.0.2.1"]) } }
+                catch ServiceError.notFound {}
+                return "it works"
+            }
+            check.note("The CrowdSec Console shows the key's quota and what is used of it under Settings › CTI API Keys.")
+            return try check.result()
         }
     }
 }

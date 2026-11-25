@@ -25,4 +25,26 @@ final class TenableTests: XCTestCase {
         XCTAssertEqual(sent["filter.0.value"], "10.0.4.23")
         XCTAssertNotNil(PionAdapters.all["tenable"])
     }
+
+    func testCheckAccessTriesTheWorkbenchAndSaysWhoseKeysTheyAre() async throws {
+        let service = FakeService()
+        service.answers["/workbenches/assets"] = (200, #"{"assets":[],"total":0}"#)
+        service.answers["/session"] = (200, #"{"username":"pion@kestrel.example","permissions":16,"container_name":"Kestrel"}"#)
+        let access = try await callTool(Tenable.adapter, "check-access", "{}", on: service, in: tenable)
+        XCTAssertFalse(access.isError, access.text)
+        XCTAssertTrue(access.text.contains("✓ Keys and the asset workbench"), access.text)
+        XCTAssertTrue(access.text.contains("The keys belong to pion@kestrel.example, with the Basic role, in Kestrel."), access.text)
+        XCTAssertEqual(queryItems(service.requests.first)["filter.0.value"], "192.0.2.1")
+    }
+
+    func testCheckAccessSaysWhatToChangeForRefusedKeysOrARoleWithoutAccess() async throws {
+        let service = FakeService()
+        service.answers["/workbenches/assets"] = (401, #"{"statusCode":401,"error":"Unauthorized","message":"Invalid Credentials"}"#)
+        let wrong = try await callTool(Tenable.adapter, "check-access", "{}", on: service, in: tenable)
+        XCTAssertTrue(wrong.text.contains("✗ Keys and the asset workbench: Tenable did not accept the keys"), wrong.text)
+        XCTAssertEqual(service.requests.count, 1)
+        service.answers["/workbenches/assets"] = (403, #"{"statusCode":403,"error":"Forbidden","message":"You do not have permission to view this resource"}"#)
+        let role = try await callTool(Tenable.adapter, "check-access", "{}", on: service, in: tenable)
+        XCTAssertTrue(role.text.contains("give it the Basic role or higher, with Can View on the assets"), role.text)
+    }
 }
