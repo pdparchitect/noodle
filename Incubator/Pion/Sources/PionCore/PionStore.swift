@@ -34,6 +34,12 @@ public final class PionStore: @unchecked Sendable {
     private func investigationURL(_ id: UUID) -> URL { folder(id).appendingPathComponent("investigation.json") }
     private func caseURL(_ id: UUID) -> URL { folder(id).appendingPathComponent("case.json") }
     public func auditURL(_ id: UUID) -> URL { folder(id).appendingPathComponent("audit.jsonl") }
+    /// An Assessment's runs of its checks, oldest first.
+    private func assessmentURL(_ id: UUID) -> URL { folder(id).appendingPathComponent("assessment.json") }
+    /// The policy an Assessment's checks hold the service to, as front matter and the person's own prose.
+    public func policyURL(_ id: UUID) -> URL { folder(id).appendingPathComponent("policy.md") }
+    /// The policy a new Assessment's questionnaire starts from, if one was kept; no check reads it.
+    public var policyTemplateURL: URL { root.appendingPathComponent("Policy.md") }
 
     // MARK: Investigations
 
@@ -54,13 +60,13 @@ public final class PionStore: @unchecked Sendable {
 
     /// Opens an Investigation for a group conversation that already exists, numbering it after the last one.
     public func open(id: UUID, title: String, objective: String, severity: Investigation.Severity? = nil,
-                     champion: String, source: String? = nil,
+                     champion: String, source: String? = nil, kind: Investigation.Kind? = nil,
                      number: Int? = nil, openedBy: CaseActor? = nil, now: Date = Date()) throws -> Investigation {
         let investigation = try lock.withLock {
             let next = number ?? (unlockedInvestigations().map(\.number).max() ?? 0) + 1
             let investigation = Investigation(id: id, number: next, title: title, objective: objective,
                                               severity: severity, champion: champion,
-                                              source: source, openedAt: now)
+                                              source: source, kind: kind, openedAt: now)
             try FileManager.default.createDirectory(at: folder(id), withIntermediateDirectories: true)
             try write(investigation, to: investigationURL(id))
             try write(CaseRecord(), to: caseURL(id))
@@ -141,6 +147,84 @@ public final class PionStore: @unchecked Sendable {
         }
         onChange?()
         return result
+    }
+
+    // MARK: Assessment
+
+    /// Records a run of an Assessment's checks: each result as evidence and each new failure as a finding, against the
+    /// run before it, which it is kept after. Returns the run with the evidence and findings it recorded.
+    @discardableResult
+    public func recordAssessment(_ run: AssessmentRun, in id: UUID, by actor: CaseActor, now: Date = Date()) throws -> AssessmentRun {
+        let recorded = try lock.withLock {
+            var investigation = try read(Investigation.self, from: investigationURL(id))
+            guard investigation.isAssessment else { throw CaseError("\(investigation.reference) is not an Assessment.") }
+            guard !investigation.isClosed else { throw CaseError("\(investigation.reference) is closed.") }
+            var record = (try? read(CaseRecord.self, from: caseURL(id))) ?? CaseRecord()
+            var runs = unlockedAssessmentRuns(id)
+            let recorded = run.recording(into: &record, previous: runs.last, by: actor, at: now)
+            runs.append(recorded)
+            try write(record, to: caseURL(id))
+            try write(runs, to: assessmentURL(id))
+            try unlockedAppend(AuditEntry(at: now, actor: actor, event: "checks", detail: recorded.tally), to: id)
+            investigation.updatedAt = now
+            try write(investigation, to: investigationURL(id))
+            return recorded
+        }
+        onChange?()
+        return recorded
+    }
+
+    /// Every run of an Assessment's checks, oldest first.
+    public func assessmentRuns(_ id: UUID) -> [AssessmentRun] {
+        lock.withLock { unlockedAssessmentRuns(id) }
+    }
+
+    private func unlockedAssessmentRuns(_ id: UUID) -> [AssessmentRun] {
+        (try? read([AssessmentRun].self, from: assessmentURL(id))) ?? []
+    }
+
+    /// An Assessment's policy, or nil before one was written.
+    public func readPolicy(_ id: UUID) -> AssessmentPolicy? {
+        lock.withLock { (try? String(contentsOf: policyURL(id), encoding: .utf8)).map(AssessmentPolicy.init(markdown:)) }
+    }
+
+    /// Writes an Assessment's policy, keeping the prose already under it, or `body` in its place, and logs which
+    /// answers changed. A closed Assessment's policy stays as it was closed.
+    public func writePolicy(_ policy: AssessmentPolicy, in id: UUID, body: String? = nil, by actor: CaseActor, now: Date = Date()) throws {
+        try lock.withLock {
+            var investigation = try read(Investigation.self, from: investigationURL(id))
+            guard !investigation.isClosed else { throw CaseError("\(investigation.reference) is closed.") }
+            let existing = try? String(contentsOf: policyURL(id), encoding: .utf8)
+            let markdown = policy.markdown(body: body ?? existing.map(AssessmentPolicy.body(of:)) ?? "")
+            guard markdown != existing else { return }
+            try Data(markdown.utf8).write(to: policyURL(id), options: .atomic)
+            let changed = policy.changes(from: existing.map(AssessmentPolicy.init(markdown:)) ?? AssessmentPolicy())
+            let detail = changed.isEmpty ? "Policy prose changed."
+                : "Policy: " + changed.map { "\($0.key) \($0.from ?? "unanswered") → \($0.to ?? "unanswered")" }.joined(separator: "; ") + "."
+            try unlockedAppend(AuditEntry(at: now, actor: actor, event: "policy", detail: detail), to: id)
+            investigation.updatedAt = now
+            try write(investigation, to: investigationURL(id))
+        }
+        onChange?()
+    }
+
+    /// The policy a new Assessment's questionnaire starts from, or nil when none was kept.
+    public func readPolicyTemplate() -> AssessmentPolicy? {
+        lock.withLock { (try? String(contentsOf: policyTemplateURL, encoding: .utf8)).map(AssessmentPolicy.init(markdown:)) }
+    }
+
+    /// The prose under the template's answers, for a new Assessment's policy to start with.
+    public func policyTemplateBody() -> String? {
+        lock.withLock { (try? String(contentsOf: policyTemplateURL, encoding: .utf8)).map(AssessmentPolicy.body(of:)) }
+    }
+
+    /// Keeps `policy` as the template for the next Assessment, with the prose already under it.
+    public func writePolicyTemplate(_ policy: AssessmentPolicy) throws {
+        try lock.withLock {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            let existing = try? String(contentsOf: policyTemplateURL, encoding: .utf8)
+            try Data(policy.markdown(keepingBody: existing).utf8).write(to: policyTemplateURL, options: .atomic)
+        }
     }
 
     // MARK: Audit log

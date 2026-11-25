@@ -1456,7 +1456,7 @@ extension GoogleWorkspace {
                 let lastLoginTime: String?, creationTime: String?, orgUnitPath: String?
                 let recoveryEmail: String?, recoveryPhone: String?, aliases: [String]?, isGuestUser: Bool?, archived: Bool?
             }
-            struct Listed: Codable { let users: [User]? }
+            struct Listed: Codable { let users: [User]?; var incomplete: Bool? = nil }
             var query: [String: String?] = ["customer": "my_customer", "viewType": "admin_view"]
             if let search = input.query?.trimmingCharacters(in: .whitespacesAndNewlines), !search.isEmpty {
                 guard search.count <= 500 else { throw ServiceError.input("Keep the search short.") }
@@ -1489,7 +1489,7 @@ extension GoogleWorkspace {
             }.joined(separator: "\n")
             if more { text += "\nThere are more accounts than the \(limit) read; narrow the search or raise limit." }
             if flaggedWithout { text += "\n" + GoogleWorkspace.domainsUnread("each account's own domains") }
-            return try ServiceResult(text: text, structured: Listed(users: users))
+            return try ServiceResult(text: text, structured: Listed(users: users, incomplete: more))
         }
     }
 

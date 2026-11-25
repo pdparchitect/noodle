@@ -828,6 +828,7 @@ import UniformTypeIdentifiers
         switch actor {
         case .agent(let id): agent(id)?.displayName ?? "Removed agent"
         case .champion(let name): name
+        case .checks(let champion): "Checks run by \(champion)"
         }
     }
 
