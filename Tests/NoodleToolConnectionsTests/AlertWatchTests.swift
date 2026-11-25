@@ -77,6 +77,32 @@ final class AlertWatchTests: XCTestCase {
         XCTAssertNil(again, "an alert listed late is news once")
     }
 
+    /// An account with nothing new for days reads back only from its last quiet check, not from when watching started,
+    /// even when all it ever found was a notice dated at the start of the window read; the notice itself moves nothing.
+    func testAQuietAccountReadsBackFromItsLastQuietCheckNotFromWhenWatchingStarted() async throws {
+        var watch = AlertWatch()
+        let lookBack: TimeInterval = 6 * 3_600
+        _ = try await watch.check(account, at: start, lookBack: lookBack) { _ in [] }
+        let day = start.addingTimeInterval(86_400)
+        let notice = try await watch.check(account, at: day, lookBack: lookBack) { from in [ServiceAlert(id: "unchecked/1", time: from)] }
+        XCTAssertNotNil(notice)
+        var since: Date?
+        _ = try await watch.check(account, at: day.addingTimeInterval(300), lookBack: lookBack) { from in since = from; return [] }
+        XCTAssertEqual(since, start, "the check that told the notice moved nothing")
+        _ = try await watch.check(account, at: day.addingTimeInterval(600), lookBack: lookBack) { from in since = from; return [] }
+        XCTAssertEqual(since, day.addingTimeInterval(300 - lookBack), "six hours back from the last quiet check")
+    }
+
+    /// A check that fails moves nothing on, so the next reads the same window again.
+    func testAFailedCheckDoesNotMoveTheWindow() async throws {
+        var watch = AlertWatch()
+        _ = try await watch.check(account, at: start) { _ in [] }
+        _ = try? await watch.check(account, at: start.addingTimeInterval(7_200)) { _ in throw CancellationError() }
+        var since: Date?
+        _ = try await watch.check(account, at: start.addingTimeInterval(7_500)) { from in since = from; return [] }
+        XCTAssertEqual(since, start)
+    }
+
     func testABurstAtTheLimitIsSaidToBeMore() async throws {
         var watch = AlertWatch()
         _ = try await watch.check(account, at: start) { _ in [] }

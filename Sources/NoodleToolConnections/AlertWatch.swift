@@ -15,9 +15,11 @@ public struct ServiceAlert: Sendable, Equatable {
 /// What the app has seen of each watched account's alerts, so an agent is woken only for what is new.
 ///
 /// An account first watched starts from then, so its past is not news. Each check after reads back from the newest
-/// alert seen, an hour unless its service says it lists alerts later, and leaves out the IDs it has seen already.
+/// alert seen or the last check that found nothing new, whichever is later, an hour unless its service says it lists
+/// alerts later, and leaves out the IDs it has seen already. A check that finds something moves it on only by what it
+/// found, so a notice dated at the start of the window read, such as one saying what could not be read, moves nothing.
 public struct AlertWatch: Codable, Equatable, Sendable {
-    /// How far each check reads back from the newest alert seen, unless the service says otherwise.
+    /// How far each check reads back from the newest alert seen or the last quiet check, unless the service says otherwise.
     public static let overlap: TimeInterval = 3_600
     /// How long what was on a board is remembered after it leaves, so one going and coming back is not news.
     static let boardMemory: TimeInterval = 7 * 86_400
@@ -26,6 +28,12 @@ public struct AlertWatch: Codable, Equatable, Sendable {
         var start: Date
         /// The alerts seen within the overlap, by ID, with their times.
         var seen: [String: Date] = [:]
+        /// When the last check that found nothing new ran, so a quiet account does not read back to when watching started.
+        var read: Date?
+        /// When the check under way runs, made `read` if it finds nothing new; a check that fails moves nothing.
+        var reading: Date?
+        /// What the next check reads back from: the newest alert seen or the last check that found nothing new.
+        var latest: Date { max(seen.values.max() ?? start, read ?? start) }
     }
     private var accounts: [UUID: Account] = [:]
 
@@ -48,15 +56,16 @@ public struct AlertWatch: Codable, Equatable, Sendable {
         return take(try await fetch(since), for: account, lookBack: lookBack)
     }
 
-    /// When the next check of `account` reads from, `lookBack` before the newest alert seen, or nil when it is first
-    /// watched, which starts it from `now`.
+    /// When the check of `account` at `now` reads from, `lookBack` before the newest alert seen or the last check that
+    /// found nothing new, or nil when it is first watched, which starts it from `now`.
     public mutating func since(_ account: UUID, at now: Date, lookBack: TimeInterval = overlap) -> Date? {
-        guard let watched = accounts[account] else {
+        guard var watched = accounts[account] else {
             accounts[account] = Account(start: now)
             return nil
         }
-        let newest = watched.seen.values.max() ?? watched.start
-        return max(watched.start, newest.addingTimeInterval(-lookBack))
+        watched.reading = now
+        accounts[account] = watched
+        return max(watched.start, watched.latest.addingTimeInterval(-lookBack))
     }
 
     /// Takes in what a check of `account` found, read from `since(_:at:lookBack:)` with the same `lookBack`, and says
@@ -65,10 +74,11 @@ public struct AlertWatch: Codable, Equatable, Sendable {
         guard var watched = accounts[account] else { return nil }
         let new = found.filter { $0.time >= watched.start && watched.seen[$0.id] == nil }
         for alert in found where alert.time >= watched.start { watched.seen[alert.id] = alert.time }
+        if new.isEmpty, let reading = watched.reading { watched.read = max(watched.read ?? reading, reading) }
+        watched.reading = nil
         // Older than the next check reads from, an alert cannot come back to be told apart.
-        if let latest = watched.seen.values.max() {
-            watched.seen = watched.seen.filter { $0.value >= latest.addingTimeInterval(-lookBack) }
-        }
+        let latest = watched.latest
+        watched.seen = watched.seen.filter { $0.value >= latest.addingTimeInterval(-lookBack) }
         accounts[account] = watched
         guard let first = new.map(\.time).min(), let last = new.map(\.time).max() else { return nil }
         return News(count: new.count, capped: found.count >= ServiceAlert.most, since: first, until: last)
