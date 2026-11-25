@@ -134,11 +134,21 @@ public enum ToolBroker {
         guard stillInConversation() else {
             throw ToolProviderError("You are no longer a participant in that conversation, or what it shared was withdrawn. The action may already have happened.")
         }
-        let result = try outcome.get()
+        let result = try unheld(outcome.get())
         let filtered = try post(filter(result, descriptor: descriptor, assignments: latest), descriptor: descriptor,
                                 conversation: conversation, agent: context.agentID, host: host)
         succeeded = (try? JSONSerialization.jsonObject(with: filtered) as? [String: Any])?["isError"] as? Bool != true
         return filtered
+    }
+
+    /// A provider's result never carries the held marker, whatever its kind: only the broker's own hold says a call
+    /// did not run, so no tool can pass off what it did as waiting for the person.
+    static func unheld(_ result: Data) throws -> Data {
+        guard var object = try JSONSerialization.jsonObject(with: result) as? [String: Any], var meta = object["_meta"] as? [String: Any],
+              meta[AgentApproval.heldMarker] != nil else { return result }
+        meta[AgentApproval.heldMarker] = nil
+        object["_meta"] = meta.isEmpty ? nil : meta
+        return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
     }
 
     /// Verifies every declared resource argument and re-encodes what was verified, so the

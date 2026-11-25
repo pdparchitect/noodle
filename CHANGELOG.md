@@ -9,6 +9,7 @@ All notable changes to Noodle are documented here, following
 ### Changed
 
 - Bots open a tab on a Linux desktop computer when its browser has none, as newer desktop images start Chromium without a window.
+- A bot's held call now says so in its result's `_meta["noodle/approval"]`, as `{ id, state }`, instead of in `structuredContent`, so a script can tell it from a service's answer; no tool can set that key, so a result carrying it never reached the service.
 
 ### Fixed
 

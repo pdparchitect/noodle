@@ -19,6 +19,9 @@ public struct AgentApproval: Codable, Hashable, Identifiable, Sendable {
     /// What a held tool takes besides its own input: why, in the bot's words, and the conversation it belongs to.
     public static let reasonParameter = "approval-reason"
     public static let conversationParameter = "approval-conversation"
+    /// The `_meta` key of the host's answer to a held call, `{ id, state }`, which no server can send: whatever carries
+    /// it never reached the service.
+    public static let heldMarker = "noodle/approval"
 
     public let id: UUID
     /// Where the bot asked; its direct conversation with the person when it named none.
@@ -282,7 +285,7 @@ extension ToolBroker {
             """
         return try JSONSerialization.data(withJSONObject: [
             "content": [["type": "text", "text": text]], "isError": false,
-            "structuredContent": ["approval": approval.id.uuidString, "state": approval.state.rawValue],
+            "_meta": [AgentApproval.heldMarker: ["id": approval.id.uuidString, "state": approval.state.rawValue]],
         ], options: [.sortedKeys])
     }
 

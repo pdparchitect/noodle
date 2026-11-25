@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- A bot's held call now says so in its result's `_meta["noodle/approval"]`, as `{ id, state }`, instead of in `structuredContent`, so a script can tell it from a service's answer; no tool can set that key, so a result carrying it never reached the service.
+
 ## [0.59.0] - 2026-11-22
 
 ### Added
