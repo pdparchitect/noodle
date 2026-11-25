@@ -61,6 +61,26 @@ import XCTest
         }
     }
 
+    /// Rendered Markdown is one text, so a selection runs across headings, paragraphs, lists and tables alike.
+    func testRenderedMarkdownIsOneTextToSelectAcrossBlocks() throws {
+        let f = try fixture()
+        let markdown = "# Title\n\nSome **bold** text.\n\n- one\n- two\n\n| Tool | Count |\n|---|--:|\n| Okta | 13 |\n\nThe end."
+        let window = try XCTUnwrap(try open(markdown, named: "notes.md", in: f, windows: AttachmentWindows()))
+        let end = Date().addingTimeInterval(3)
+        func texts() -> [NSTextView] {
+            window.contentView?.layoutSubtreeIfNeeded()
+            return views(window.contentView).compactMap { $0 as? NSTextView }
+        }
+        while texts().isEmpty, Date() < end { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
+        let text = try XCTUnwrap(texts().first { $0.string.contains("Title") }, "\(texts().map(\.string))")
+        XCTAssertTrue(text.isSelectable)
+        XCTAssertFalse(text.isEditable)
+        for part in ["Some bold text.", "one", "two", "Okta", "13", "The end."] {
+            XCTAssertTrue(text.string.contains(part), "\(part) in \(text.string)")
+        }
+        XCTAssertFalse(text.string.contains("**"), "Rendered, not the source")
+    }
+
     /// Other text files keep opening in Quick Look.
     func testOtherFilesDoNotOpenAsDocuments() throws {
         let f = try fixture()

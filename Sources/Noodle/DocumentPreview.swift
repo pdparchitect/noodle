@@ -59,7 +59,7 @@ struct DocumentPreviewView: View {
             if model.showsSource {
                 DocumentSourceView(text: model.source)
             } else if let markdown = model.markdown {
-                MarkdownDocumentView(markdown)
+                RenderedMarkdownView(document: markdown)
             } else {
                 ShaderPreview(url: model.url)
             }
@@ -87,6 +87,41 @@ private struct DocumentSourceView: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {}
+}
+
+/// The document as one text, so a selection runs across headings, paragraphs, lists, quotes, code and tables alike.
+/// TextKit 1, as only it lays out tables and the boxes around code and quotes.
+private struct RenderedMarkdownView: NSViewRepresentable {
+    let document: MarkdownDocument
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true; scroll.autohidesScrollers = true; scroll.drawsBackground = false
+        let view = ReadableTextView(usingTextLayoutManager: false)
+        view.isEditable = false; view.isSelectable = true; view.drawsBackground = false; view.isRichText = true
+        view.usesFindBar = true; view.isIncrementalSearchingEnabled = true
+        view.isVerticallyResizable = true; view.isHorizontallyResizable = false
+        view.autoresizingMask = [.width]
+        view.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        view.textContainer?.widthTracksTextView = true
+        view.linkTextAttributes = [.foregroundColor: NSColor(MessageMarkdownCache.linkColor), .cursor: NSCursor.pointingHand]
+        view.textStorage?.setAttributedString(MarkdownText.attributedString(document))
+        scroll.documentView = view
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {}
+}
+
+/// Lines no longer than reads comfortably: a wide window centres the text.
+private final class ReadableTextView: NSTextView {
+    static let readableWidth: CGFloat = 860
+
+    override func setFrameSize(_ size: NSSize) {
+        let side = max(28, (size.width - Self.readableWidth) / 2)
+        if textContainerInset.width != side { textContainerInset = NSSize(width: side, height: 24) }
+        super.setFrameSize(size)
+    }
 }
 
 /// Preview | Source, in the document window's header.

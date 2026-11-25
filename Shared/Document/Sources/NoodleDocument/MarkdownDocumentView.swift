@@ -87,12 +87,12 @@ public struct MarkdownDocumentContent: View {
         return 12
     }
 
-    static func headingSize(_ level: Int) -> CGFloat {
+    static func headingSize(_ level: Int, body: CGFloat = bodySize) -> CGFloat {
         switch level {
-        case 1: bodySize + 12
-        case 2: bodySize + 6
-        case 3: bodySize + 3
-        default: bodySize + 1
+        case 1: body + 12
+        case 2: body + 6
+        case 3: body + 3
+        default: body + 1
         }
     }
 }
