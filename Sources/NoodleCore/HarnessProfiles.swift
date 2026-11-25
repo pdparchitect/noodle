@@ -120,6 +120,12 @@ public struct HarnessProfileStore: Sendable {
             try AtomicFile.write(Data("cli_auth_credentials_store = \"file\"\n".utf8),
                                  to: account.appendingPathComponent("config.toml"))
         }
+        if provider == .copilot {
+            // Away from the person's Keychain, Copilot keeps a sign-in in this folder only when told to;
+            // otherwise it asks on a terminal its sign-in here does not have, and saves nothing.
+            try AtomicFile.write(Data(#"{"storeTokenPlaintext": true}"#.utf8 + [10]),
+                                 to: account.appendingPathComponent("settings.json"))
+        }
     }
 
     public func rename(_ profile: HarnessProfile, to rawName: String) throws -> HarnessProfile {

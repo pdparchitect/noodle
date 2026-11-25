@@ -163,6 +163,14 @@ final class CopilotTests: XCTestCase {
         XCTAssertEqual(environment["COPILOT_CACHE_HOME"], store.environment(personal)["COPILOT_CACHE_HOME"])
         XCTAssertNotEqual(environment["HOME"], store.environment(personal)["HOME"])
         XCTAssertEqual(environment["COPILOT_AUTO_UPDATE"], "false")
+        // Out of reach of the Keychain, Copilot saves a sign-in only with this, and otherwise asks on a terminal it does not have.
+        for profile in [work, personal] {
+            let settings = try Data(contentsOf: store.accountHome(profile).appendingPathComponent("settings.json"))
+            XCTAssertEqual(try JSONSerialization.jsonObject(with: settings) as? [String: Bool], ["storeTokenPlaintext": true])
+        }
+        try store.signOut(work, deleteSecret: { _, _ in })
+        XCTAssertNoThrow(try Data(contentsOf: store.accountHome(work).appendingPathComponent("settings.json")),
+                         "Signing out leaves the profile ready to sign in again")
     }
 
     /// A restricted bot gets a copy of the login and its own home, never the shared one.
@@ -201,6 +209,27 @@ final class CopilotTests: XCTestCase {
         XCTAssertEqual(policy.components(separatedBy: quoted).count - 1, 1, "Read once, and never in the writable list")
         let writes = try XCTUnwrap(policy.range(of: "(allow file-write*"))
         XCTAssertLessThan(try XCTUnwrap(policy.range(of: quoted)).lowerBound, writes.lowerBound)
+    }
+
+    /// Copilot checks certificates only through macOS's Security service, which also fronts the Keychain:
+    /// the verified executable alone may reach it, never a tool it runs, and no other harness may.
+    func testOnlyTheCopilotExecutableReachesTheSecurityService() throws {
+        let executable = URL(fileURLWithPath: "/native/copilot")
+        func policy(_ provider: HarnessProvider) throws -> String {
+            try RestrictedAgentSandbox.profile(provider: provider, workspace: URL(fileURLWithPath: "/fixture/bot/workspace"),
+                repository: URL(fileURLWithPath: "/fixture"), home: URL(fileURLWithPath: "/private-login"), executable: executable,
+                application: URL(fileURLWithPath: "/app"), temporary: URL(fileURLWithPath: "/fixture/bot/workspace/tmp"))
+        }
+        let copilot = try policy(.copilot)
+        let scoped = #"(allow mach-lookup (require-all (global-name "com.apple.SecurityServer") (process-path ""#
+            + RestrictedAgentSandbox.sandboxPath(executable.path) + #"")))"#
+        XCTAssertTrue(copilot.contains(scoped), copilot)
+        XCTAssertEqual(copilot.components(separatedBy: "com.apple.SecurityServer").count - 1, 1, "Never granted unscoped")
+        XCTAssertTrue(copilot.contains(#"(allow file-read-data (literal "/Library/Keychains/System.keychain"))"#))
+        XCTAssertFalse(copilot.contains("login.keychain"))
+        for provider in [HarnessProvider.claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity] {
+            XCTAssertFalse(try policy(provider).contains("com.apple.SecurityServer"), provider.rawValue)
+        }
     }
 
     /// `copilot --version` unpacks the package; the folder named after the version it reports is used.

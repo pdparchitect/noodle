@@ -42,12 +42,22 @@ public enum RestrictedAgentSandbox {
             readFiles += ancestorDirectories(of: workspace) + ancestorDirectories(of: account)
             readFiles += folders.flatMap { ancestorDirectories(of: URL(fileURLWithPath: $0.path)) }
         }
-        if provider == .fx { readFiles.append("/Library/Keychains/System.keychain") }
+        if provider == .fx || provider == .copilot { readFiles.append("/Library/Keychains/System.keychain") }
         // Muse Code 1.4.4 and later list these for system-wide settings and fail every session without them.
         if provider == .muse { readFiles += ["/Library", "/Library/Application Support"] }
         let base = profile(workspace: workspace,
             executablePaths: [executable.path] + (package.map { [$0.path] } ?? []), application: application,
             readFiles: Array(Set(readFiles)).sorted(), folders: folders, egressPort: egressPort)
+        // Copilot checks every certificate through macOS's Security service, so exporting the
+        // anchors, as for Codex, does not help it. That service also fronts the Keychain, so
+        // only the verified executable may reach it, never a tool it runs. Its own home keeps
+        // the person's keychain out of its search, but not out of reach of a deliberate request.
+        if provider == .copilot {
+            return base + """
+
+            (allow mach-lookup (require-all (global-name "com.apple.SecurityServer") (process-path \(quoted(sandboxPath(executable.path))))))
+            """
+        }
         guard provider == .openCode || provider == .antigravity else { return base }
         // Antigravity runs every shell command in a pseudo-terminal. The pty
         // extension limits the tree to terminals it opened itself.

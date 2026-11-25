@@ -433,6 +433,53 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         try checkInstalledACP(provider: .grokBuild)
     }
 
+    /// A restricted Copilot bot on a real sign-in, through the sandbox and the silo: it answers, runs a command in its
+    /// workspace, and reaches only its silo's addresses. Point NOODLE_TEST_COPILOT_LOGIN at a login home Copilot signed in
+    /// to with Noodle's profile settings; the test uses a model request.
+    func testRestrictedCopilotAnswersOnARealSignInThroughTheSilo() throws {
+        guard let login = ProcessInfo.processInfo.environment["NOODLE_TEST_COPILOT_LOGIN"] else {
+            throw XCTSkip("Set NOODLE_TEST_COPILOT_LOGIN to a signed-in Copilot login home to run a real turn.")
+        }
+        let realHome = HarnessStorage.userHome
+        let executable = try CopilotExecutableTrust.executable(at: realHome.appendingPathComponent(".local/bin/copilot").path, home: realHome)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("Noodle"))
+        let workspace = repository.directory(for: try repository.createAgent(named: "Copilot live").agent)
+        try RestrictedHarnessStorage.prepare(provider: .copilot, workspace: workspace, loginHome: URL(fileURLWithPath: login),
+                                             secret: { _, _ in nil })
+        let temporary = workspace.appendingPathComponent(".noodle/tmp")
+        let package = try CopilotLaunch.package(executable: executable, cacheHome: CopilotLaunch.cacheHome(root: repository.rootURL),
+                                                environment: ["HOME": root.path, "PATH": "/usr/bin:/bin"])
+        let addresses = NSMutableSet(), lock = NSLock()
+        let proxy = try HarnessEgressProxy(allowed: HarnessProvider.copilot.siloAllowlist(appsEnabled: false)) { address, allowed in
+            lock.lock(); if allowed { addresses.add(address) }; lock.unlock()
+        }
+        defer { proxy.stop() }
+        let policy = try RestrictedAgentSandbox.profile(provider: .copilot, workspace: workspace, repository: repository.rootURL,
+            home: realHome, executable: executable, package: package, application: workspace, temporary: temporary, egressPort: proxy.port)
+        var environment = try RestrictedAgentSandbox.environment(provider: .copilot, home: realHome, workspace: workspace)
+            .merging(HarnessProvider.copilot.reportingOffEnvironment) { own, _ in own }
+            .merging(HarnessEgressProxy.environment(port: proxy.port)) { own, _ in own }
+        environment["COPILOT_CLI_DIST_DIR"] = package.path
+        environment["TMPDIR"] = temporary.path
+        environment["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
+        let wire = try ACPWireFixture(executable: URL(fileURLWithPath: "/usr/bin/sandbox-exec"), workspace: workspace,
+                                     arguments: ["-p", policy, executable.path, "--acp"], environment: environment, requestTimeout: 120)
+        defer { wire.stop() }
+        _ = try wire.request("initialize", FxProtocol.initializeParameters)
+        let session = try wire.request("session/new", ["cwd": workspace.path, "mcpServers": []])
+        XCTAssertFalse(CopilotProtocol.models(fromSession: session).isEmpty)
+        let result = try wire.request("session/prompt", ["sessionId": try XCTUnwrap(session["sessionId"] as? String),
+            "prompt": [["type": "text", "text": "Run the shell command `echo sandboxed > proof.txt`, then reply with just the word pong."]]])
+        XCTAssertEqual(result["stopReason"] as? String, "end_turn")
+        XCTAssertNotNil(result["usage"], "A turn without usage is a failed model request: \(wire.diagnostics)")
+        XCTAssertEqual(try String(contentsOf: workspace.appendingPathComponent("proof.txt"), encoding: .utf8), "sandboxed\n")
+        lock.lock(); let reached = addresses.allObjects as? [String] ?? []; lock.unlock()
+        XCTAssertTrue(Set(reached).isSubset(of: HarnessProvider.copilot.siloAllowlist(appsEnabled: false)))
+        XCTAssertTrue(reached.contains { $0.hasSuffix("githubcopilot.com:443") }, "\(reached)")
+    }
+
     /// Copilot runs from the package unpacked once outside the bot, which the profile lets it read but not change.
     /// With no login and no network it gets as far as asking for a sign-in, so everything before that worked.
     func testInstalledCopilotRunsTheSharedPackageInsideItsRestrictedProfile() throws {
