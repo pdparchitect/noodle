@@ -18,6 +18,7 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
     private let onUnexpectedTermination: @MainActor (ACPAgentProcess, String, Bool) -> Void
     private let stateURL: URL
     private var turnRecovery: AgentTurnRecovery
+    private let handoff: HarnessHandoff
     private var state = ACPSessionState()
     private var sessionID: String? {
         get { state.sessionID }
@@ -79,6 +80,7 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
         self.onUnexpectedTermination = onUnexpectedTermination
         stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: provider, extendedAccess: extendedAccess)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
+        handoff = HarnessHandoff(sessionStateURL: stateURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         if let data = try? Data(contentsOf: stateURL), let saved = try? JSONDecoder().decode(ACPSessionState.self, from: data) {
             state = saved
@@ -246,8 +248,9 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
         usageResetsAt = nil
         turnFailure = nil
         trace.begin(reason: reason)
-        let prompt = reason.eventText + (state.needsHistoryRecovery ? "\n\n" + MessengerDocumentation.recoveredModelContext : "")
+        let prompt = reason.eventText + handoff.context(recoveringHistory: state.needsHistoryRecovery)
         request(.prompt(reason), method: "session/prompt", params: ["sessionId": sessionID, "prompt": [["type": "text", "text": prompt]]])
+        handoff.clear()
         guard running else { return }
         trace.record(.wakeSubmitted)
         if reason.isScheduled { onHeartbeat() }

@@ -1010,6 +1010,15 @@ public final class AgentRuntimeCoordinator {
             return
         }
 
+        do {
+            try HarnessHandoff.enter(repository.storage(for: agent.id).sessionState(provider: installation.provider,
+                extendedAccess: accessConfiguration.isExtended(for: agent)))
+        } catch {
+            snapshots[agent.id] = AgentRuntimeSnapshot(agentID: agent.id, phase: .failed,
+                detail: "Could not prepare the bot's session on \(installation.provider.displayName). Use Kick to retry.")
+            return
+        }
+
         restartTasks.removeValue(forKey: agent.id)?.cancel()
         let runtimeID = UUID()
         runtimeIDs[agent.id] = runtimeID

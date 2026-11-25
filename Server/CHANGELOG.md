@@ -6,6 +6,10 @@
 
 - Claude Code and Codex run with their usage and error reports turned off.
 
+### Fixed
+
+- A bot moved to another harness no longer resumes an old session it had there, which missed everything since. It starts fresh and its next turn catches up from the conversation and workspace, carrying on with unfinished work.
+
 ## [0.4.0] - 2026-11-25
 
 ### Changed

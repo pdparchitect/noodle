@@ -16,6 +16,7 @@ public final class AntigravityAgentProcess: AgentRuntimeProcess {
     private let onUnexpectedTermination: @MainActor (AntigravityAgentProcess, String, Bool) -> Void
     private var sessionState: AntigravitySessionState
     private var turnRecovery: AgentTurnRecovery
+    private let handoff: HarnessHandoff
 
     private var connectionID: UUID?
     private let sleep: @MainActor (Duration) async throws -> Void
@@ -62,6 +63,7 @@ public final class AntigravityAgentProcess: AgentRuntimeProcess {
         let stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: .antigravity, extendedAccess: extendedAccess)
         sessionState = AntigravitySessionState(url: stateURL)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
+        handoff = HarnessHandoff(sessionStateURL: stateURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
     }
@@ -209,7 +211,8 @@ public final class AntigravityAgentProcess: AgentRuntimeProcess {
         trace.begin(reason: reason)
         do {
             try turnRecovery.begin()
-            connection.write(AntigravityProtocol.userMessage(reason.eventText))
+            connection.write(AntigravityProtocol.userMessage(reason.eventText + handoff.context()))
+            handoff.clear()
             trace.record(.wakeSubmitted)
             turnIsActive = true
             if reason.isScheduled { onHeartbeat() }

@@ -235,8 +235,16 @@ public enum MessengerCommandKind: String, CaseIterable, Sendable {
 public enum MessengerDocumentation {
     /// Added to a wake only when the harness had to replace missing or incompatible private context.
     public static let recoveredModelContext = """
-    \(ProductIdentity.current.name) replaced unavailable private model context. Your workspace and \(ProductIdentity.current.name) conversation history are intact. Read the Messenger skill, check unread messages once, and use Messenger --list-conversations and --list-messages --conversation <uuid> to recover recent unanswered requests even if the inbox was consumed before the interruption. Check your own prior replies, workspace files, and completed actions before repeating work. Do not assume an interrupted action failed; if its outcome cannot be verified, ask a specific question before repeating a consequential action. Reply through Messenger to the original conversation; do not merely acknowledge this recovery notice.
+    \(ProductIdentity.current.name) replaced unavailable private model context. \(rebuildingContext)
     """
+
+    /// Each harness and access mode keeps its own private session, so a bot moved between them starts one without
+    /// what it said and did on the other.
+    public static let harnessHandoffContext = """
+    \(ProductIdentity.current.name) moved you to another harness or access mode, so this private model context is new and holds nothing from before the move. \(rebuildingContext)
+    """
+
+    private static let rebuildingContext = "Your workspace and \(ProductIdentity.current.name) conversation history are intact. Read the Messenger skill, check unread messages once, and use Messenger --list-conversations and --list-messages --conversation <uuid> to recover recent unanswered requests even if the inbox was consumed before the interruption. Check your own prior replies, workspace files, and completed actions before repeating work. Do not assume an interrupted action failed; if its outcome cannot be verified, ask a specific question before repeating a consequential action. Reply through Messenger to the original conversation; do not merely acknowledge this recovery notice."
     public static var eventReferences: [MessengerReference] {
         deliveryReferences + ConversationEffectKind.allCases.map(\.reference)
     }

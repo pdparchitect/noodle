@@ -49,6 +49,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
     private let onUnexpectedTermination: @MainActor (CodexAgentProcess, String, Bool) -> Void
     private let stateURL: URL
     private var turnRecovery: AgentTurnRecovery
+    private let handoff: HarnessHandoff
 
     private var nextRequestID = 1
     private var purposes: [Int: RequestPurpose] = [:]
@@ -121,6 +122,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
         self.onUnexpectedTermination = onUnexpectedTermination
         stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: .codex, extendedAccess: extendedAccess)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
+        handoff = HarnessHandoff(sessionStateURL: stateURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
         let state = Self.loadState(from: stateURL)
@@ -677,7 +679,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
             "threadId": threadID,
             "input": [[
                 "type": "text",
-                "text": reason.eventText + (needsHistoryRecovery ? "\n\n" + MessengerDocumentation.recoveredModelContext : "")
+                "text": reason.eventText + handoff.context(recoveringHistory: needsHistoryRecovery)
             ]],
             "cwd": workspaceURL.path,
             "approvalPolicy": extendedAccess ? "on-request" : "never",
@@ -689,6 +691,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
         do {
             try turnRecovery.begin()
             try request(.startTurn(reason), method: "turn/start", params: params)
+            handoff.clear()
             trace.record(.wakeSubmitted)
             turnIsActive = true
             update(.working, reason.activityDetail)

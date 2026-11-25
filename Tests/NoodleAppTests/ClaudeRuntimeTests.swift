@@ -45,6 +45,24 @@ import XCTest
         XCTAssertTrue(f.failures.isEmpty)
     }
 
+    /// After a move from another harness or access mode, the first turn says to catch up, and only the first.
+    func testAHandoffAsksTheFirstTurnToCatchUp() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.claude(wire)
+        let mark = f.state(.claudeCode).appendingPathExtension("handoff")
+        try FileManager.default.createDirectory(at: mark.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: mark)
+        func text(_ write: [String: Any]) -> String? {
+            ((write["message"] as? [String: Any])?["content"] as? [[String: Any]])?.first?["text"] as? String
+        }
+        try await ready(f, wire, p); try confirm(wire)
+        p.notify(); try await f.wait { wire.count("user") == 1 }
+        XCTAssertTrue(text(try wire.last("user"))?.contains(MessengerDocumentation.harnessHandoffContext) == true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: mark.path))
+        try complete(wire); try await f.wait { p.canReceiveHeartbeat }
+        p.notify(); try await f.wait { wire.count("user") == 2 }
+        XCTAssertEqual(text(try wire.last("user")), AgentWakeReason.inboxChanged.eventText)
+    }
+
     func testRestrictedStartupFailureDoesNotRetryWithAutonomousAccess() async throws {
         let f = try fixture(), wire = HarnessWire(), p = f.claude(wire, extended: false)
         wire.automaticStart = false

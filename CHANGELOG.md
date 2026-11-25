@@ -17,6 +17,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- A bot moved to another harness or access mode, by a usage fallback, its return, Kick or a change in its settings, no longer resumes an old session it had there, which missed everything since. It starts fresh and its next turn catches up from the conversation and workspace, carrying on with unfinished work.
 - Signing in to MCP services that accept only apps they approved, such as Vercel, no longer fails with HTTP 400: Noodle receives the sign-in on this Mac, on a random port it listens on only until the sign-in ends.
 
 ## [0.97.0] - 2026-11-25

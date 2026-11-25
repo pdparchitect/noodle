@@ -47,6 +47,7 @@ public final class MuseAgentProcess: AgentRuntimeProcess {
     private let onUnexpectedTermination: @MainActor (MuseAgentProcess, String, Bool) -> Void
     private let stateURL: URL
     private var turnRecovery: AgentTurnRecovery
+    private let handoff: HarnessHandoff
     private var sessionID: String?
     private var activeTurnID: String?
     private var steeringNotificationID: UUID?
@@ -106,6 +107,7 @@ public final class MuseAgentProcess: AgentRuntimeProcess {
         self.onUnexpectedTermination = onUnexpectedTermination
         stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: .muse, extendedAccess: extendedAccess)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
+        handoff = HarnessHandoff(sessionStateURL: stateURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         if let data = try? Data(contentsOf: stateURL), let state = try? JSONDecoder().decode(State.self, from: data),
            state.sessionID == nil, state.needsHistoryRecovery == true {
@@ -253,8 +255,9 @@ public final class MuseAgentProcess: AgentRuntimeProcess {
         let commandID = MuseProtocol.commandID()
         request(.prompt(commandID), method: "turn/start", params: MuseProtocol.turnParameters(
             sessionID: sessionID, commandID: commandID,
-            text: reason.eventText + (needsHistoryRecovery ? "\n\n" + MessengerDocumentation.recoveredModelContext : ""),
+            text: reason.eventText + handoff.context(recoveringHistory: needsHistoryRecovery),
             effort: configuration.reasoningEffort))
+        handoff.clear()
         guard running else { return }
         trace.record(.wakeSubmitted)
         if reason.isScheduled { onHeartbeat() }

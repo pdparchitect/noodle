@@ -301,6 +301,62 @@ import XCTest
         XCTAssertEqual(f.runtime.activity.log(for: agent.id).fallbackLogin, "Codex · Spare")
     }
 
+    private func session(_ f: RuntimeCoordinatorFixture, _ agent: AgentRecord, _ provider: HarnessProvider, extended: Bool? = nil) -> URL {
+        f.repository.storage(for: agent.id).sessionState(provider: provider,
+            extendedAccess: extended ?? f.runtime.accessConfiguration.isExtended(for: agent))
+    }
+    private func save(_ url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: url)
+    }
+    private func exists(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path) }
+
+    func testASwitchStartsTheOtherHarnessCaughtUpInsteadOfResumingItsOldSession() throws {
+        let f = try fixture(), agent = try codexBot(f)
+        let codex = session(f, agent, .codex), claude = session(f, agent, .claudeCode)
+        let first = try f.start(agent)
+        try save(codex)
+        try save(claude) // Left over from an earlier stay on Claude Code.
+
+        first.transition(.failed, failure: .usageLimit, usageResetsAt: f.clock.date.addingTimeInterval(3 * 3600))
+        XCTAssertEqual(f.runtime.runningHarness(for: agent.id), .claudeCode)
+        XCTAssertFalse(exists(claude), "Claude Code's old session missed everything since that stay")
+        XCTAssertTrue(exists(claude.appendingPathExtension("handoff")), "The new session catches up from the conversation")
+
+        try save(claude)
+        _ = f.runtime.kick(agent: agent, repository: f.repository)
+        XCTAssertNil(f.runtime.runningHarness(for: agent.id))
+        XCTAssertFalse(exists(codex), "Codex's session from before the switch missed the work done on Claude Code")
+        XCTAssertTrue(exists(codex.appendingPathExtension("handoff")))
+    }
+
+    func testARestartOnTheSameHarnessKeepsItsSession() throws {
+        let f = try fixture(), agent = try codexBot(f), codex = session(f, agent, .codex)
+        try f.start(agent)
+        try save(codex)
+        f.runtime.restart(agent: agent, repository: f.repository)
+        XCTAssertEqual(f.factory.processes.count, 2)
+        XCTAssertTrue(exists(codex))
+        XCTAssertFalse(exists(codex.appendingPathExtension("handoff")))
+    }
+
+    func testChangingAccessCatchesUpAndCarriesTheUnfinishedTurn() throws {
+        let f = try fixture(), agent = try codexBot(f)
+        let restricted = session(f, agent, .codex, extended: false), unrestricted = session(f, agent, .codex, extended: true)
+        try f.start(agent)
+        try save(restricted)
+        try save(unrestricted) // Left over from an earlier time with unrestricted access.
+        try save(restricted.appendingPathExtension("unfinished"))
+
+        f.runtime.setExtendedAccess(true, agent: agent, repository: f.repository)
+        XCTAssertEqual(f.factory.processes.count, 2)
+        XCTAssertTrue(f.runtime.accessConfiguration.isExtended(for: agent))
+        XCTAssertFalse(exists(unrestricted))
+        XCTAssertTrue(exists(unrestricted.appendingPathExtension("handoff")))
+        XCTAssertTrue(exists(unrestricted.appendingPathExtension("unfinished")), "The interrupted turn continues in the new session")
+        XCTAssertFalse(exists(restricted.appendingPathExtension("unfinished")))
+    }
+
     func testTheSwitchPostsASystemLineInTheBotsConversation() throws {
         let f = try StoreFixture()
         addTeardownBlock { @MainActor in f.cleanUp() }

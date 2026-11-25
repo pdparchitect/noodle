@@ -19,6 +19,7 @@ public final class ClaudeAgentProcess: AgentRuntimeProcess {
     private let onUnexpectedTermination: @MainActor (ClaudeAgentProcess, String, Bool) -> Void
     private var sessionState: ClaudeSessionState
     private var turnRecovery: AgentTurnRecovery
+    private let handoff: HarnessHandoff
     private var sessionID: UUID { sessionState.sessionID }
 
     private var connectionID: UUID?
@@ -85,6 +86,7 @@ public final class ClaudeAgentProcess: AgentRuntimeProcess {
         let stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: .claudeCode, extendedAccess: extendedAccess)
         sessionState = ClaudeSessionState(url: stateURL)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
+        handoff = HarnessHandoff(sessionStateURL: stateURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
     }
@@ -327,9 +329,10 @@ public final class ClaudeAgentProcess: AgentRuntimeProcess {
         }
         trace.begin(reason: reason)
         do {
-            let data = try Self.userMessage(reason.eventText)
+            let data = try Self.userMessage(reason.eventText + handoff.context())
             try turnRecovery.begin()
             connection.write(data)
+            handoff.clear()
             trace.record(.wakeSubmitted)
             turnIsActive = true
             if reason.isScheduled { onHeartbeat() }

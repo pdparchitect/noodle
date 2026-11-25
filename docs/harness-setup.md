@@ -61,6 +61,12 @@ reasoning effort. Every bot starts with restricted access; once you
 [turn on unrestricted access](security.md), you can give it to a bot in
 **Settings → Bots**.
 
+You can change a bot's model, harness or access at any time. A new model on the
+same harness continues the same session. A bot moved to another harness or
+access mode starts a fresh session there, then catches up from the conversation
+and its workspace on its next turn and carries on with unfinished work.
+Details it only remembered privately in the previous session may be lost.
+
 Apps connected to ChatGPT or Claude.ai are off by default for Noodle bots. Turn
 on **Apps** beside a bot in **Settings → Bots** to allow them. This setting is
 separate for each bot and harness; [account apps](security.md#account-apps)
@@ -195,8 +201,8 @@ Profile** menu lets you change its profile; **Move Up** and **Move Down** change
 the order.
 
 When a bot runs out of usage, it continues on the next available choice, skipping
-profiles that have also run out. Switching profiles keeps its model; switching
-harnesses uses the new harness's default model. Its saved profile stays the same,
+profiles that have also run out. Switching profiles keeps its model and session; switching
+harnesses uses the new harness's default model and catches up as described above. Its saved profile stays the same,
 and it returns there when usage is available again and the bot is idle. If every
 choice is unavailable, the bot pauses until usage returns or you choose **Kick**.
 
