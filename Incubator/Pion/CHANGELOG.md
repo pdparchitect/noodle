@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Each service's Detection and Containment tools now draw on one list of its operations, each naming whether it serves detection, audit or containment, so an Audit tool of its own can later offer its share; until then Detection keeps the audit reads it has, but never one that needs Containment's access, such as Google Workspace's tokens. Every tool offers exactly what it did.
+
 ## [0.12.0] - 2026-11-25
 
 ### Changed

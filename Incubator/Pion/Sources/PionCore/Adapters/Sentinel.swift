@@ -72,6 +72,7 @@ extension Sentinel {
     struct Query: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String, timespan: String? }
         static let name = "query"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Run a KQL query over the workspace and return its columns and rows. Read-only."
         static let input = JSONSchema.object([
             "query": .string("The KQL query. Filter by time and end with take or summarize."),

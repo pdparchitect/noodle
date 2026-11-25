@@ -62,10 +62,7 @@ extension Entra {
         "Confirming or dismissing risk needs Microsoft Entra ID P2. Give the **Directory (tenant) ID** and the app's **Application (client) ID**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
 
-    public static let containmentAdapter = OperationAdapter(operations: [
-        ContainmentUser(), DisableSignIn(), EnableSignIn(), RevokeSessions(), DeleteSignInMethods(), RemoveDirectoryRole(), RemoveAppCredential(),
-        ConfirmCompromised(), DismissUserRisk(), ContainmentCheckAccess(),
-    ], simultaneousRequests: 4)
+    public static let containmentAdapter = OperationAdapter(operations: operations, job: .containment, simultaneousRequests: 4)
 
     // MARK: What it needs
 
@@ -231,6 +228,7 @@ extension Entra {
     struct ContainmentUser: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String }
         static let name = "user"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "A user's state before acting: whether they can sign in and are synced from on-premises, their active and eligible directory roles with each assignment's ID, their sign-in methods with their IDs, Identity Protection's risk, and whether they are a Global Administrator. It changes nothing."
         static let input = JSONSchema.object(["user": Entra.userField], required: ["user"])
 
@@ -300,6 +298,7 @@ extension Entra {
     struct DisableSignIn: ServiceOperation {
         typealias Input = UserInput
         static let name = "disable-sign-in"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: enable-sign-in restores sign-in, with the user's groups, roles and apps as they were. Disabling does not end sessions or tokens already issued: revoke-sessions does."
         static let summary = "Disable a user's sign-in (accountEnabled false), so they cannot sign in again. \(recovery)"
         static let input = Entra.userSchema
@@ -320,6 +319,7 @@ extension Entra {
     struct EnableSignIn: ServiceOperation {
         typealias Input = UserInput
         static let name = "enable-sign-in"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: disable-sign-in again. Restoring sign-in can let an attacker back in, so before it remove sign-in methods you do not trust, have the password reset and revoke sessions, as the champion decides."
         static let summary = "Restore a disabled user's sign-in (accountEnabled true). Held like the rest, as it gives access back. \(recovery)"
         static let input = Entra.userSchema
@@ -340,6 +340,7 @@ extension Entra {
     struct RevokeSessions: ServiceOperation {
         typealias Input = UserInput
         static let name = "revoke-sessions"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: nothing to restore; the user signs in again everywhere. Their refresh tokens and session cookies are invalidated, but access tokens already issued keep working until they expire, usually within an hour, except in apps that honour Continuous Access Evaluation."
         static let summary = "Revoke all of a user's sign-in sessions (revokeSignInSessions), invalidating their refresh tokens and session cookies so they must sign in again. \(recovery)"
         static let input = Entra.userSchema
@@ -371,6 +372,7 @@ extension Entra {
     struct DeleteSignInMethods: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String; let methods: [String]; let allowGlobalAdmin: Bool? }
         static let name = "delete-sign-in-methods"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: the user must register each removed method again; make sure it is them, as whoever signs in next with the password may register their own. The password is not a method this removes: have it reset in the Microsoft Entra admin center."
         static let summary = "Delete one or more of a user's sign-in methods, such as an authenticator or phone an attacker registered, by their IDs from user; checks every one first and reports each deletion. \(recovery)"
         static let input = JSONSchema.object(["user": Entra.userField, "methods": .array(.string("A sign-in method's ID, as user lists it."), "Between 1 and 20 methods."),
@@ -409,6 +411,7 @@ extension Entra {
     struct RemoveDirectoryRole: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String; let assignments: [String]?; let eligibilities: [String]?; let allowGlobalAdmin: Bool? }
         static let name = "remove-directory-role"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: assign each role again in Roles and administrators, or make the user eligible again in Privileged Identity Management; the assignment's ID and schedule are not restored."
         static let summary = "Remove directory roles a user holds directly: active assignments, and eligibility in Privileged Identity Management, by their IDs from user; checks every one first and reports each removal. Roles held through a group are refused, as they are the group's. \(recovery)"
         static let input = JSONSchema.object(["user": Entra.userField,
@@ -474,6 +477,7 @@ extension Entra {
     struct RemoveAppCredential: ServiceOperation {
         struct Input: Decodable, Sendable { let app: String; let kind: String; let keyId: String }
         static let name = "remove-app-credential"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: none, as a secret cannot be shown again: whatever used it needs a new one. Pion never adds credentials."
         static let summary = "Remove one client secret from an app registration or enterprise app, by the app's object ID and the secret's keyId from Microsoft Entra ID Detection's app-credentials, saying what it was. A certificate is refused, with the steps to remove it in the Microsoft Entra admin center. \(recovery)"
         static let input = JSONSchema.object(["app": .string("The app's object ID (a GUID), as app-credentials lists it; not its application (client) ID."),
@@ -564,6 +568,7 @@ extension Entra {
     struct ConfirmCompromised: ServiceOperation {
         typealias Input = UserInput
         static let name = "confirm-compromised"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: dismiss-user-risk clears it. Confirming sets the user's risk to high, which risk-based Conditional Access policies may act on, such as blocking their sign-in or requiring a secure password change."
         static let summary = "Tell Identity Protection a user is compromised, setting their risk to high. Needs Entra ID P2. \(recovery)"
         static let input = Entra.userSchema
@@ -584,6 +589,7 @@ extension Entra {
     struct DismissUserRisk: ServiceOperation {
         typealias Input = UserInput
         static let name = "dismiss-user-risk"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: none directly. Dismissing hides the user's risk from Identity Protection, its risk-based policies and the alert watch; confirm-compromised raises it to high again."
         static let summary = "Dismiss a user's risk in Identity Protection. Held like the rest, as it hides risk. Needs Entra ID P2. \(recovery)"
         static let input = Entra.userSchema
@@ -608,6 +614,7 @@ extension Entra {
     struct ContainmentCheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Reads the roles of the signed-in admin and says which containment operations they allow, what role to add for the rest, and when they allow far more; which tenant it acts on; tries what the operations read first; and which permissions the app is consented. It changes nothing."
         static let input = JSONSchema.object([:])
 

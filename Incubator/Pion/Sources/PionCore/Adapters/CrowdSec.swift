@@ -81,6 +81,7 @@ extension CrowdSec {
     struct Lookup: ServiceOperation {
         struct Input: Decodable, Sendable { let ip: String }
         static let name = "ip"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "What CrowdSec's network has seen an IP address do: reputation, behaviours, attacks, MITRE techniques, CVEs, history and scores."
         static let input = JSONSchema.object(["ip": .string("An IPv4 or IPv6 address.")], required: ["ip"])
 
@@ -98,6 +99,7 @@ extension CrowdSec {
     struct Lookups: ServiceOperation {
         struct Input: Decodable, Sendable { let ips: [String] }
         static let name = "ips"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Several IP addresses at once, up to 20, each as ip describes it, and which ones CrowdSec has not seen."
         static let input = JSONSchema.object(["ips": .array(.string("An IPv4 or IPv6 address."), "Up to 20 addresses.")], required: ["ips"])
 

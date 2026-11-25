@@ -78,9 +78,14 @@ public enum CrowdStrike {
         cloudStep,
     ]
 
-    public static let adapter = OperationAdapter(operations: [Hosts(), HostDetails(), Alerts(), AlertDetails(), RTRSessions(), HostGroups(), ContainerImages(),
-                                                              Users(), SecurityEvents(), CheckAccess()],
-                                                 trigger: NewSecurityEvents(),
+    /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
+    static let operations: [any ServiceOperation] = [
+        Hosts(), HostDetails(), Alerts(), AlertDetails(), RTRSessions(), HostGroups(), ContainerImages(), Users(), SecurityEvents(), CheckAccess(),
+        ContainmentHost(), ActionStatus(), ContainHost(), LiftContainment(), BlockIOC(), UnblockIOC(), RTRKillProcess(), CloseAlert(),
+        UpdateAlertStatus(), ContainmentCheckAccess(),
+    ]
+
+    public static let adapter = OperationAdapter(operations: operations, job: .detection, trigger: NewSecurityEvents(),
                                                  // Paced, as users asks for each user's roles in turn; Falcon allows each customer so
                                                  // many requests a minute, shared by every API client.
                                                  simultaneousRequests: 8)
@@ -614,6 +619,7 @@ extension CrowdStrike {
     struct Hosts: ServiceOperation {
         struct Input: Decodable, Sendable { let name: String?, ip: String?, platform: String?, status: String?, group: String?, seenSince: String?, limit: Int? }
         static let name = "hosts"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Find hosts by the start of their name, an IP address, platform, containment status or host group, most recently seen first, with each one's device ID, sensor, containment status and when last seen, saying when more matched than it kept."
         static let input = JSONSchema.object([
             "name": .string("The start of the host's name, such as LT-04."),
@@ -666,6 +672,7 @@ extension CrowdStrike {
     struct HostDetails: ServiceOperation {
         struct Input: Decodable, Sendable { let host: String }
         static let name = "host"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "One host in full: its sensor, OS, addresses, when first and last seen, whether its sensor is online, its containment status, tags and host groups, any hint that it runs Kubernetes workloads or containers, not verified, and the newest alerts that named it, saying what it could not read."
         static let input = JSONSchema.object(["host": .string("The host's 32-character device ID, or its exact name.")], required: ["host"])
 
@@ -788,6 +795,7 @@ extension CrowdStrike {
     struct Alerts: ServiceOperation {
         struct Input: Decodable, Sendable { let host: String?, severity: String?, status: String?, since: String?, until: String?, limit: Int? }
         static let name = "alerts"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Alerts Falcon raised, newest first, by host, least severity, status and time, with the host, file, command line and MITRE technique, saying when more matched than it kept."
         static let input = JSONSchema.object([
             "host": .string("The host's 32-character device ID, or its exact name."),
@@ -829,6 +837,7 @@ extension CrowdStrike {
     struct AlertDetails: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "alert"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "One alert in full: what it says, the host with its device ID, the process, its parent and grandparent with their command lines and SHA256s, the user, the MITRE tactic and technique, and what Falcon did about it."
         static let input = JSONSchema.object(["id": .string("The alert's composite ID, as alerts lists it.")], required: ["id"])
 
@@ -903,6 +912,7 @@ extension CrowdStrike {
     struct RTRSessions: ServiceOperation {
         struct Input: Decodable, Sendable { let host: String?, user: String?, since: String?, until: String?, limit: Int? }
         static let name = "rtr-sessions"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Real Time Response sessions, newest first, by host, user and time: who opened each on which host, and every command they ran in it, saying when more matched than it kept."
         static let input = JSONSchema.object([
             "host": .string("Only sessions on this host, by its 32-character device ID."),
@@ -962,6 +972,7 @@ extension CrowdStrike {
     struct HostGroups: ServiceOperation {
         struct Input: Decodable, Sendable { let group: String?, limit: Int? }
         static let name = "host-groups"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Host groups, with each one's type and assignment rule; or, given a group, the hosts in it, saying when more matched than it kept."
         static let input = JSONSchema.object([
             "group": .string("A host group's ID, to list the hosts in it."),
@@ -1003,6 +1014,7 @@ extension CrowdStrike {
     struct ContainerImages: ServiceOperation {
         struct Input: Decodable, Sendable { let repository: String?, minimumSeverity: String?, limit: Int? }
         static let name = "container-images"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Container images Falcon assessed, by repository and least vulnerability severity, with each one's registry, tag, highest vulnerability severity, vulnerability and detection counts, base OS and when first and last seen, saying when more matched than it kept. Read-only."
         static let input = JSONSchema.object([
             "repository": .string("Only images of this repository, such as library/nginx."),
@@ -1049,6 +1061,7 @@ extension CrowdStrike {
     struct Users: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "users"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Everyone who can use the Falcon console, with their roles, administrators first, saying what it could not read."
         static let input = JSONSchema.object([:])
 
@@ -1156,6 +1169,7 @@ extension CrowdStrike {
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Tries each thing this tool reads once and says what works and, for what does not, which scope to add; which Falcon cloud it reads; and warns when a read shows the API client holds Real Time Response's write or admin scope, which Detection must not. It sends only reads, so other write scopes are not verified."
         static let input = JSONSchema.object([:])
 

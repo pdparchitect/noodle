@@ -7,6 +7,7 @@ import XCTest
 private struct FileReport: ServiceOperation {
     struct Input: Decodable, Sendable { let hash: String; let relationships: Bool? }
     static let name = "file-report"
+    static let jobs: Set<ToolJob> = [.detection]
     static let summary = "A file's reputation by its hash."
     static let input = JSONSchema.object([
         "hash": .string("MD5, SHA-1 or SHA-256 of the file."),

@@ -358,6 +358,7 @@ extension Azure {
     struct SecurityEvents: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, until: String? }
         static let name = "security-events"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "What the alert watch wakes for, for a window, newest first and each kind in turn: open high-severity Defender for Cloud alerts, and activity log entries that open the way in or hide what follows: Owner, Contributor, User Access Administrator or Role Based Access Control Administrator granted on the subscription, Key Vault access changed, diagnostic settings deleted, locks and policy assignments removed, network rules opened to the internet, commands run on VMs, storage opened to public or shared key access, and access elevated by a Global Administrator; saying what it searched, what it could not read and why, and what it does not watch."
         static let input = JSONSchema.object([
             "since": .string("The earliest time, in ISO 8601. The last 24 hours when left out, at most 90 days."),

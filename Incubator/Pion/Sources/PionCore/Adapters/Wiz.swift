@@ -63,6 +63,7 @@ extension Wiz {
         }
         struct Variables: Encodable { let filterBy: Filter; let first: Int }
         static let name = "issues"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Cloud security issues, by severity, status and time, with the rule that raised each and the resource it concerns."
         static let input = JSONSchema.object([
             "severities": .array(.string("A severity.", oneOf: ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"]), "Severities to include."),
@@ -109,6 +110,7 @@ extension Wiz {
     struct Query: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String }
         static let name = "query"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Run a read-only GraphQL query over the Wiz security graph. Mutations are refused."
         static let input = JSONSchema.object(["query": .string("The GraphQL query, such as query { cloudResources(first: 10) { nodes { name type } } }.")],
                                              required: ["query"])

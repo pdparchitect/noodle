@@ -59,9 +59,14 @@ public enum Defender {
         "Give the **Directory (tenant) ID** and the app's **Application (client) ID** from its **Overview**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [Alerts(), AlertDetails(), Incidents(), IncidentDetails(), Hunt(), Devices(), DeviceDetails(),
-                                                              SecurityEvents(), CheckAccess()],
-                                                 trigger: NewSecurityEvents(),
+    /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
+    static let operations: [any ServiceOperation] = [
+        Alerts(), AlertDetails(), Incidents(), IncidentDetails(), Hunt(), Devices(), DeviceDetails(), SecurityEvents(), CheckAccess(),
+        ContainmentDevice(), MachineActions(), ActionStatus(), IsolateDevice(), ReleaseIsolation(), RestrictAppExecution(), RemoveAppRestriction(),
+        StopAndQuarantineFile(), RunAVScan(), CollectInvestigationPackage(), ContainmentCheckAccess(),
+    ]
+
+    public static let adapter = OperationAdapter(operations: operations, job: .detection, trigger: NewSecurityEvents(),
                                                  // Graph throttles each app in each tenant, advanced hunting most of all.
                                                  simultaneousRequests: 4)
 
@@ -365,6 +370,7 @@ extension Defender {
     struct Alerts: ServiceOperation {
         struct Input: Decodable, Sendable { let severity: String?, status: String?, source: String?, incident: String?, since: String?, until: String?, limit: Int? }
         static let name = "alerts"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Security alerts across Microsoft Defender XDR by severity, status, source, incident and time, with the entities each involves, saying when more matched than it kept."
         static let input = JSONSchema.object([
             "severity": .string("The severity.", oneOf: Defender.severities),
@@ -409,6 +415,7 @@ extension Defender {
     struct AlertDetails: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "alert"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "One alert in full: what it says, how to respond, its classification and every entity in its evidence, with each device's Defender for Endpoint ID and each file's SHA1, which Microsoft Defender XDR Containment acts on."
         static let input = JSONSchema.object(["id": .string("The alert's ID, as alerts lists it.")], required: ["id"])
 
@@ -443,6 +450,7 @@ extension Defender {
     struct Incidents: ServiceOperation {
         struct Input: Decodable, Sendable { let severity: String?, status: String?, since: String?, until: String?, limit: Int? }
         static let name = "incidents"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Incidents, which gather related alerts, by severity, status and time, saying when more matched than it kept."
         static let input = JSONSchema.object([
             "severity": .string("The severity.", oneOf: Defender.severities),
@@ -480,6 +488,7 @@ extension Defender {
     struct IncidentDetails: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "incident"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "One incident with each of its alerts and the entities they involve."
         static let input = JSONSchema.object(["id": .string("The incident's ID, as incidents lists it.")], required: ["id"])
 
@@ -535,6 +544,7 @@ extension Defender {
     struct Hunt: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String, timespan: String? }
         static let name = "hunt"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Run a KQL query over Defender's advanced hunting tables, such as DeviceProcessEvents or EmailEvents, saying when the results may be cut short. Read-only."
         static let input = JSONSchema.object([
             "query": .string("The KQL query. Filter by time and end with take or limit to keep results small."),
@@ -589,6 +599,7 @@ extension Defender {
     struct Devices: ServiceOperation {
         struct Input: Decodable, Sendable { let name: String?, platform: String?, onboarding: String?, limit: Int? }
         static let name = "devices"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The devices Defender for Endpoint reported in the last 30 days, newest seen first, by the start of their name, platform and onboarding, with each one's Defender for Endpoint ID, sensor health, exposure and device group, saying when more matched than it kept."
         static let input = JSONSchema.object([
             "name": .string("The start of the device's name."),
@@ -622,6 +633,7 @@ extension Defender {
     struct DeviceDetails: ServiceOperation {
         struct Input: Decodable, Sendable { let device: String }
         static let name = "device"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "One device as Defender for Endpoint last reported it in 30 days: platform, onboarding, sensor health, exposure, device group, tags and Entra device ID, its network addresses, and the alerts that named it, saying what it could not read."
         static let input = JSONSchema.object(["device": .string("The device's 40-character Defender for Endpoint ID, or its exact name.")], required: ["device"])
 
@@ -681,6 +693,7 @@ extension Defender {
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Tries each thing this tool reads once and says what works and, for what does not, exactly what to change: the app's permissions, the admin's role or what the tenant lacks; which tenant it reads and who is signed in; and which Defender plans' hunting tables have data in the last 7 days, as hunting an empty table finds nothing. It changes nothing."
         static let input = JSONSchema.object([:])
 

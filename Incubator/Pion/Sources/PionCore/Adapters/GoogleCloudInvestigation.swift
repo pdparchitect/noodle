@@ -150,6 +150,7 @@ extension GoogleCloud {
     struct FindingDetail: ServiceOperation {
         struct Input: Decodable, Sendable { let name: String }
         static let name = "scc-finding"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "One Security Command Center finding in full, by the name scc-findings shows: its description and next steps, MITRE ATT&CK tactic and techniques, who acted, from where, with which key and through whom for a threat, the resource and its project, when it was created and last seen, and its source's own properties."
         static let input = JSONSchema.object([
             "name": .string("The finding's full name, such as organizations/123/sources/456/findings/abc."),
@@ -251,6 +252,7 @@ extension GoogleCloud {
     struct FindingSummary: ServiceOperation {
         struct Input: Decodable, Sendable { let groupBy: [String]?, severities: [String]?, since: String?, includeMuted: Bool? }
         static let name = "scc-summary"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "How many active Security Command Center findings there are across the scope, counted by category, severity, project or resource type, most first, to see where to look; muted ones only when asked."
         static let input = JSONSchema.object([
             "groupBy": .array(.string("What to count by.", oneOf: ["category", "severity", "project", "resourceType"]), "What to count by, up to 2. Category and severity when left out."),
@@ -338,6 +340,7 @@ extension GoogleCloud {
     struct Impersonation: ServiceOperation {
         struct Input: Decodable, Sendable { let serviceAccount: String?, member: String?, project: String?, throughOtherAccounts: Bool? }
         static let name = "who-can-impersonate"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Who can act as a service account, or which service accounts a member can act as, under IAM allow policies: who can mint its tokens, sign as it, attach it to what they run or make it a key, including through groups, with each binding's condition. Each call is one of the organisation's daily IAM analyses."
         static let input = JSONSchema.object([
             "serviceAccount": .string("A service account's email, to find who can act as it."),
@@ -472,6 +475,7 @@ extension GoogleCloud {
     struct ServiceAccountKeys: ServiceOperation {
         struct Input: Decodable, Sendable { let serviceAccount: String?, recentDays: Int?, includeSystemManaged: Bool? }
         static let name = "sa-keys"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Service account keys across the scope, newest first, flagging user-managed keys, which work from anywhere until deleted, and those made lately, with when each was made and expires, whether it is disabled and why, and whether it was uploaded."
         static let input = JSONSchema.object([
             "serviceAccount": .string("Only this service account's keys, by its email."),
@@ -567,6 +571,7 @@ extension GoogleCloud {
     struct PublicResources: ServiceOperation {
         struct Input: Decodable, Sendable { let assetTypes: [String]? }
         static let name = "public-resources"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Resources whose IAM allow policy grants a role to anyone on the internet (allUsers) or any Google account (allAuthenticatedUsers), across the scope, by resource type, with the role and any condition, saying how many policies it read."
         static let input = JSONSchema.object([
             "assetTypes": .array(.string("An asset type, such as storage.googleapis.com/Bucket or run.googleapis.com/Service."), "Only these types, up to 20. Every type when left out."),
@@ -619,6 +624,7 @@ extension GoogleCloud {
     struct AssetHistory: ServiceOperation {
         struct Input: Decodable, Sendable { let assetType: String, since: String, name: String?, content: String? }
         static let name = "asset-history"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "How the IAM policies, or the resources, of one asset type across the scope differ now from how they were at a time up to 35 days ago: what was added, removed and changed, and for IAM policies each role granted and revoked."
         static let input = JSONSchema.object([
             "assetType": .string("The asset type, such as storage.googleapis.com/Bucket or cloudresourcemanager.googleapis.com/Project."),
@@ -725,6 +731,7 @@ extension GoogleCloud {
     struct OrgPolicies: ServiceOperation {
         struct Input: Decodable, Sendable { let constraint: String?, all: Bool? }
         static let name = "org-policies"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Organisation policies set across the scope, on the organisation, its folders and projects, flagging security constraints loosened, such as service account key creation allowed, public buckets allowed or members of any domain allowed, with when each was last set."
         static let input = JSONSchema.object([
             "constraint": .string("Only this constraint, such as iam.disableServiceAccountKeyCreation."),
@@ -847,6 +854,7 @@ extension GoogleCloud {
     struct LoggingCoverage: ServiceOperation {
         struct Input: Decodable, Sendable { let service: String? }
         static let name = "logging-coverage"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Where Data Access audit logging is on across the scope, from the audit configuration in the organisation's, folders' and projects' IAM policies: for a service, such as storage.googleapis.com, whether each project logs data reads, data writes and admin reads, each on, off or unknown and why, with whom it exempts; otherwise every configuration set. Run it before taking no reads found as none."
         static let input = JSONSchema.object([
             "service": .string("The service to check, such as storage.googleapis.com, secretmanager.googleapis.com or iamcredentials.googleapis.com. Every configuration set when left out."),

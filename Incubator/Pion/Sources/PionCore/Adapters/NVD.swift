@@ -130,6 +130,7 @@ extension NVD {
     struct Products: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String }
         static let name = "products"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Find a product's name as NVD knows it, vendor:product, to search its CVEs with recent."
         static let input = JSONSchema.object(["query": .string("Words in the product's name, such as grafana or google chrome.")], required: ["query"])
 
@@ -164,6 +165,7 @@ extension NVD {
     struct Recent: ServiceOperation {
         struct Input: Decodable, Sendable { let product: String?, keyword: String?, since: String?, severity: String?, exploited: Bool?, limit: Int? }
         static let name = "recent"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "CVEs published since a date for a product or by keyword, newest first, with CVSS scores and whether CISA has seen them exploited."
         static let input = JSONSchema.object([
             "product": .string("The product as products names it, vendor:product, such as grafana:grafana."),
@@ -193,6 +195,7 @@ extension NVD {
     struct CVE: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "cve"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "One CVE in full: its description, CVSS score, weakness, affected products and versions, whether it is exploited, and references."
         static let input = JSONSchema.object(["id": .string("The CVE's ID, such as CVE-2026-14199.")], required: ["id"])
 
@@ -234,6 +237,7 @@ extension NVD {
     struct Exploited: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, product: String?, keyword: String?, limit: Int? }
         static let name = "exploited"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "CVEs CISA has added to its catalogue of those exploited in the wild since a date, newest first, with the date to fix them by."
         static let input = JSONSchema.object([
             "since": .string("The earliest date CISA added them, such as 2026-11-01, at most 119 days back. The last 30 days when left out."),

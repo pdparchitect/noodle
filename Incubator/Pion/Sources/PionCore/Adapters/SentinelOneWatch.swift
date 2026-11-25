@@ -187,6 +187,7 @@ extension SentinelOne {
     struct SecurityEvents: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, until: String? }
         static let name = "security-events"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "What the alert watch wakes for, for a window, newest first and each kind in turn: unresolved threats of malicious or suspicious confidence, and network disconnects and threat mitigations a person issued; and the agents disconnected from the network or with a disconnect pending now, with when the watch first saw each; saying, for each feed, what it searched, what is off, what it could not read and why, and what it does not watch."
         static let input = JSONSchema.object([
             "since": .string("The earliest time, in ISO 8601. The last 24 hours when left out, at most 30 days."),

@@ -55,12 +55,31 @@ public indirect enum JSONSchema: Sendable {
     }
 }
 
+/// What one of a service's tools is for. Detection watches and reads what happened and what exists, for an
+/// investigation; Audit reads how things are set up and exposed; Containment acts, and reads what it acts on first.
+public enum ToolJob: Sendable {
+    case detection, audit, containment
+
+    /// Whether this job's tool offers an operation that serves `jobs`.
+    func offers(_ jobs: Set<ToolJob>) -> Bool {
+        switch self {
+        // Until the service has an Audit tool, Detection keeps the reads only Audit is for, though not one Containment
+        // shares, which takes Containment's access. The rule is for every service at once; the first Audit tool makes
+        // it the service's own.
+        case .detection: jobs.contains(.detection) || jobs == [.audit]
+        case .audit, .containment: jobs.contains(self)
+        }
+    }
+}
+
 /// One thing an adapter can do: a typed input, and the requests that answer it. Operations are values, so an
 /// adapter is a list of them and one operation can serve several adapters.
 public protocol ServiceOperation: Sendable {
     associatedtype Input: Decodable & Sendable
     /// What bots call it: lowercase words joined by hyphens.
     static var name: String { get }
+    /// The jobs it serves, each of which a tool of its service offers it for. Every operation names its own.
+    static var jobs: Set<ToolJob> { get }
     static var summary: String { get }
     static var input: JSONSchema { get }
     /// Whether it only reads. Bots are told through the tool's hints.
@@ -541,6 +560,11 @@ public struct OperationAdapter: ToolConnectionAdapter {
         entries = operations.map { Self.entry($0) }
         self.trigger = trigger
         self.simultaneousRequests = simultaneousRequests
+    }
+
+    /// The tool for one job of a service, offering those of the service's `operations` that serve it.
+    public init(operations: [any ServiceOperation], job: ToolJob, trigger: (any ServiceTrigger)? = nil, simultaneousRequests: Int? = nil) {
+        self.init(operations: operations.filter { job.offers(type(of: $0).jobs) }, trigger: trigger, simultaneousRequests: simultaneousRequests)
     }
 
     /// The operation that reads what its trigger finds, if its service has a feed of new and serious things to watch;

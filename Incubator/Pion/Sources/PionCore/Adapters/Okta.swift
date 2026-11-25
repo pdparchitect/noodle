@@ -77,9 +77,14 @@ public enum Okta {
         "Give your org's domain, such as `acme.okta.com`, not its `-admin` address, and the app's **Client ID**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [FindUser(), UserGroups(), UserApps(), UserFactors(), SignInEvents(),
-                                                              UserGrants(), AdminRoles(), APITokens(), SecurityEvents(), CheckAccess()],
-                                                 trigger: NewSecurityEvents(),
+    /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
+    static let operations: [any ServiceOperation] = [
+        FindUser(), UserGroups(), UserApps(), UserFactors(), SignInEvents(), UserGrants(), AdminRoles(), APITokens(), SecurityEvents(), CheckAccess(),
+        ContainmentUser(), Suspend(), Unsuspend(), Deactivate(), ClearSessions(), ResetFactors(), DeleteFactor(), ExpirePassword(), RemoveFromGroup(),
+        RevokeAdminRole(), RevokeAppGrants(), RevokeAPIToken(), ContainmentCheckAccess(),
+    ]
+
+    public static let adapter = OperationAdapter(operations: operations, job: .detection, trigger: NewSecurityEvents(),
                                                  // Paced, as admin-roles asks for each admin's roles in turn.
                                                  simultaneousRequests: 8)
 
@@ -407,6 +412,7 @@ extension Okta {
     struct FindUser: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String; let limit: Int? }
         static let name = "find-user"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Find users whose first name, last name or email starts with the query, with their status and last sign-in, saying when more match than it kept. It does not search logins; give a full login to the other tools."
         static let input = JSONSchema.object(["query": .string("The start of a first name, last name or email address."),
                                               "limit": .integer("How many users, at most. 10 when left out.", minimum: 1, maximum: 50)], required: ["query"])
@@ -430,6 +436,7 @@ extension Okta {
     struct UserGroups: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String }
         static let name = "user-groups"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The groups a user belongs to, with each group's type, read page after page."
         static let input = JSONSchema.object(["user": .string("The user's Okta ID or login.")], required: ["user"])
 
@@ -452,6 +459,7 @@ extension Okta {
     struct UserApps: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String }
         static let name = "user-apps"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Every app assigned to a user, directly or through a group, hidden ones included, read page after page."
         static let input = JSONSchema.object(["user": .string("The user's Okta ID or login.")], required: ["user"])
 
@@ -473,6 +481,7 @@ extension Okta {
     struct UserFactors: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String }
         static let name = "user-factors"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The sign-in factors a user has enrolled, such as push, SMS or a security key, with their status and when each was enrolled."
         static let input = JSONSchema.object(["user": .string("The user's Okta ID or login.")], required: ["user"])
 
@@ -507,6 +516,7 @@ extension Okta {
             let user: String?, target: String?, ip: String?, eventType: String?, failuresOnly: Bool?, since: String?, until: String?, limit: Int?
         }
         static let name = "sign-in-events"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "System Log events of any kind, newest first, by the user who acted, the user or thing acted on, IP address, event type, failures only and time, saying when more matched than it kept. Okta keeps 90 days."
         static let input = JSONSchema.object([
             "user": .string("The login of the user who acted, such as name@example.com."),
@@ -582,6 +592,7 @@ extension Okta {
     struct UserGrants: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String }
         static let name = "user-grants"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The apps a user let act for them through OAuth, with the scopes each holds and whether the user or an admin granted it, read page after page."
         static let input = JSONSchema.object(["user": .string("The user's Okta ID or login.")], required: ["user"])
 
@@ -620,6 +631,7 @@ extension Okta {
     struct AdminRoles: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "admin-roles"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Everyone Okta lists as holding an admin role, with which roles and whether through a group, super administrators first, saying when it read only some."
         static let input = JSONSchema.object([:])
 
@@ -659,6 +671,7 @@ extension Okta {
     struct APITokens: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "api-tokens"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Every API token, with who made it, when it expires and where it may be used from, read page after page."
         static let input = JSONSchema.object([:])
 
@@ -707,6 +720,7 @@ extension Okta {
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Tries each thing this tool reads once and says what works and, for what does not, exactly what to change, in the Okta app's scopes or the admin's role; which scopes the sign-in holds; and which admin roles the signed-in admin holds, saying when they could change the org. It changes nothing."
         static let input = JSONSchema.object([:])
 

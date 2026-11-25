@@ -59,9 +59,16 @@ public enum SentinelOne {
         consoleStep,
     ]
 
-    public static let adapter = OperationAdapter(operations: [Agents(), AgentDetails(), Threats(), ThreatDetails(), Activities(), ActivityTypes(), Sites(), Groups(),
-                                                              Exclusions(), SecurityEvents(), CheckAccess()],
-                                                 trigger: NewSecurityEvents(),
+    /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
+    static let operations: [any ServiceOperation] = [
+        Agents(), AgentDetails(), Threats(), ThreatDetails(), Activities(), ActivityTypes(), Sites(), Groups(), Exclusions(), SecurityEvents(),
+        CheckAccess(),
+        ContainmentAgent(), ContainmentThreat(), ActionStatus(), DisconnectAgent(), ReconnectAgent(), InitiateScan(), KillThreat(),
+        QuarantineThreat(), UnquarantineThreat(), RemediateThreat(), RollbackThreat(), ResolveThreat(), UpdateThreatStatus(), BlockHash(),
+        UnblockHash(), ContainmentCheckAccess(),
+    ]
+
+    public static let adapter = OperationAdapter(operations: operations, job: .detection, trigger: NewSecurityEvents(),
                                                  // SentinelOne limits each token's requests a second per endpoint.
                                                  simultaneousRequests: 4)
 
@@ -525,6 +532,7 @@ extension SentinelOne {
     struct Agents: ServiceOperation {
         struct Input: Decodable, Sendable { let name: String?, networkStatus: String?, infected: Bool?, osType: String?, siteId: String?, groupId: String?, activeSince: String?, limit: Int? }
         static let name = "agents"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Find agents by part of their computer name, network status, infection, OS, site or group, most recently active first, with each one's ID, OS, whether it is disconnected from the network, infected and in touch with the console, and when last active, saying when more matched than it kept."
         static let input = JSONSchema.object([
             "name": .string("All or part of the computer's name, such as LT-04."),
@@ -565,6 +573,7 @@ extension SentinelOne {
     struct AgentDetails: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "agent"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "One agent in full by its ID: whether it is disconnected from the network, in touch with the console and infected, its OS, addresses, users, scan status and when last active, and its unresolved threats, saying what it could not read."
         static let input = JSONSchema.object(["id": .string("The agent's ID, as agents or a threat gives it.")], required: ["id"])
 
@@ -726,6 +735,7 @@ extension SentinelOne {
     struct Threats: ServiceOperation {
         struct Input: Decodable, Sendable { let computerName: String?, agentId: String?, incidentStatus: String?, confidence: String?, since: String?, until: String?, limit: Int? }
         static let name = "threats"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Threats agents detected, newest first, by computer, agent, incident status, confidence and time, with each one's classification, confidence, mitigation status, incident status, analyst verdict and file, saying when more matched than it kept."
         static let input = JSONSchema.object([
             "computerName": .string("All or part of the computer's name."),
@@ -812,6 +822,7 @@ extension SentinelOne {
     struct ThreatDetails: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "threat"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "One threat in full by its ID: the endpoint and agent, file, hashes, process and user, storyline, classification and confidence, MITRE indicators, every mitigation action and where it stands, incident status and verdict, its notes, and its newest timeline entries, saying what it could not read."
         static let input = JSONSchema.object(["id": .string("The threat's ID, as threats lists it.")], required: ["id"])
 
@@ -894,6 +905,7 @@ extension SentinelOne {
     struct Activities: ServiceOperation {
         struct Input: Decodable, Sendable { let agentId: String?, threatId: String?, userId: String?, types: [Int]?, since: String?, until: String?, limit: Int? }
         static let name = "activities"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "The activity log, newest first: who did what and when, by agent, threat, user, activity type and time, each entry with its type, description and who did it, saying when more matched than it kept."
         static let input = JSONSchema.object([
             "agentId": .string("Only entries about this agent."),
@@ -935,6 +947,7 @@ extension SentinelOne {
     struct ActivityTypes: ServiceOperation {
         struct Input: Decodable, Sendable { let contains: String? }
         static let name = "activity-types"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "The activity log's types, by number, with what each records, optionally only those whose name contains some words, for activities' types."
         static let input = JSONSchema.object(["contains": .string("Only types whose name or description contains this, such as network or quarantine.")])
 
@@ -953,6 +966,7 @@ extension SentinelOne {
     struct Sites: ServiceOperation {
         struct Input: Decodable, Sendable { let limit: Int? }
         static let name = "sites"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The sites this token sees, with each one's ID, account, state, type and licences, saying when more matched than it kept."
         static let input = JSONSchema.object(["limit": .integer("How many sites, at most. 200 when left out.", minimum: 1, maximum: 1_000)])
 
@@ -987,6 +1001,7 @@ extension SentinelOne {
     struct Groups: ServiceOperation {
         struct Input: Decodable, Sendable { let siteId: String?, limit: Int? }
         static let name = "groups"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Groups of agents, with each one's ID, site, type, how many agents it holds and whether it is the site's default, optionally of one site, saying when more matched than it kept."
         static let input = JSONSchema.object([
             "siteId": .string("Only this site's groups."),
@@ -1017,6 +1032,7 @@ extension SentinelOne {
     struct Exclusions: ServiceOperation {
         struct Input: Decodable, Sendable { let type: String?, osType: String?, limit: Int? }
         static let name = "exclusions"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Exclusions, newest first: what each lets the agents ignore (a path, hash, certificate, browser or file type), its mode, OS and scope, and who added it and when. An exclusion an attacker added hides what they do. Says when it read only part."
         static let input = JSONSchema.object([
             "type": .string("Only this kind.", oneOf: SentinelOne.exclusionTypes),
@@ -1120,6 +1136,7 @@ extension SentinelOne {
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Reads the token's own service user, its role, scope and when the token expires, warning of any role but Viewer; tries each thing this tool reads once and says what works and what to change; and names the console it reaches. It sends only reads."
         static let input = JSONSchema.object([:])
 

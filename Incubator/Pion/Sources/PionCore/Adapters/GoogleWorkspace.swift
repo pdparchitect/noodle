@@ -95,11 +95,16 @@ public enum GoogleWorkspace {
         "Choose **Add & Connect** and sign in as that admin.",
     ]
 
+    /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
+    static let operations: [any ServiceOperation] = [
+        Activity(), SecurityEvents(), AdminRoles(), Users(), UserGroups(), UserDevices(), GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(),
+        IPActivity(), LinkClicks(), Domains(), CheckAccess(), DriveExposure(), MailTrace(), ClientActivity(),
+        UserState(), Tokens(), Apps(), AppPasswords(), ContainmentDevices(), ContainmentCheckAccess(), SignOut(), ResetPassword(), RemoveRecovery(),
+        RevokeToken(), DeleteAppPassword(), InvalidateBackupCodes(), DeviceBlock(), Suspend(), Unsuspend(),
+    ]
+
     /// The Reports API turns away part of a burst of about 19 requests at once, well inside its per-minute quota.
-    public static let adapter = OperationAdapter(operations: [Activity(), SecurityEvents(), AdminRoles(), Users(), UserGroups(), UserDevices(),
-                                                              GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(), IPActivity(), LinkClicks(), Domains(), CheckAccess(),
-                                                              DriveExposure(), MailTrace(), ClientActivity()], trigger: NewSecurityEvents(),
-                                                 simultaneousRequests: 8)
+    public static let adapter = OperationAdapter(operations: operations, job: .detection, trigger: NewSecurityEvents(), simultaneousRequests: 8)
 
     /// Suspending, resetting a password and removing recovery details take the broad user scope, as Google has none
     /// narrower; what the token can really do is set by the signing-in admin's role, which the setup keeps to those and
@@ -153,10 +158,7 @@ public enum GoogleWorkspace {
     ]
 
     /// Paced, as apps asks for each user's tokens in turn.
-    public static let containmentAdapter = OperationAdapter(operations: [
-        UserState(), Tokens(), Apps(), AppPasswords(), ContainmentDevices(), ContainmentCheckAccess(), SignOut(), ResetPassword(), RemoveRecovery(),
-        RevokeToken(), DeleteAppPassword(), InvalidateBackupCodes(), DeviceBlock(), Suspend(), Unsuspend(),
-    ], simultaneousRequests: 8)
+    public static let containmentAdapter = OperationAdapter(operations: operations, job: .containment, simultaneousRequests: 8)
 
     /// The audit events that mean an account or the domain may be under attack, each asked for by name as the Reports
     /// API takes one at a time, unless its report is read whole, with a parameter value that makes one not count:
@@ -710,6 +712,7 @@ extension GoogleWorkspace {
             let application: String, user: String?, eventName: String?, ip: String?, filters: String?, since: String?, until: String?, limit: Int?
         }
         static let name = "activity"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Audit events of one report, newest first, by user, event name, IP address, an event's details and time, with each event's details and where its address is."
         static let input = JSONSchema.object([
             "application": .string("Which report.", oneOf: GoogleWorkspace.applications),
@@ -751,6 +754,7 @@ extension GoogleWorkspace {
     struct SecurityEvents: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, until: String? }
         static let name = "security-events"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "The audit events that mean an attack or a takeover, newest first: suspicious and blocked sign-ins, accounts Google disabled, government-backed attack warnings, admin privileges, SSO and 2-step verification changes, recovery changes, mail forwarded out or monitored, an admin taking over an account, domain mail rules, defences loosened, Takeout and Vault exports, retention changes, data transfers, apps granted access to mail, files or the domain, files made public or open to anyone with the link, compromised devices, harmful apps and rules that fired above low."
         static let input = JSONSchema.object([
             "since": .string("The earliest time, in ISO 8601. The last 24 hours when left out."),
@@ -877,6 +881,7 @@ extension GoogleWorkspace {
     struct UserState: ServiceOperation {
         typealias Input = UserInput
         static let name = "user"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Whether a user is suspended, an admin or enrolled in 2-step verification, their organisational unit and last sign-in."
         static let input = userSchema
 
@@ -901,6 +906,7 @@ extension GoogleWorkspace {
     struct Tokens: ServiceOperation {
         typealias Input = UserInput
         static let name = "tokens"
+        static let jobs: Set<ToolJob> = [.audit, .containment]
         static let summary = "The apps a user has granted access to their account, with each app's client ID and scopes."
         static let input = userSchema
 
@@ -919,6 +925,7 @@ extension GoogleWorkspace {
     struct AppPasswords: ServiceOperation {
         typealias Input = UserInput
         static let name = "app-passwords"
+        static let jobs: Set<ToolJob> = [.audit, .containment]
         static let summary = "A user's app passwords, which sign in without 2-step verification, with when each was made and last used."
         static let input = userSchema
 
@@ -942,6 +949,7 @@ extension GoogleWorkspace {
     struct SignOut: ServiceOperation {
         typealias Input = UserInput
         static let name = "sign-out"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Sign a user out of every web and device session."
         static let input = userSchema
         static let readOnly = false
@@ -958,6 +966,7 @@ extension GoogleWorkspace {
     struct InvalidateBackupCodes: ServiceOperation {
         typealias Input = UserInput
         static let name = "invalidate-backup-codes"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "End a user's backup codes for 2-step verification, which an attacker may have made or copied."
         static let input = userSchema
         static let readOnly = false
@@ -972,6 +981,7 @@ extension GoogleWorkspace {
     struct RevokeToken: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String, clientId: String }
         static let name = "revoke-token"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Revoke every token a user granted one app, by its client ID from tokens."
         static let input = JSONSchema.object(["user": .string("The user's primary email address."),
                                               "clientId": .string("The app's client ID, as tokens lists it.")], required: ["user", "clientId"])
@@ -987,6 +997,7 @@ extension GoogleWorkspace {
     struct DeleteAppPassword: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String, codeId: Int }
         static let name = "delete-app-password"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Delete one of a user's app passwords, by its ID from app-passwords."
         static let input = JSONSchema.object(["user": .string("The user's primary email address."),
                                               "codeId": .integer("The app password's ID, as app-passwords lists it.", minimum: 0)],
@@ -1004,6 +1015,7 @@ extension GoogleWorkspace {
     struct Suspend: ServiceOperation {
         typealias Input = UserInput
         static let name = "suspend"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Suspend a user, so they cannot sign in until restored with unsuspend."
         static let input = userSchema
         static let readOnly = false
@@ -1018,6 +1030,7 @@ extension GoogleWorkspace {
     struct Unsuspend: ServiceOperation {
         typealias Input = UserInput
         static let name = "unsuspend"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Restore a suspended user."
         static let input = userSchema
         static let readOnly = false
@@ -1035,6 +1048,7 @@ extension GoogleWorkspace {
     struct ResetPassword: ServiceOperation {
         typealias Input = UserInput
         static let name = "reset-password"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Replace a user's password with a random one nobody knows, to be changed at their next sign-in, so a stolen password stops working; an admin then sets them a new one."
         static let input = userSchema
         static let readOnly = false
@@ -1073,6 +1087,7 @@ extension GoogleWorkspace {
     struct RemoveRecovery: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String, email: Bool?, phone: Bool? }
         static let name = "remove-recovery"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Remove a user's recovery email, phone or both, which an attacker may have set to get back in, saying what they were."
         static let input = JSONSchema.object([
             "user": .string("The user's primary email address."),
@@ -1110,6 +1125,7 @@ extension GoogleWorkspace {
     struct ContainmentDevices: ServiceOperation {
         typealias Input = UserInput
         static let name = "devices"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "The phones and tablets that sync a user's account, with each one's resource ID for device-block, its model, OS, status and last sync."
         static let input = userSchema
 
@@ -1135,6 +1151,7 @@ extension GoogleWorkspace {
     struct DeviceBlock: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String, resourceId: String }
         static let name = "device-block"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Block one of a user's phones or tablets from syncing their account, by its resource ID from devices, until an admin unblocks it."
         static let input = JSONSchema.object(["user": .string("The user's primary email address."),
                                               "resourceId": .string("The device's resource ID, as devices lists it.")], required: ["user", "resourceId"])
@@ -1179,6 +1196,7 @@ extension GoogleWorkspace {
     struct LinkClicks: ServiceOperation {
         struct Input: Decodable, Sendable { let link: String?, message: String?, user: String?, since: String?, until: String?, limit: Int? }
         static let name = "link-clicks"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Who clicked links in mail, newest first: in the body or in an attachment preview, by the link's address or domain, the message's subject or ID, or the user."
         static let input = JSONSchema.object([
             "link": .string("Only clicks on links containing this, such as a domain or a full address."),
@@ -1264,6 +1282,7 @@ extension GoogleWorkspace {
     struct Domains: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "domains"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "The organisation's domains and domain aliases: primary or secondary, verified or not, and when each was added."
         static let input = JSONSchema.object([:])
 
@@ -1312,6 +1331,7 @@ extension GoogleWorkspace {
     struct AdminRoles: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String? }
         static let name = "admin-roles"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The super admins, and every admin role with what it allows and who holds it, with groups' members, organisational units and conditions; or the roles one user holds, directly or through a group."
         static let input = JSONSchema.object([
             "user": .string("Only the roles this user holds, directly or through a group, by email. Every role when left out."),
@@ -1414,6 +1434,7 @@ extension GoogleWorkspace {
     struct Users: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String?, deleted: Bool?, limit: Int? }
         static let name = "users"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Accounts in the domain, optionally by search such as isEnrolledIn2Sv=false, isSuspended=true or orgUnitPath=/Finance, with admin, 2-step verification and its enforcement, recovery email and phone, aliases and last sign-in."
         static let input = JSONSchema.object([
             "query": .string("A Directory search, such as isEnrolledIn2Sv=false, isAdmin=true, isSuspended=false or email:m.okafor*. Everyone when left out."),
@@ -1470,6 +1491,7 @@ extension GoogleWorkspace {
     struct UserGroups: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String }
         static let name = "user-groups"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The groups a user is a member of, and so the shared drives, lists and access granted to them."
         static let input = userSchema
 
@@ -1495,6 +1517,7 @@ extension GoogleWorkspace {
     struct UserDevices: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String }
         static let name = "user-devices"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The phones and tablets that sync a user's mail and files, with their model, OS, status, last sync and whether Google finds them compromised."
         static let input = userSchema
 
@@ -1621,6 +1644,7 @@ extension GoogleWorkspace {
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Tries each thing this tool reads once and says what works and, for what does not, exactly what to change: a scope, an API or the admin's role. Run it when a tool is refused."
         static let input = JSONSchema.object([:])
 
@@ -1652,6 +1676,7 @@ extension GoogleWorkspace {
     struct ContainmentCheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Tries reading users, one non-admin's tokens and the mobile devices, and says what works and what to change for what does not; suspending, resetting passwords, removing recovery details and acting on devices are described, not tried. Run it when a tool is refused."
         static let input = JSONSchema.object([:])
 
@@ -1725,6 +1750,7 @@ extension GoogleWorkspace {
     struct GroupMembers: ServiceOperation {
         struct Input: Decodable, Sendable { let group: String }
         static let name = "group-members"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Who is in a group, with their role, flagging members outside the domain."
         static let input = JSONSchema.object(["group": .string("The group's email address.")], required: ["group"])
 
@@ -1760,6 +1786,7 @@ extension GoogleWorkspace {
     struct OAuthApps: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, until: String? }
         static let name = "oauth-apps"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Every app people granted access to their accounts in a window, by client ID, with its scopes and who granted or revoked it, those that read mail or files or administer first; and every app an admin gave domain-wide delegation, which acts as anyone without their consent."
         static let input = JSONSchema.object([
             "since": .string("The earliest time, in ISO 8601. The last 180 days when left out, as far back as Google keeps."),
@@ -1841,6 +1868,7 @@ extension GoogleWorkspace {
     struct AppActivity: ServiceOperation {
         struct Input: Decodable, Sendable { let clientId: String?, user: String?, since: String?, until: String? }
         static let name = "app-activity"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "API calls apps made on people's behalf and the data they pulled, by app, user and method, the largest first; by client ID, user or both."
         static let input = JSONSchema.object([
             "clientId": .string("Only this app, by its client ID from oauth-apps."),
@@ -1885,6 +1913,7 @@ extension GoogleWorkspace {
     struct UserTimeline: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String, since: String?, until: String? }
         static let name = "user-timeline"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "One account's activity across every report it appears in, and what admins did to it, newest first: sign-ins, account and recovery changes, app grants, Drive, Gmail, Calendar, Chat, Meet, Keep, Chrome, rules it set off, Looker Studio, Google Cloud, Gemini, Takeout exports, groups and admin actions. It says which reports it searched and which it could not read."
         static let input = JSONSchema.object([
             "user": .string("The user's email, or the profile ID of a deleted account from users."),
@@ -1936,6 +1965,7 @@ extension GoogleWorkspace {
     struct IPActivity: ServiceOperation {
         struct Input: Decodable, Sendable { let ip: String, since: String?, until: String? }
         static let name = "ip-activity"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Everything one IP address did across every report and account, newest first: sign-ins, app grants, Drive, Gmail, Chrome, rules set off, admin actions, exports and more. It says which reports it searched and which it could not read; Gmail only for the window's last 30 days."
         static let input = JSONSchema.object([
             "ip": .string("The IPv4 or IPv6 address."),
@@ -1975,6 +2005,7 @@ extension GoogleWorkspace {
     struct Apps: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "apps"
+        static let jobs: Set<ToolJob> = [.audit, .containment]
         static let summary = "Every app holding access to accounts now, across all users, by client ID, with its scopes and holders, those that read mail or files or administer first."
         static let input = JSONSchema.object([:])
 
@@ -2064,6 +2095,7 @@ extension GoogleWorkspace {
     struct DriveExposure: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String?, since: String?, until: String?, limit: Int? }
         static let name = "drive-exposure"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "What left through Drive in a window, for one user or everyone: downloads, copies and prints by person and file, files shared with people outside the organisation by their domain, files made public or open to anyone with the link, and ownership handed over, each with the file's ID and title to fix it by."
         static let input = JSONSchema.object([
             "user": .string("Only what this user did: their email, or the profile ID of a deleted account. Everyone when left out."),
@@ -2192,6 +2224,7 @@ extension GoogleWorkspace {
             let messageId: String?, sender: String?, recipient: String?, subject: String?, user: String?, since: String?, until: String?, limit: Int?
         }
         static let name = "mail-trace"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "What happened to a message in every mailbox, for up to 30 days, by its Message-ID, sender, recipient or subject: who received it, opened it, replied, forwarded it, clicked in it, downloaded its attachments, had it reclassified or deleted it, and who may still hold it."
         static let input = JSONSchema.object([
             "messageId": .string("The message's Message-ID, with or without its angle brackets."),
@@ -2314,6 +2347,7 @@ extension GoogleWorkspace {
     struct ClientActivity: ServiceOperation {
         struct Input: Decodable, Sendable { let clientId: String, user: String?, since: String?, until: String?, limit: Int? }
         static let name = "client-activity"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Everything one OAuth client ID did across Drive, Gmail, Calendar, admin actions and its tokens, by the account it acted as and whether it impersonated them, for an app given domain-wide delegation or granted access. It says which reports it searched and which were cut short."
         static let input = JSONSchema.object([
             "clientId": .string("The app's OAuth client ID, from oauth-apps, app-activity or an event's via client."),

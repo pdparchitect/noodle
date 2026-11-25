@@ -36,6 +36,7 @@ extension Splunk {
     struct Search: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String, earliest: String?, latest: String?, limit: Int? }
         static let name = "search"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Run an SPL search once and return its results. Read-only."
         static let input = JSONSchema.object([
             "query": .string("The SPL search, such as index=auth action=failure | stats count by src_ip."),

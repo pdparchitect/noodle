@@ -61,11 +61,7 @@ extension SentinelOne {
         consoleStep,
     ]
 
-    public static let containmentAdapter = OperationAdapter(operations: [
-        ContainmentAgent(), ContainmentThreat(), ActionStatus(), DisconnectAgent(), ReconnectAgent(), InitiateScan(),
-        KillThreat(), QuarantineThreat(), UnquarantineThreat(), RemediateThreat(), RollbackThreat(),
-        ResolveThreat(), UpdateThreatStatus(), BlockHash(), UnblockHash(), ContainmentCheckAccess(),
-    ], simultaneousRequests: 2)
+    public static let containmentAdapter = OperationAdapter(operations: operations, job: .containment, simultaneousRequests: 2)
 
     // MARK: What it needs
 
@@ -149,6 +145,7 @@ extension SentinelOne {
     struct ContainmentAgent: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "agent"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "An agent's state before acting: whether it is disconnected from the network, said plainly (pending is not done), whether it is in touch with the console, its OS, infection and scan status. It changes nothing."
         static let input = JSONSchema.object(["id": SentinelOne.agentField], required: ["id"])
 
@@ -206,6 +203,7 @@ extension SentinelOne {
     struct DisconnectAgent: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "disconnect-agent"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: reconnect-agent restores the endpoint's network access, and must be asked for explicitly; until then it reaches only the SentinelOne console, so its user cannot work on it and every workload on it is cut off too."
         static let summary = "Disconnect one endpoint from the network by its agent's ID, keeping it in touch with the SentinelOne console. Sent with a filter of that ID alone, and confirmed only when SentinelOne says it affected exactly one agent and the agent's status then follows. \(recovery)"
         static let input = JSONSchema.object(["id": SentinelOne.agentField], required: ["id"])
@@ -228,6 +226,7 @@ extension SentinelOne {
     struct ReconnectAgent: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "reconnect-agent"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: disconnect-agent again. Reconnecting restores the endpoint's full network access, an attacker's still on it included, so reconnect it only once the champion judges it clean."
         static let summary = "Reconnect one endpoint to the network by its agent's ID. Held like the rest, as it gives access back. \(recovery)"
         static let input = JSONSchema.object(["id": SentinelOne.agentField], required: ["id"])
@@ -250,6 +249,7 @@ extension SentinelOne {
     struct InitiateScan: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "initiate-scan"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: none needed: a scan changes nothing by itself, but a full disk scan uses the endpoint's CPU and disk until it ends, and what it finds is handled as the agent's policy says. Abort it in the console (Actions › Abort Scan) if it gets in the user's way."
         static let summary = "Start a full disk scan on one endpoint by its agent's ID. Held, as it is a change that uses the endpoint's resources. \(recovery)"
         static let input = JSONSchema.object(["id": SentinelOne.agentField], required: ["id"])
@@ -324,6 +324,7 @@ extension SentinelOne {
     struct ContainmentThreat: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "threat"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "A threat's state before acting: its endpoint and OS (rollback needs Windows), incident status, analyst verdict, mitigation status, and every mitigation action with where it stands (pending is not done). It changes nothing."
         static let input = JSONSchema.object(["id": SentinelOne.threatField], required: ["id"])
 
@@ -440,6 +441,7 @@ extension SentinelOne {
     struct KillThreat: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "kill-threat"
+        static let jobs: Set<ToolJob> = [.containment]
         static let mitigation = Mitigation(action: "kill", verb: "kill", permission: "Threats: Kill", undoneBy: nil, keepsState: false,
                                            recovery: "Recovery: none: the threat's processes are ended, and their memory and unsaved work are gone for good, so record what they were first; a process can only be started again, and a service may restart itself.")
         static let summary = "Kill one threat's processes on its endpoint, by the threat's ID. \(mitigation.recovery)"
@@ -452,6 +454,7 @@ extension SentinelOne {
     struct QuarantineThreat: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "quarantine-threat"
+        static let jobs: Set<ToolJob> = [.containment]
         static let mitigation = Mitigation(action: "quarantine", verb: "quarantine", permission: "Threats: Quarantine", undoneBy: "un-quarantine", keepsState: true,
                                            recovery: "Recovery: unquarantine-threat restores the file to where it was. Quarantining moves it into the agent's encrypted quarantine, so it can no longer run, and kills its processes first.")
         static let summary = "Quarantine one threat's file on its endpoint, by the threat's ID. \(mitigation.recovery)"
@@ -464,6 +467,7 @@ extension SentinelOne {
     struct UnquarantineThreat: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "unquarantine-threat"
+        static let jobs: Set<ToolJob> = [.containment]
         static let mitigation = Mitigation(action: "un-quarantine", verb: "release from quarantine", permission: "Threats: Un-Quarantine", undoneBy: nil, keepsState: false,
                                            recovery: "Recovery: quarantine-threat again. Releasing restores the file to its place, where it can run again, so release only what the champion judged harmless; marking it a false positive or adding an exclusion is separate.")
         static let summary = "Release one threat's file from the agent's quarantine, restoring it, by the threat's ID; refused when its mitigation history shows it is not quarantined. \(mitigation.recovery)"
@@ -476,6 +480,7 @@ extension SentinelOne {
     struct RemediateThreat: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "remediate-threat"
+        static let jobs: Set<ToolJob> = [.containment]
         static let mitigation = Mitigation(action: "remediate", verb: "remediation", permission: "Threats: Remediate", undoneBy: nil, keepsState: true,
                                            recovery: "Recovery: none through SentinelOne: remediation removes the threat's files and reverses the changes the agent tied to it, such as registry keys and scheduled tasks, for good.")
         static let summary = "Remediate one threat on its endpoint, by the threat's ID: kill, quarantine and remove what it changed. \(mitigation.recovery)"
@@ -488,6 +493,7 @@ extension SentinelOne {
     struct RollbackThreat: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "rollback-threat"
+        static let jobs: Set<ToolJob> = [.containment]
         static let mitigation = Mitigation(action: "rollback-remediation", verb: "rollback", permission: "Threats: Rollback", undoneBy: nil, keepsState: true,
                                            recovery: "Recovery: none through SentinelOne: rollback, on Windows only, remediates the threat and restores the files it touched from Volume Shadow Copy snapshots taken before it, which also undoes any legitimate change the user made to those files since.")
         static let summary = "Roll back one threat on a Windows endpoint, by the threat's ID; refused on any other OS, or one not given. ⚠ It restores files and may undo the user's own changes. \(mitigation.recovery)"
@@ -559,6 +565,7 @@ extension SentinelOne {
     struct ResolveThreat: ServiceOperation {
         struct Input: Decodable, Sendable { let ids: [String]; let verdict: String? }
         static let name = "resolve-threat"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: update-threat-status unresolved or in_progress reopens each, and a verdict can be set again. Until then, resolving, or a false-positive verdict, hides it from the unresolved threats analysts and the alert watch look at, so resolve only what the champion judged handled or false."
         static let summary = "Resolve threats, optionally with an analyst verdict, false_positive included, which hides them from the unresolved queue. \(recovery)"
         static let input = JSONSchema.object([
@@ -577,6 +584,7 @@ extension SentinelOne {
     struct UpdateThreatStatus: ServiceOperation {
         struct Input: Decodable, Sendable { let ids: [String]; let status: String?; let verdict: String? }
         static let name = "update-threat-status"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Set threats in progress or unresolved, which reopens them, or set a verdict of true positive, suspicious or undefined. It hides nothing, so it is not held; resolve-threat resolves them or marks them false positives."
         static let input = JSONSchema.object([
             "ids": .array(.string("A threat's ID."), "The threats' IDs, as threats lists them, at most 50."),
@@ -744,6 +752,7 @@ extension SentinelOne {
     struct BlockHash: ServiceOperation {
         struct Input: Decodable, Sendable { let hash: String; let osType: String; let siteId: String; let description: String }
         static let name = "block-hash"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: unblock-hash with the entry's ID removes it, which lets the file run again on the site's endpoints at once; a file the agents mitigated while it was blocked is not restored by that."
         static let summary = "Add a SHA1 or SHA256 to one site's blocklist for one OS, so the agents there stop the file running, and keep a record that Pion made it, which unblock-hash needs. Refused when any entry, in the site or above it, already holds the hash, whoever made it. \(recovery)"
         static let input = JSONSchema.object([
@@ -841,6 +850,7 @@ extension SentinelOne {
     struct UnblockHash: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "unblock-hash"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: block-hash again restores it. Removing it lets the file run on every endpoint of the site at once."
         static let summary = "Remove one blocklist entry, by its ID, that Pion's own record says block-hash made through this connection and that SentinelOne still holds as made; any other is left in place, whatever its description says. Held, as it lifts a block. \(recovery)"
         static let input = JSONSchema.object(["id": .string("The entry's ID, as block-hash gave it.")], required: ["id"])
@@ -905,6 +915,7 @@ extension SentinelOne {
     struct ActionStatus: ServiceOperation {
         struct Input: Decodable, Sendable { let agentId: String?, threatId: String?, hash: String?, siteId: String? }
         static let name = "action-status"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Where an action stands: for an agent, its network and scan status; for a threat, its incident status, verdict and every mitigation action with where it stands (pending is not done); with either, the newest activity log entries about it; for a hash in a site, every blocklist entry that holds it and whether Pion's own record says block-hash made it through this connection. It changes nothing."
         static let input = JSONSchema.object([
             "agentId": SentinelOne.agentField,
@@ -952,6 +963,7 @@ extension SentinelOne {
     struct ContainmentCheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Reads the token's own service user, its role, scope and when the token expires, warning of a built-in role broader than Containment needs; tries what the actions read first, agents, threats, the activity log, sites and the blocklist; and names the console it reaches. It sends only reads, so the actions' permissions are not verified."
         static let input = JSONSchema.object([:])
 

@@ -36,6 +36,7 @@ extension SumoLogic {
     struct Search: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String, since: String?, until: String? }
         static let name = "search"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Run a Sumo Logic search over a time range and return its messages, or for an aggregate query its records. Read-only."
         static let input = JSONSchema.object([
             "query": .string("The Sumo Logic query."),

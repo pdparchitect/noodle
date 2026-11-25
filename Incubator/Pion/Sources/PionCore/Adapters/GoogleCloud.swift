@@ -100,11 +100,16 @@ public enum GoogleCloud {
         "Set Scope and its ID to where they have that access: the organisation's or folder's number, or the project's ID. Then choose **Add & Connect**, sign in, and ask an agent to run check-access.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [
-        AuditLogs(), SecurityEvents(), Findings(), FindingDetail(), FindingSummary(), IAMPolicies(), Impersonation(), PublicResources(), ServiceAccountKeys(),
-        AssetHistory(), OrgPolicies(), LoggingCoverage(), FindResources(), CheckAccess(),
-    ],
-                                                 trigger: NewSecurityEvents())
+    /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
+    static let operations: [any ServiceOperation] = [
+        AuditLogs(), SecurityEvents(), Findings(), FindingDetail(), FindingSummary(), IAMPolicies(), Impersonation(), PublicResources(),
+        ServiceAccountKeys(), AssetHistory(), OrgPolicies(), LoggingCoverage(), FindResources(), CheckAccess(),
+        DisableKey(), EnableKey(), DisableServiceAccount(), EnableServiceAccount(), RemoveIAMMember(), EnforcePublicAccessPrevention(),
+        RevertPublicAccessPrevention(), SnapshotDisks(), StopInstance(), IsolateInstance(), UnisolateInstance(), ComputeOperationStatus(),
+        ContainmentCheckAccess(),
+    ]
+
+    public static let adapter = OperationAdapter(operations: operations, job: .detection, trigger: NewSecurityEvents())
 
     /// The account's scope, such as organizations/123456789012.
     static func scope(_ service: ServiceClient) throws -> (level: String, id: String) {
@@ -331,6 +336,7 @@ extension GoogleCloud {
             let logViews: [String]?, since: String?, until: String?, limit: Int?
         }
         static let name = "audit-logs"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Cloud Audit Log entries across the scope, its folders and its projects, and any log views named, newest first, by principal (what they did as themselves or while impersonating a service account), method, resource, caller IP, outcome, service and log, with who acted, the service account key and delegation behind it, what an IAM change granted or revoked, the permissions checked and the request's and response's key fields, saying what was and was not searched."
         static let input = JSONSchema.object([
             "principal": .string("Who acted: an email, such as mallory@example.com or a service account, matched also where they acted through a service account they impersonated; or a principal:// identity from workforce or workload identity federation."),
@@ -808,6 +814,7 @@ extension GoogleCloud {
     struct Findings: ServiceOperation {
         struct Input: Decodable, Sendable { let severities: [String]?, category: String?, since: String?, limit: Int?, includeMuted: Bool? }
         static let name = "scc-findings"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Active Security Command Center findings, newest first, by severity, category and time, with their class, the resource each concerns, who acted and from where for threats, and how many matched in all; muted ones only when asked."
         static let input = JSONSchema.object([
             "severities": .array(.string("A severity.", oneOf: ["CRITICAL", "HIGH", "MEDIUM", "LOW"]), "Severities. Critical and high when left out."),
@@ -898,6 +905,7 @@ extension GoogleCloud {
     struct IAMPolicies: ServiceOperation {
         struct Input: Decodable, Sendable { let member: String?, resource: String?, role: String? }
         static let name = "iam-policies"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Who can do what on which resource across the scope, under IAM allow policies: for a member, including access through groups, or for a resource, with each binding's condition and what the analysis could not cover."
         static let input = JSONSchema.object([
             "member": .string("A user's, group's or service account's email, or a principal such as group:admins@example.com, to find every role it holds. A bare email is checked as a user, then as a group when that finds nothing."),
@@ -1007,6 +1015,7 @@ extension GoogleCloud {
     struct FindResources: ServiceOperation {
         struct Input: Decodable, Sendable { let assetTypes: [String], name: String?, createdSince: String?, location: String? }
         static let name = "find-resources"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Resources of the given types across the scope, with where each is and its state, optionally only those whose name contains a word, made since a time or in a location, such as VMs made lately in an unusual region, saying when more exist than were read."
         static let input = JSONSchema.object([
             "assetTypes": .array(.string("An asset type, such as compute.googleapis.com/Instance or storage.googleapis.com/Bucket."), "The types to list, up to 20."),
@@ -1137,6 +1146,7 @@ extension GoogleCloud {
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Tries each thing this tool reads once and says what works and, for what does not, exactly what to change: a scope, an API, a role or Security Command Center's activation; whether Data Access logs can be read; which Security Command Center services report here; and whether the account signed in could change findings. It changes nothing; its IAM check counts as one of the organisation's daily analyses. Run it when a tool is refused."
         static let input = JSONSchema.object([:])
 

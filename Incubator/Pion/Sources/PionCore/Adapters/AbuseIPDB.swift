@@ -28,6 +28,7 @@ extension AbuseIPDB {
     struct Check: ServiceOperation {
         struct Input: Decodable, Sendable { let ip: String, days: Int? }
         static let name = "check-ip"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "An IP address's abuse confidence score, reports and reporters, ISP, usage type and Tor status."
         static let input = JSONSchema.object([
             "ip": .string("An IPv4 or IPv6 address."),

@@ -30,6 +30,7 @@ extension Tenable {
     struct AssetVulnerabilities: ServiceOperation {
         struct Input: Decodable, Sendable { let ip: String, days: Int? }
         static let name = "asset-vulnerabilities"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The asset at an IP address, with its hostnames, operating system and last scan, and its vulnerabilities by severity."
         static let input = JSONSchema.object([
             "ip": .string("The asset's IPv4 address."),

@@ -81,11 +81,15 @@ public enum Cloudflare {
         accountStep,
     ]
 
-    public static let adapter = OperationAdapter(operations: [
-        Zones(), ZoneDNS(), FirewallEvents(), AuditLog(), Members(), APITokens(),
-        AccessLogs(), AccessApps(), AccessApp(), AccessUsers(), AccessUser(), GatewayActivity(), GatewayRules(), GatewayLists(),
-        Devices(), Tunnels(), SecurityEvents(), CheckAccess(),
-    ], trigger: NewSecurityEvents(), simultaneousRequests: 4)
+    /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
+    static let operations: [any ServiceOperation] = [
+        Zones(), ZoneDNS(), FirewallEvents(), AuditLog(), Members(), APITokens(), AccessLogs(), AccessApps(), AccessApp(), AccessUsers(),
+        AccessUser(), GatewayActivity(), GatewayRules(), GatewayLists(), Devices(), Tunnels(), SecurityEvents(), CheckAccess(),
+        ContainmentAccessUser(), ContainmentDevice(), ActionStatus(), BlockIP(), BlockASN(), BlockCountry(), Unblock(), RevokeAccessSessions(),
+        GatewayBlock(), GatewayUnblock(), RevokeDevice(), ContainmentCheckAccess(),
+    ]
+
+    public static let adapter = OperationAdapter(operations: operations, job: .detection, trigger: NewSecurityEvents(), simultaneousRequests: 4)
 
     // MARK: Limits
 
@@ -723,6 +727,7 @@ extension Cloudflare {
     struct Zones: ServiceOperation {
         struct Input: Decodable, Sendable { let name: String?, limit: Int? }
         static let name = "zones"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The account's zones the token can see, with each one's ID, status, plan, type, whether it is paused, its name servers and when it was activated, saying when more matched than it kept."
         static let input = JSONSchema.object([
             "name": .string("Only the zone with this exact domain, such as example.com."),
@@ -756,6 +761,7 @@ extension Cloudflare {
     struct ZoneDNS: ServiceOperation {
         struct Input: Decodable, Sendable { let zone: String, type: String?, name: String?, limit: Int? }
         static let name = "zone-dns"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "A zone's DNS records, read whole, with whether each is proxied, its TTL and when it last changed, the apex, MX and NS records first, optionally of one type or whose name contains some words; says when it read only part."
         static let input = JSONSchema.object([
             "zone": .string("The zone's domain, such as example.com."),
@@ -795,6 +801,7 @@ extension Cloudflare {
     struct FirewallEvents: ServiceOperation {
         struct Input: Decodable, Sendable { let zone: String, ip: String?, action: String?, since: String?, until: String?, limit: Int? }
         static let name = "firewall-events"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Firewall events at a zone's edge, newest first, by client IP address, action and time, each with its action, client IP, country and network, host, method, path and query, the rule and the product that acted, and its Ray ID; says when more matched than it kept."
         static let input = JSONSchema.object([
             "zone": .string("The zone's domain, such as example.com."),
@@ -867,6 +874,7 @@ extension Cloudflare {
     struct AuditLog: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, until: String?, actor: String?, actionType: String?, zone: String?, limit: Int? }
         static let name = "audit-log"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Changes in the account, newest first: who did what, to which resource, from which IP address and through the dashboard or the API, by time, person, action and zone; says when more matched than it kept."
         static let input = JSONSchema.object([
             "since": .string("The earliest time, in ISO 8601. The last 7 days when left out, at most a year."),
@@ -909,6 +917,7 @@ extension Cloudflare {
     struct Members: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "members"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Everyone in the account with their roles or permission policies and whether they use 2FA, administrators first; says when it read only part."
         static let input = JSONSchema.object([:])
 
@@ -943,6 +952,7 @@ extension Cloudflare {
     struct APITokens: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "api-tokens"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The account's own API tokens: what each may do, from which addresses, when it was issued, last used and expires; tokens people made under their own profiles are not listed. Says when it read only part."
         static let input = JSONSchema.object([:])
 
@@ -1049,6 +1059,7 @@ extension Cloudflare {
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Verifies the token with Cloudflare (whose it is, whether active, when it expires), lists its own permissions when it may read them and warns of any that change things, tries each thing this tool reads once, at the edge and in Zero Trust, and says which parts the token covers and what to add. It sends only reads."
         static let input = JSONSchema.object([:])
 

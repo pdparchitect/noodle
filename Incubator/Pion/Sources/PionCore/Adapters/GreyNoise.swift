@@ -28,6 +28,7 @@ extension GreyNoise {
     struct Context: ServiceOperation {
         struct Input: Decodable, Sendable { let ip: String }
         static let name = "ip-context"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Whether an IP address is scanning the internet or is a known benign service, its classification and when last seen."
         static let input = JSONSchema.object(["ip": .string("An IPv4 address.")], required: ["ip"])
 

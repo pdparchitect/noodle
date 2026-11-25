@@ -158,6 +158,7 @@ extension AWS {
     struct IAMAccess: ServiceOperation {
         struct Input: Decodable, Sendable { let account: String? }
         static let name = "iam-access"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Who holds which permissions in an account: each IAM user, with its groups' policies, and each role, with who can assume it; full administrators first, then who could make themselves one (iam:PassRole with Lambda, EC2 or CloudFormation, policy versions, attaching or writing policies, trust changes, other users' keys or passwords, assuming an administrator role), by their policies, with IAM's policy simulator's answer for each action and what it was asked; and roles that anyone, accounts outside the sign-in's or an identity provider's tokens for any subject, such as any GitHub repository, could assume. Says when the account had more than was read."
         static let input = JSONSchema.object(["account": AWS.accountInput])
 
@@ -415,6 +416,7 @@ extension AWS {
             let resourceType: String, resourceId: String, since: String?, until: String?, limit: Int?, region: String?, account: String?
         }
         static let name = "config-history"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "How a resource's configuration changed, from AWS Config's history, newest first: what each change made different from the configuration before it, and who made it, from CloudTrail's event history on that resource between the two, saying plainly when no event matched; and whether Config records that resource type in the region, saying when it does not. Config keeps what a resource looked like, not who changed it, and CloudTrail keeps 90 days."
         static let input = JSONSchema.object([
             "resourceType": .string("The resource's type as AWS Config names it, such as AWS::EC2::SecurityGroup, AWS::S3::Bucket or AWS::IAM::Role."),
@@ -763,6 +765,7 @@ extension AWS {
     struct S3Exposure: ServiceOperation {
         struct Input: Decodable, Sendable { let bucket: String?, limit: Int?, region: String?, account: String? }
         static let name = "s3-exposure"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Whether an account's buckets, or one bucket, are open to the internet or to other accounts: the account's and each bucket's Block Public Access, whether S3 judges its policy public, the policy's statements for anyone or other accounts with their conditions, such as aws:PrincipalOrgID, ACL grants to everyone, any AWS account or other accounts, object ownership, and Access Analyzer's findings for it. Says when the account has more buckets than were read, and when a setting could not be read, rather than calling a bucket private."
         static let input = JSONSchema.object([
             "bucket": .string("One bucket's name alone. Every bucket of the account, up to the limit, when left out."),
@@ -1137,6 +1140,7 @@ extension AWS {
     struct IdentityCenterAssignments: ServiceOperation {
         struct Input: Decodable, Sendable { let inAccount: String?, permissionSet: String?, principal: String?, region: String?, account: String? }
         static let name = "identity-center-assignments"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Who holds which IAM Identity Center permission set in which account: each user and group by name, with permission sets that make their holders full administrators, AdministratorAccess or an inline policy allowing everything, flagged; filtered by account, permission set, or a user, with the groups they are in, or a group. Read from the organisation's management account or Identity Center's delegated administrator, in Identity Center's region; says when it stopped before reading everything."
         static let input = JSONSchema.object([
             "inAccount": .string("Only assignments in this account, by its 12-digit ID or, for one the sign-in covers, its name."),
@@ -1403,6 +1407,7 @@ extension AWS {
     struct CredentialHygiene: ServiceOperation {
         struct Input: Decodable, Sendable { let days: Int?, account: String? }
         static let name = "credential-hygiene"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Weak and stale credentials in an account, from its credential report: whether root has MFA and access keys, console users without MFA, other users without it, active access keys older than a number of days or unused for as long, and console passwords unused as long; saying how old the report is, as AWS reuses one up to four hours old."
         static let input = JSONSchema.object([
             "days": .integer("How old a key, or how long unused, counts as stale. 90 when left out.", minimum: 30, maximum: 365), "account": AWS.accountInput,
@@ -1509,6 +1514,7 @@ extension AWS {
     struct InspectorFindings: ServiceOperation {
         struct Input: Decodable, Sendable { let severities: [String]?, limit: Int?, region: String?, account: String? }
         static let name = "inspector-findings"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Amazon Inspector's active findings, critical and high unless asked, most severe first: vulnerable packages and network reachability on instances, container images and Lambda functions, with the resource, its account and region, and whether an exploit and a fix are known; saying when more matched than were read, or when Inspector is off."
         static let input = JSONSchema.object([
             "severities": .array(.string("A severity.", oneOf: ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL", "UNTRIAGED"]), "Severities. Critical and high when left out."),
@@ -1568,6 +1574,7 @@ extension AWS {
     struct MacieFindings: ServiceOperation {
         struct Input: Decodable, Sendable { let limit: Int?, region: String?, account: String? }
         static let name = "macie-findings"
+        static let jobs: Set<ToolJob> = [.audit]
         /// The most pages of finding IDs one lookup reads.
         static let pages = 5
         static let summary = "Amazon Macie's sensitive data findings that are not archived, newest first: which bucket and object hold what kind of sensitive data, such as credentials or personal information, and how much; saying when more matched than were read, or when Macie is off."

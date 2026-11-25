@@ -27,6 +27,7 @@ extension Censys {
     struct Host: ServiceOperation {
         struct Input: Decodable, Sendable { let ip: String }
         static let name = "host"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "An IP address's services and ports, network owner, location and DNS names."
         static let input = JSONSchema.object(["ip": .string("An IPv4 or IPv6 address.")], required: ["ip"])
 

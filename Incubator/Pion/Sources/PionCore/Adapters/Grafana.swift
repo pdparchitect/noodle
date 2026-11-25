@@ -78,6 +78,7 @@ extension Grafana {
     struct Dashboards: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String?, tag: String?, limit: Int? }
         static let name = "dashboards"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Find dashboards by title or tag, with each one's UID, folder and tags."
         static let input = JSONSchema.object([
             "query": .string("Words in the title. Every dashboard when left out."),
@@ -105,6 +106,7 @@ extension Grafana {
     struct Dashboard: ServiceOperation {
         struct Input: Decodable, Sendable { let uid: String }
         static let name = "dashboard"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "A dashboard's panels, each with its data source and the queries behind it, to run again with query."
         static let input = JSONSchema.object(["uid": .string("The dashboard's UID, from dashboards.")], required: ["uid"])
 
@@ -153,6 +155,7 @@ extension Grafana {
     struct DataSources: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "data-sources"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The data sources, with each one's UID and type."
         static let input = JSONSchema.object([:])
 
@@ -172,6 +175,7 @@ extension Grafana {
     struct Query: ServiceOperation {
         struct Input: Decodable, Sendable { let datasource: String, query: String, from: String?, to: String? }
         static let name = "query"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Run one query over a data source and time range and return its results as rows. Read-only."
         static let input = JSONSchema.object([
             "datasource": .string("The data source's UID, from data-sources or a dashboard's panel."),
@@ -208,6 +212,7 @@ extension Grafana {
     struct Alerts: ServiceOperation {
         struct Input: Decodable, Sendable { let filter: String? }
         static let name = "alerts"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Alerts Grafana is firing now, with their labels, summary and when they started."
         static let input = JSONSchema.object([
             "filter": .string("Only alerts whose labels match, such as severity=\"critical\"."),
@@ -237,6 +242,7 @@ extension Grafana {
     struct Annotations: ServiceOperation {
         struct Input: Decodable, Sendable { let from: String?, to: String?, tags: [String]?, limit: Int? }
         static let name = "annotations"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Annotations over a time range, such as deploys and incidents marked on dashboards, newest first."
         static let input = JSONSchema.object([
             "from": .string("The start: now-1h, now-7d or ISO 8601. The last day when left out."),

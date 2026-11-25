@@ -28,6 +28,7 @@ extension HaveIBeenPwned {
     struct Breaches: ServiceOperation {
         struct Input: Decodable, Sendable { let email: String }
         static let name = "breaches"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "The data breaches an email address appears in, when each happened and what it exposed."
         static let input = JSONSchema.object(["email": .string("The email address.")], required: ["email"])
 
@@ -49,6 +50,7 @@ extension HaveIBeenPwned {
     struct Pastes: ServiceOperation {
         struct Input: Decodable, Sendable { let email: String }
         static let name = "pastes"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "The pastes an email address appears in, newest first."
         static let input = JSONSchema.object(["email": .string("The email address.")], required: ["email"])
 

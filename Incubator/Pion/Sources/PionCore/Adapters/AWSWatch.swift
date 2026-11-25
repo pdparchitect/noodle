@@ -461,6 +461,7 @@ extension AWS {
     struct SecurityEvents: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, until: String?, account: String? }
         static let name = "security-events"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "What the alert watch wakes for, for a window, newest first and each kind in turn: high and critical GuardDuty and Security Hub findings that are not archived, suppressed or resolved, and CloudTrail changes that open the way in or hide what follows: root activity, console sign-ins without MFA, IAM users, passwords and access keys made, administrator policies granted, role trust opened outside the organisation, MFA removed, Identity Center access changed, logging and detection turned off or findings auto-archived, buckets, snapshots, images and security groups opened, KMS keys disabled, guardrails removed and commands run on instances; saying, for each account and region, what it searched, what is off, what it could not read and why, and what it does not watch."
         static let input = JSONSchema.object([
             "since": .string("The earliest time, in ISO 8601. The last 24 hours when left out, at most 90 days."),

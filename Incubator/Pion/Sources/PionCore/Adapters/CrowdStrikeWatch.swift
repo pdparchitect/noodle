@@ -157,6 +157,7 @@ extension CrowdStrike {
     struct SecurityEvents: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, until: String? }
         static let name = "security-events"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "What the alert watch wakes for, for a window, newest first and each kind in turn: high and critical alerts not closed, and Real Time Response sessions opened, by anyone; and the hosts contained or with containment pending now, with when the watch first saw each; saying, for each feed, what it searched, what is off, what it could not read and why, and what it does not watch."
         static let input = JSONSchema.object([
             "since": .string("The earliest time, in ISO 8601. The last 24 hours when left out, at most 30 days."),

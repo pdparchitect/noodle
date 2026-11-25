@@ -97,6 +97,7 @@ public enum DNS {
     struct Records: ServiceOperation {
         struct Input: Decodable, Sendable { let name: String, types: [String]? }
         static let name = "records"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "A name's public DNS records of the types asked, or the names an IP address points back to."
         static let input = JSONSchema.object([
             "name": .string("A domain or host, such as example.com or _dmarc.example.com, or an IP address to look up backwards."),
@@ -136,6 +137,7 @@ public enum DNS {
     struct EmailSecurity: ServiceOperation {
         struct Input: Decodable, Sendable { let domain: String, selectors: [String]? }
         static let name = "email-security"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Where a domain's mail goes and how well it stops others sending as it: SPF with its DNS lookups counted, DMARC, DKIM keys, MTA-STS and TLS reporting, with what is weak."
         static let input = JSONSchema.object([
             "domain": .string("The domain mail is sent as, such as example.com."),

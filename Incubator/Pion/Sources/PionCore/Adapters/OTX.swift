@@ -27,6 +27,7 @@ extension OTX {
     struct Indicator: ServiceOperation {
         struct Input: Decodable, Sendable { let indicator: String, kind: String? }
         static let name = "indicator"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "The pulses that mention an IP address, domain, hostname or file hash, with their tags, adversaries and malware families."
         static let input = JSONSchema.object([
             "indicator": .string("An IP address, domain, hostname or file hash."),

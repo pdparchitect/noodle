@@ -63,10 +63,7 @@ extension CrowdStrike {
         cloudStep,
     ]
 
-    public static let containmentAdapter = OperationAdapter(operations: [
-        ContainmentHost(), ActionStatus(), ContainHost(), LiftContainment(), BlockIOC(), UnblockIOC(), RTRKillProcess(), CloseAlert(),
-        UpdateAlertStatus(), ContainmentCheckAccess(),
-    ], simultaneousRequests: 2)
+    public static let containmentAdapter = OperationAdapter(operations: operations, job: .containment, simultaneousRequests: 2)
 
     // MARK: What it needs
 
@@ -135,6 +132,7 @@ extension CrowdStrike {
     struct ContainmentHost: ServiceOperation {
         struct Input: Decodable, Sendable { let host: String }
         static let name = "host"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "A host's state before acting: its containment status, said plainly (pending is not done), whether its sensor is online, which Real Time Response needs, and whether Falcon's record holds a hint that it runs Kubernetes workloads or containers (a hint, not verified) or none, which contain-host's workloads must give. It changes nothing."
         static let input = JSONSchema.object(["host": CrowdStrike.hostField], required: ["host"])
 
@@ -155,6 +153,7 @@ extension CrowdStrike {
     struct ActionStatus: ServiceOperation {
         struct Input: Decodable, Sendable { let host: String?, type: String?, value: String? }
         static let name = "action-status"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Where an action stands: for a host, its containment status (containment_pending and lift_containment_pending are not done; contained and normal are); for an indicator, by type and value, every custom indicator Falcon holds for it and whether Pion's own record says block-ioc made it through this connection. It changes nothing."
         static let input = JSONSchema.object([
             "host": CrowdStrike.hostField,
@@ -234,6 +233,7 @@ extension CrowdStrike {
     struct ContainHost: ServiceOperation {
         struct Input: Decodable, Sendable { let host: String; let workloads: String }
         static let name = "contain-host"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: lift-containment restores the host's network access, and must be asked for explicitly; until then the host reaches only the Falcon cloud, so its user cannot work on it, and every workload on it, every pod and container it runs included, is cut off too."
         static let summary = "Contain a host: cut it, and every workload on it, off the network, keeping it connected to Falcon. workloads repeats what host read: kubernetes-suggested or containers-suggested when Falcon's record holds a hint that the host runs Kubernetes workloads or containers, which suggests but does not verify what it is; cannot-tell when it holds none, which is not proof it runs none. \(recovery)"
         static let input = JSONSchema.object([
@@ -266,6 +266,7 @@ extension CrowdStrike {
     struct LiftContainment: ServiceOperation {
         struct Input: Decodable, Sendable { let host: String }
         static let name = "lift-containment"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: contain-host again. Lifting restores the host's full network access, an attacker's still on it included, so lift it only once the champion judges it clean."
         static let summary = "Lift a host's containment, restoring its network access. Held like the rest, as it gives access back. \(recovery)"
         static let input = JSONSchema.object(["host": CrowdStrike.hostField], required: ["host"])
@@ -474,6 +475,7 @@ extension CrowdStrike {
     struct BlockIOC: ServiceOperation {
         struct Input: Decodable, Sendable { let type: String; let value: String; let action: String; let severity: String; let platforms: [String]; let expiration: String?; let comment: String }
         static let name = "block-ioc"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: unblock-ioc with the indicator's ID removes it, which ends the blocking and alerting at once; Falcon does not restore a file it quarantined or a process it stopped while the indicator was in force, which a quarantined file's release in the Falcon console does."
         static let summary = "Add a custom indicator, applied to every host, and keep a record that Pion made it, which unblock-ioc needs: a SHA256 or MD5 Falcon blocks (prevent) or alerts on (detect), or a domain, IPv4 or IPv6 address it alerts on (detect only). It refuses when Falcon already holds an indicator for the value, whoever made it. \(recovery)"
         static let input = JSONSchema.object([
@@ -608,6 +610,7 @@ extension CrowdStrike {
     struct UnblockIOC: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String; let comment: String }
         static let name = "unblock-ioc"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: block-ioc again restores it. Removing it lets the hash run, or the domain or address go unremarked, on every host at once."
         static let summary = "Remove one custom indicator, by its ID, that Pion's own record says block-ioc made through this connection and that Falcon still holds as made; any other is left in place, whatever its source or description says. Held, as it lifts a block. \(recovery)"
         static let input = JSONSchema.object([
@@ -761,6 +764,7 @@ extension CrowdStrike {
     struct RTRKillProcess: ServiceOperation {
         struct Input: Decodable, Sendable { let host: String; let pid: Int; let process: String }
         static let name = "rtr-kill-process"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: none: a killed process's memory and unsaved work are gone for good, so record what it was first; it can only be started again, and a service may restart itself."
         static let summary = "End one process on a host, by its PID and name, through Real Time Response's kill, only when ps lists that PID as that process; then list the processes again and say whether the process with that PID and name is still listed, which is what ps shows, not proof that the kill ended it. The host's sensor must be online. \(recovery)"
         static let input = JSONSchema.object([
@@ -862,6 +866,7 @@ extension CrowdStrike {
     struct CloseAlert: ServiceOperation {
         struct Input: Decodable, Sendable { let ids: [String]; let comment: String }
         static let name = "close-alert"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: update-alert-status reopened puts each back in the open queue. Until then closing hides it from the open alerts analysts and the alert watch look at, so close only what the champion judged handled or false."
         static let summary = "Close alerts, with a comment Falcon records, which hides them from the open queue. \(recovery)"
         static let input = JSONSchema.object([
@@ -879,6 +884,7 @@ extension CrowdStrike {
     struct UpdateAlertStatus: ServiceOperation {
         struct Input: Decodable, Sendable { let ids: [String]; let status: String; let comment: String? }
         static let name = "update-alert-status"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Set alerts in progress or reopen them, with an optional comment Falcon records. It hides nothing, so it is not held; close-alert closes them."
         static let input = JSONSchema.object([
             "ids": .array(.string("An alert's composite ID."), "The alerts' composite IDs, as alerts lists them, at most 50."),
@@ -901,6 +907,7 @@ extension CrowdStrike {
     struct ContainmentCheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Tries what the actions read first, hosts, alerts and custom indicators, and whether a read shows the API client holds Real Time Response's write scope, which kill needs, and not its admin scope, which Containment must not have; says what to add for what does not work. It sends only reads, so the other write scopes are not verified."
         static let input = JSONSchema.object([:])
 

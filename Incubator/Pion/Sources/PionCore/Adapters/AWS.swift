@@ -78,11 +78,18 @@ public enum AWS {
      "identitystore:ListGroupMembershipsForMember","inspector2:ListFindings","macie2:ListFindings","macie2:GetFindings"]}]}
     """
 
-    public static let adapter = OperationAdapter(operations: [
+    /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
+    static let operations: [any ServiceOperation] = [
         Accounts(), Regions(), CloudTrailEvents(), GuardDutyFindings(), SecurityHubFindings(), AccessKey(), CredentialReport(), IAMAccess(),
         AccessAnalyzerFindings(), Instances(), OpenSecurityGroups(), LogsInsights(), ConfigHistory(), S3Exposure(), IdentityCenterAssignments(),
         CredentialHygiene(), InspectorFindings(), MacieFindings(), SecurityEvents(), CheckAccess(),
-    ], trigger: NewSecurityEvents())
+        DeactivateAccessKey(), ReactivateAccessKey(), QuarantinePrincipal(), ReleasePrincipal(), RevokeRoleSessions(), RemoveSessionRevocation(),
+        DeleteLoginProfile(), IsolateInstance(), UnisolateInstance(), DetachInstanceProfile(), StopInstance(), SnapshotVolumes(), ProtectInstance(),
+        BlockS3PublicAccess(), RestartLogging(), ArchiveGuardDutyFindings(), UnarchiveGuardDutyFindings(), GuardDutyFeedback(), SetFindingWorkflow(),
+        CloseFindings(), ContainmentCheckAccess(),
+    ]
+
+    public static let adapter = OperationAdapter(operations: operations, job: .detection, trigger: NewSecurityEvents())
 
     typealias JSON = GoogleCloud.JSON
 
@@ -330,6 +337,7 @@ extension AWS {
     struct Accounts: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "accounts"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Every AWS account the sign-in covers, with its ID, name and email. Other lookups name one of them. Only accounts the person is assigned in IAM Identity Center are listed; check-access compares them with the organisation's own list."
         static let input = JSONSchema.object([:])
 
@@ -347,6 +355,7 @@ extension AWS {
     struct Regions: ServiceOperation {
         struct Input: Decodable, Sendable { let account: String? }
         static let name = "regions"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The regions an account has turned on, which lookups can name, and those it has not."
         static let input = JSONSchema.object(["account": AWS.accountInput])
 
@@ -372,6 +381,7 @@ extension AWS {
             let since: String?, until: String?, limit: Int?, region: String?, account: String?
         }
         static let name = "cloudtrail-events"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "CloudTrail management events, newest first, by one of user, event name, event source, resource or access key, with who acted (root, an IAM user or an assumed role and the role behind it, and from which account), source IP, agent, whether MFA was used and any error; reading the default region and us-east-1, where IAM, STS, Organizations and console sign-ins are logged, unless a region is named, and saying when more matched than were read."
         static let input = JSONSchema.object([
             "user": .string("The IAM user or role session name."), "eventName": .string("An API call, such as ConsoleLogin or CreateAccessKey."),
@@ -539,6 +549,7 @@ extension AWS {
     struct GuardDutyFindings: ServiceOperation {
         struct Input: Decodable, Sendable { let minimumSeverity: Double?, includeArchived: Bool?, limit: Int?, region: String?, account: String? }
         static let name = "guardduty-findings"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "GuardDuty findings that are not archived, most recently updated first, from a minimum severity, with the resource and identity each concerns and the account and region it is in, saying when more matched than were read."
         static let input = JSONSchema.object([
             "minimumSeverity": .integer("The lowest severity, from 1 to 10: 9 and above is critical, such as attack sequences, 7 and above high. 4 when left out.", minimum: 1, maximum: 10),
@@ -613,6 +624,7 @@ extension AWS {
     struct SecurityHubFindings: ServiceOperation {
         struct Input: Decodable, Sendable { let severities: [String]?, workflowStatuses: [String]?, limit: Int?, region: String?, account: String? }
         static let name = "securityhub-findings"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Active Security Hub findings, most recently updated first, by severity and workflow status, NEW and NOTIFIED unless asked, with the product, resources, and the account and region each is in, which differ in an aggregating account; saying when more matched than were read."
         static let input = JSONSchema.object([
             "severities": .array(.string("A severity.", oneOf: ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"]), "Severities. Critical and high when left out."),
@@ -655,6 +667,7 @@ extension AWS {
     struct AccessKey: ServiceOperation {
         struct Input: Decodable, Sendable { let accessKeyId: String, account: String? }
         static let name = "access-key"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Which account an access key belongs to and, for a long-term key, which user and when, where and with which service it was last used. A temporary key, ASIA…, is traced to its account; its use is in cloudtrail-events by accessKeyId."
         static let input = JSONSchema.object(["accessKeyId": .string("The access key ID, such as AKIA… or ASIA…."),
                                               "account": .string("The account to ask AWS from, by ID or name. Any covered account when left out; the key's own account is found from the key.")],
@@ -701,6 +714,7 @@ extension AWS {
     struct CredentialReport: ServiceOperation {
         struct Input: Decodable, Sendable { let account: String? }
         static let name = "credential-report"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Every IAM user's password and access key use, key ages and whether MFA is on, from the account's credential report, saying when it was made: AWS reuses one up to four hours old."
         static let input = JSONSchema.object(["account": AWS.accountInput])
 
@@ -766,6 +780,7 @@ extension AWS {
     struct AccessAnalyzerFindings: ServiceOperation {
         struct Input: Decodable, Sendable { let limit: Int?, region: String?, account: String? }
         static let name = "access-analyzer-findings"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Active IAM Access Analyzer findings of the region's external access analyzer, the organisation's or the account's: resources shared outside, and whether publicly; saying when more matched than were read."
         static let input = JSONSchema.object(["limit": .integer("How many findings, at most. 50 when left out.", minimum: 1, maximum: 100), "region": AWS.regionInput, "account": AWS.accountInput])
 
@@ -814,6 +829,7 @@ extension AWS {
     struct Instances: ServiceOperation {
         struct Input: Decodable, Sendable { let instanceId: String?, ip: String?, region: String?, account: String? }
         static let name = "ec2-instances"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "EC2 instances by instance ID or public or private IP address, with their state, addresses, security groups, instance profile and Name tag."
         static let input = JSONSchema.object(["instanceId": .string("The instance ID, such as i-0abc…."),
                                               "ip": .string("A public or private IPv4 address."), "region": AWS.regionInput, "account": AWS.accountInput])
@@ -858,6 +874,7 @@ extension AWS {
     struct OpenSecurityGroups: ServiceOperation {
         struct Input: Decodable, Sendable { let region: String?, account: String? }
         static let name = "open-security-groups"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Security groups that let anyone on the internet in, over IPv4 (0.0.0.0/0) or IPv6 (::/0), with the ports they open."
         static let input = JSONSchema.object(["region": AWS.regionInput, "account": AWS.accountInput])
 
@@ -907,6 +924,7 @@ extension AWS {
     struct LogsInsights: ServiceOperation {
         struct Input: Decodable, Sendable { let logGroups: [String], query: String, since: String?, until: String?, limit: Int?, region: String?, account: String? }
         static let name = "logs-insights"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Run a CloudWatch Logs Insights query over log groups, such as VPC Flow Logs or CloudTrail delivered to CloudWatch, saying how many records matched when more did than were returned. Read-only."
         static let input = JSONSchema.object([
             "logGroups": .array(.string("A log group name."), "Up to 10 log groups."),
@@ -989,6 +1007,7 @@ extension AWS {
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable { let account: String? }
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Tries each thing this tool reads once, in one account or the first five covered, IAM Identity Center, AWS Config's history, S3's bucket settings, Inspector and Macie included, and says what works and, for what does not, exactly which permission to add; whether GuardDuty, Security Hub (with its administrator and cross-region aggregation), AWS Config and an external access analyzer are on and CloudTrail trails are logging, as the watch relies on them; which regions are on; whether the role could change anything; and which of the organisation's accounts the sign-in does not cover. It changes nothing."
         static let input = JSONSchema.object(["account": .string("Only this account, by its ID or name. The first \(AWS.checkAccounts) the sign-in covers when left out.")])
 

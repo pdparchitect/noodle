@@ -31,6 +31,7 @@ extension Elastic {
     struct ESQL: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String }
         static let name = "esql"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Run an ES|QL query and return its columns and rows. Read-only."
         static let input = JSONSchema.object(["query": .string("The ES|QL query. Filter by time and end with LIMIT.")], required: ["query"])
 

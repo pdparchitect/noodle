@@ -106,6 +106,7 @@ extension VirusTotal {
     struct FileReport: ServiceOperation {
         struct Input: Decodable, Sendable { let hash: String }
         static let name = "file-report"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "A file's reputation by its MD5, SHA-1 or SHA-256 hash, with its name, type and size."
         static let input = JSONSchema.object(["hash": .string("The file's MD5, SHA-1 or SHA-256 hash.")], required: ["hash"])
 
@@ -126,6 +127,7 @@ extension VirusTotal {
     struct DomainReport: ServiceOperation {
         struct Input: Decodable, Sendable { let domain: String }
         static let name = "domain-report"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "A domain's reputation, with its registrar and when it was registered."
         static let input = JSONSchema.object(["domain": .string("The domain name alone, such as example.com.")], required: ["domain"])
 
@@ -144,6 +146,7 @@ extension VirusTotal {
     struct AddressReport: ServiceOperation {
         struct Input: Decodable, Sendable { let ip: String }
         static let name = "ip-report"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "An IP address's reputation, with its network, owner and country."
         static let input = JSONSchema.object(["ip": .string("An IPv4 or IPv6 address.")], required: ["ip"])
 
@@ -163,6 +166,7 @@ extension VirusTotal {
     struct URLReport: ServiceOperation {
         struct Input: Decodable, Sendable { let url: String }
         static let name = "url-report"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "A web address's reputation, with where it ends up and its page title. Never submits it for scanning."
         static let input = JSONSchema.object(["url": .string("The full http or https address.")], required: ["url"])
 

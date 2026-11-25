@@ -63,10 +63,7 @@ extension Defender {
         "Actions need Microsoft Defender for Endpoint Plan 2, or Microsoft 365 E5. Give the **Directory (tenant) ID** and the app's **Application (client) ID**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
 
-    public static let containmentAdapter = OperationAdapter(operations: [
-        ContainmentDevice(), MachineActions(), ActionStatus(), IsolateDevice(), ReleaseIsolation(), RestrictAppExecution(), RemoveAppRestriction(),
-        StopAndQuarantineFile(), RunAVScan(), CollectInvestigationPackage(), ContainmentCheckAccess(),
-    ], simultaneousRequests: 2)
+    public static let containmentAdapter = OperationAdapter(operations: operations, job: .containment, simultaneousRequests: 2)
 
     // MARK: What it needs
 
@@ -441,6 +438,7 @@ extension Defender {
     struct ContainmentDevice: ServiceOperation {
         struct Input: Decodable, Sendable { let device: String }
         static let name = "device"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "A device's state before acting: whether it is onboarded and active, its risk, exposure and device group, its pending machine actions, saying when not all could be read, and the last observed isolation and app-restriction actions, or that they could not be confirmed. It changes nothing."
         static let input = JSONSchema.object(["device": Defender.deviceField], required: ["device"])
 
@@ -490,6 +488,7 @@ extension Defender {
     struct MachineActions: ServiceOperation {
         struct Input: Decodable, Sendable { let device: String?, type: String?, status: String?, since: String?, limit: Int? }
         static let name = "machine-actions"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Machine actions taken on devices, by anyone, newest first, by device, type, status and time, with who asked, why and where each stands, saying when more matched than it kept."
         static let input = JSONSchema.object([
             "device": Defender.deviceField,
@@ -535,6 +534,7 @@ extension Defender {
     struct ActionStatus: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "action-status"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Where one machine action stands, by its ID: Pending and InProgress are not done; Succeeded is. It changes nothing."
         static let input = JSONSchema.object(["id": .string("The machine action's ID, a GUID, as an action or machine-actions gave it.")], required: ["id"])
 
@@ -554,6 +554,7 @@ extension Defender {
     struct ContainmentCheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Tries what the actions read first, devices and machine actions, and says what works and, for what does not, what to change: the app's permissions, the admin's Defender role or what the tenant lacks; and what each action needs, which only asking for it tests. It changes nothing."
         static let input = JSONSchema.object([:])
 
@@ -587,6 +588,7 @@ extension Defender {
     struct IsolateDevice: ServiceOperation {
         struct Input: Decodable, Sendable { let device: String; let comment: String; let isolationType: String? }
         static let name = "isolate-device"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: release-isolation restores the device's network access, and must be asked for explicitly; until then the device reaches only Defender for Endpoint (and, with Selective, Outlook, Teams and Skype for Business), so its user cannot work on it."
         static let summary = "Isolate a device from the network, Full or Selective, keeping it connected to Defender for Endpoint. It can take minutes to apply. \(recovery)"
         static let input = JSONSchema.object(["device": Defender.deviceField, "comment": Defender.commentField,
@@ -607,6 +609,7 @@ extension Defender {
     struct ReleaseIsolation: ServiceOperation {
         typealias Input = ActInput
         static let name = "release-isolation"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: isolate-device again. Releasing restores the device's full network access, an attacker's still on it included, so release it only once the champion judges it clean."
         static let summary = "Release an isolated device, restoring its network access. Held like the rest, as it gives access back. It can take minutes to apply. \(recovery)"
         static let input = Defender.actSchema
@@ -624,6 +627,7 @@ extension Defender {
     struct RestrictAppExecution: ServiceOperation {
         typealias Input = ActInput
         static let name = "restrict-app-execution"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: remove-app-restriction lets every app run again. Until then only apps signed by Microsoft run on the device, which stops most of its user's work and any other app already running."
         static let summary = "Restrict a device to running only apps signed by Microsoft. \(recovery)"
         static let input = Defender.actSchema
@@ -640,6 +644,7 @@ extension Defender {
     struct RemoveAppRestriction: ServiceOperation {
         typealias Input = ActInput
         static let name = "remove-app-restriction"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: restrict-app-execution again. Removing the restriction lets any app run again, an attacker's included."
         static let summary = "Lift a device's app restriction, letting any app run. Held like the rest, as it gives back what the restriction held off. \(recovery)"
         static let input = Defender.actSchema
@@ -656,6 +661,7 @@ extension Defender {
     struct StopAndQuarantineFile: ServiceOperation {
         struct Input: Decodable, Sendable { let device: String; let comment: String; let sha1: String }
         static let name = "stop-and-quarantine-file"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: stopping the file's processes ends them and loses their in-memory state, which cannot be undone, so record what they were first; the quarantined file can be restored, from the file's page or the device's action center in the Microsoft Defender portal, or with MpCmdRun -Restore on the device."
         static let summary = "Stop every process of a file, by its SHA1, on one device, and quarantine the file there. \(recovery)"
         static let input = JSONSchema.object(["device": Defender.deviceField, "comment": Defender.commentField,
@@ -677,6 +683,7 @@ extension Defender {
     struct RunAVScan: ServiceOperation {
         struct Input: Decodable, Sendable { let device: String; let comment: String; let scanType: String? }
         static let name = "run-av-scan"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: nothing to undo: a scan changes nothing on the device's state itself, but uses its processor and disk while it runs, a Full scan for an hour or more; what it finds, Microsoft Defender Antivirus remediates as its policy says, which may quarantine files."
         static let summary = "Run a Microsoft Defender Antivirus scan, Quick or Full, on a device. \(recovery)"
         static let input = JSONSchema.object(["device": Defender.deviceField, "comment": Defender.commentField,
@@ -695,6 +702,7 @@ extension Defender {
     struct CollectInvestigationPackage: ServiceOperation {
         typealias Input = ActInput
         static let name = "collect-investigation-package"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: nothing to undo: collecting changes nothing on the device's state, but uses its resources while the package is gathered and uploaded, and the package, with its processes, connections, users, logs and more, can be downloaded by anyone whose Defender role covers the device."
         static let summary = "Collect a forensic investigation package from a device, which the Defender portal then offers to download. \(recovery)"
         static let input = Defender.actSchema

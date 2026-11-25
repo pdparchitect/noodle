@@ -81,9 +81,15 @@ public enum Entra {
         "Give the **Directory (tenant) ID** and the app's **Application (client) ID** from its **Overview**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [FindUser(), UserGroups(), SignInMethods(), SignIns(), RiskyUsers(), RoleHolders(),
-                                                              AppPermissions(), DirectoryAudit(), AppCredentials(), SecurityEvents(), CheckAccess()],
-                                                 trigger: NewSecurityEvents(),
+    /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
+    static let operations: [any ServiceOperation] = [
+        FindUser(), UserGroups(), SignInMethods(), SignIns(), RiskyUsers(), RoleHolders(), AppPermissions(), DirectoryAudit(), AppCredentials(),
+        SecurityEvents(), CheckAccess(),
+        ContainmentUser(), DisableSignIn(), EnableSignIn(), RevokeSessions(), DeleteSignInMethods(), RemoveDirectoryRole(), RemoveAppCredential(),
+        ConfirmCompromised(), DismissUserRisk(), ContainmentCheckAccess(),
+    ]
+
+    public static let adapter = OperationAdapter(operations: operations, job: .detection, trigger: NewSecurityEvents(),
                                                  // Graph throttles each app in each tenant, and role-holders and app-permissions look up names.
                                                  simultaneousRequests: 4)
 
@@ -420,6 +426,7 @@ extension Entra {
     struct FindUser: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String; let limit: Int? }
         static let name = "find-user"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Find users whose display name, user principal name or email starts with the query, with whether they can sign in and when they were made, saying when more match than it kept."
         static let input = JSONSchema.object(["query": .string("The start of a name, user principal name or email address."),
                                               "limit": .integer("How many users, at most. 10 when left out.", minimum: 1, maximum: 50)], required: ["query"])
@@ -451,6 +458,7 @@ extension Entra {
     struct UserGroups: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String }
         static let name = "user-groups"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The groups and directory roles a user is a member of, directly or through nested groups, read page after page."
         static let input = JSONSchema.object(["user": .string("The user's object ID or user principal name.")], required: ["user"])
 
@@ -500,6 +508,7 @@ extension Entra {
     struct SignInMethods: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String }
         static let name = "user-sign-in-methods"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The sign-in methods a user has registered, such as Microsoft Authenticator, a phone or a security key, with each one's ID and when it was added."
         static let input = JSONSchema.object(["user": .string("The user's object ID or user principal name.")], required: ["user"])
 
@@ -520,6 +529,7 @@ extension Entra {
     struct SignIns: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String?, ip: String?, failuresOnly: Bool?, since: String?, until: String?, limit: Int? }
         static let name = "sign-ins"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Interactive sign-ins, newest first, by user principal name, IP address, failures only and time, with app, location, conditional access and risk, saying when more matched than it kept. Needs Entra ID P1; the log keeps 30 days."
         static let input = JSONSchema.object([
             "user": .string("The user principal name, such as name@contoso.com."),
@@ -589,6 +599,7 @@ extension Entra {
     struct RiskyUsers: ServiceOperation {
         struct Input: Decodable, Sendable { let limit: Int? }
         static let name = "risky-users"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "The users Identity Protection currently rates at risk, with how high, why and since when, highest first, saying when more are at risk than it kept. Needs Entra ID P2."
         static let input = JSONSchema.object(["limit": .integer("How many users, at most. 100 when left out.", minimum: 1, maximum: 500)])
 
@@ -629,6 +640,7 @@ extension Entra {
     struct RoleHolders: ServiceOperation {
         struct Input: Decodable, Sendable { let role: String? }
         static let name = "role-holders"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Each directory role and who holds it, actively or eligible to activate it in Privileged Identity Management: users, groups and apps, Global Administrator and the other privileged roles first, saying what it could not read."
         static let input = JSONSchema.object(["role": .string("Only roles whose name contains this, such as Global or Exchange.")])
 
@@ -688,6 +700,7 @@ extension Entra {
     struct AppPermissions: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "app-permissions"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Which apps hold which Microsoft Graph permissions, granted to the app itself or consented for people, with those that can change the tenant or make administrators flagged, saying what it could not read."
         static let input = JSONSchema.object([:])
         /// Permissions with which an app can grant itself, or anyone, more.
@@ -777,6 +790,7 @@ extension Entra {
     struct DirectoryAudit: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String?, activity: String?, category: String?, since: String?, until: String?, limit: Int? }
         static let name = "directory-audit"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Changes to the directory, newest first, by who made them, the activity, category and time, with what they changed and from which IP address, saying when more matched than it kept. The log keeps 30 days."
         static let input = JSONSchema.object([
             "user": .string("Only changes this user principal name made."),
@@ -818,6 +832,7 @@ extension Entra {
     struct AppCredentials: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "app-credentials"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The secrets and certificates apps sign in with, newest first, with each app's object ID and each credential's keyId, flagging those added in the last 30 days, valid for more than two years, or expired, saying when it read only some apps."
         static let input = JSONSchema.object([:])
 
@@ -919,6 +934,7 @@ extension Entra {
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Tries each thing this tool reads once and says what works and, for what does not, exactly what to change: the app's permissions, the admin's role or a licence the tenant lacks; which tenant it reads; which permissions the app is consented, warning of more than it needs; and which roles the signed-in admin holds, saying when they could change the tenant. It changes nothing."
         static let input = JSONSchema.object([:])
 

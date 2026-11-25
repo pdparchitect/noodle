@@ -59,10 +59,7 @@ extension Azure {
         "Microsoft.Security/locations/alerts/*",
     ]
 
-    public static let containmentAdapter = OperationAdapter(operations: [
-        RemoveRoleAssignment(), DeallocateVM(), IsolateVM(), UnisolateVM(), RotateStorageKey(), RestrictStorage(), AddLock(), SnapshotDisk(),
-        SetAlertStatus(), CloseAlert(), OperationStatus(), ContainmentCheckAccess(),
-    ])
+    public static let containmentAdapter = OperationAdapter(operations: operations, job: .containment)
 
     static let computeVersion = "2024-07-01", diskVersion = "2024-03-02", networkVersion = "2024-05-01", storageVersion = "2023-05-01", lockVersion = "2020-05-01"
     static let isolationPriority = 100
@@ -111,6 +108,7 @@ extension Azure {
     struct RemoveRoleAssignment: ServiceOperation {
         struct Input: Decodable, Sendable { let assignment: String }
         static let name = "remove-role-assignment"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Remove one role assignment, by its full ID from role-assignments, saying what it granted to whom and where."
         static let input = JSONSchema.object(["assignment": .string("The role assignment's full ID, such as /subscriptions/…/providers/Microsoft.Authorization/roleAssignments/GUID.")],
                                              required: ["assignment"])
@@ -135,6 +133,7 @@ extension Azure {
     struct DeallocateVM: ServiceOperation {
         struct Input: Decodable, Sendable { let vm: String }
         static let name = "deallocate-vm"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Stop a VM and release its compute, ending everything running on it and what is only in its memory; its disks stay. Start it again in the Azure portal."
         static let input = JSONSchema.object(["vm": .string("The VM's full ID.")], required: ["vm"])
         static let readOnly = false
@@ -212,6 +211,7 @@ extension Azure {
     struct IsolateVM: ServiceOperation {
         struct Input: Decodable, Sendable { let vm: String, allowShared: Bool? }
         static let name = "isolate-vm"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Cut a VM off the network: add deny-all inbound and outbound rules, named after the VM, at priority 100 to the network security group of each of its network interfaces, returning the isolation's ID and the rules added. It refuses a group shared with other interfaces or subnets unless allowShared, and any rule already at priority 100 or of the same name. Connections already open may continue until they close. Undo with unisolate-vm."
         static let input = JSONSchema.object([
             "vm": .string("The VM's full ID."),
@@ -283,6 +283,7 @@ extension Azure {
     struct UnisolateVM: ServiceOperation {
         struct Input: Decodable, Sendable { let vm: String, networkSecurityGroups: [String]?, allowShared: Bool? }
         static let name = "unisolate-vm"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Undo isolate-vm: remove the rules isolate-vm added for this VM, and only those, from the network security groups isolate-vm reported, or else those of the VM's network interfaces now, letting traffic back. A rule of that name Pion did not add for this VM stops it."
         static let input = JSONSchema.object([
             "vm": .string("The VM's full ID."),
@@ -358,6 +359,7 @@ extension Azure {
     struct RotateStorageKey: ServiceOperation {
         struct Input: Decodable, Sendable { let account: String, key: String }
         static let name = "rotate-storage-key"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Replace one of a storage account's two access keys, ending whatever uses it and every SAS token it signed. The new key is never shown."
         static let input = JSONSchema.object([
             "account": .string("The storage account's full ID."),
@@ -379,6 +381,7 @@ extension Azure {
     struct RestrictStorage: ServiceOperation {
         struct Input: Decodable, Sendable { let account: String, publicBlobAccess: Bool?, sharedKeyAccess: Bool? }
         static let name = "restrict-storage"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Turn off a storage account's anonymous public blob access, its shared key access, which every access key and SAS token signed with one relies on, or both. Apps that use keys stop working until it is turned back on."
         static let input = JSONSchema.object([
             "account": .string("The storage account's full ID."),
@@ -406,6 +409,7 @@ extension Azure {
     struct AddLock: ServiceOperation {
         struct Input: Decodable, Sendable { let resource: String, notes: String? }
         static let name = "add-lock"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Stop a resource, a resource group or the subscription being deleted, with a CanNotDelete lock named pion-containment, such as evidence or logging an attacker may remove. Changes stay allowed. A lock of that name Pion did not add is left as it is. Azure's locks take no write condition, so a lock of that name someone makes between Pion's check and its write would be replaced."
         static let input = JSONSchema.object([
             "resource": .string("The full ID of the resource, the resource group, such as /subscriptions/…/resourceGroups/rg-prod, or the subscription."),
@@ -445,6 +449,7 @@ extension Azure {
     struct SnapshotDisk: ServiceOperation {
         struct Input: Decodable, Sendable { let disk: String, name: String? }
         static let name = "snapshot-disk"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Copy a managed disk to a full snapshot in its resource group, as evidence before a VM is changed or stopped."
         static let input = JSONSchema.object([
             "disk": .string("The managed disk's full ID."),
@@ -486,6 +491,7 @@ extension Azure {
     struct SetAlertStatus: ServiceOperation {
         struct Input: Decodable, Sendable { let alert: String, status: String }
         static let name = "set-alert-status"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Mark a Defender for Cloud alert Active or InProgress, by its full ID from Microsoft Azure Detection's defender-alerts. close-alert resolves or dismisses one."
         static let input = JSONSchema.object([
             "alert": .string("The alert's full ID, such as /subscriptions/…/providers/Microsoft.Security/locations/centralus/alerts/NAME."),
@@ -506,6 +512,7 @@ extension Azure {
     struct CloseAlert: ServiceOperation {
         struct Input: Decodable, Sendable { let alert: String, status: String }
         static let name = "close-alert"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Resolve or dismiss a Defender for Cloud alert, by its full ID from Microsoft Azure Detection's defender-alerts, which takes it out of the alert watch and Defender's open alerts. Reopen it with set-alert-status."
         static let input = JSONSchema.object([
             "alert": .string("The alert's full ID, such as /subscriptions/…/providers/Microsoft.Security/locations/centralus/alerts/NAME."),
@@ -525,6 +532,7 @@ extension Azure {
     struct OperationStatus: ServiceOperation {
         struct Input: Decodable, Sendable { let status: String }
         static let name = "operation-status"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "How a long operation this tool started is going, by the status path it returned."
         static let input = JSONSchema.object(["status": .string("The status path an action returned, such as /subscriptions/…/providers/Microsoft.Compute/locations/westeurope/operations/ID?api-version=….")], required: ["status"])
 
@@ -567,6 +575,7 @@ extension Azure {
     struct ContainmentCheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Reads the app's permissions on the subscription and says which actions its role allows and exactly what to add for those it does not, warning when it allows far more. It changes nothing."
         static let input = JSONSchema.object([:])
 

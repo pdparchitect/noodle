@@ -57,10 +57,7 @@ extension Cloudflare {
         accountStep,
     ]
 
-    public static let containmentAdapter = OperationAdapter(operations: [
-        ContainmentAccessUser(), ContainmentDevice(), ActionStatus(), BlockIP(), BlockASN(), BlockCountry(), Unblock(),
-        RevokeAccessSessions(), GatewayBlock(), GatewayUnblock(), RevokeDevice(), ContainmentCheckAccess(),
-    ], simultaneousRequests: 2)
+    public static let containmentAdapter = OperationAdapter(operations: operations, job: .containment, simultaneousRequests: 2)
 
     // MARK: What it needs
 
@@ -411,6 +408,7 @@ extension Cloudflare {
     struct BlockIP: ServiceOperation {
         struct Input: Decodable, Sendable { let ip: String; let zone: String?; let reason: String }
         static let name = "block-ip"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Block an IP address, or an IPv4 /16 or /24 or IPv6 /32, /48 or /64 range, at Cloudflare's edge with an IP Access rule, for the whole account or one zone, and keep a record that Pion made it, which unblock needs. Refused when any rule already holds that value, whoever made it. \(Cloudflare.blockRecovery)"
         static let input = JSONSchema.object(["ip": .string("The IPv4 or IPv6 address, or range."), "zone": Cloudflare.zoneField, "reason": Cloudflare.reasonField], required: ["ip", "reason"])
         static let readOnly = false
@@ -424,6 +422,7 @@ extension Cloudflare {
     struct BlockASN: ServiceOperation {
         struct Input: Decodable, Sendable { let asn: String; let zone: String?; let reason: String }
         static let name = "block-asn"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Block a whole network by its AS number at Cloudflare's edge with an IP Access rule, for the whole account or one zone, and keep a record that Pion made it. A network carries everyone it serves, customers included, so prefer block-ip unless the network itself is hostile. \(Cloudflare.blockRecovery)"
         static let input = JSONSchema.object(["asn": .string("The AS number, such as AS64500."), "zone": Cloudflare.zoneField, "reason": Cloudflare.reasonField], required: ["asn", "reason"])
         static let readOnly = false
@@ -437,6 +436,7 @@ extension Cloudflare {
     struct BlockCountry: ServiceOperation {
         struct Input: Decodable, Sendable { let country: String; let zone: String?; let reason: String }
         static let name = "block-country"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Block a whole country at Cloudflare's edge with an IP Access rule, for the whole account or one zone, and keep a record that Pion made it. Cloudflare lets only Enterprise plans block a country; it refuses otherwise. Everyone there is cut off, travelling staff and customers included. \(Cloudflare.blockRecovery)"
         static let input = JSONSchema.object(["country": .string("The two-letter ISO 3166-1 code, such as RU, or T1 for Tor."), "zone": Cloudflare.zoneField, "reason": Cloudflare.reasonField],
                                              required: ["country", "reason"])
@@ -451,6 +451,7 @@ extension Cloudflare {
     struct Unblock: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "unblock"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: block-ip, block-asn or block-country again restores the block. Removing it lets that traffic reach the account's sites again at once."
         static let summary = "Remove one IP Access rule, by its ID, that Pion's own record says block-ip, block-asn or block-country made through this connection, in the same account or zone, and that Cloudflare still holds as made; any other is left in place, whatever its notes say. Held, as it lifts a block. \(recovery)"
         static let input = JSONSchema.object(["id": .string("The rule's ID, as the block gave it.")], required: ["id"])
@@ -516,6 +517,7 @@ extension Cloudflare {
     struct ContainmentAccessUser: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String }
         static let name = "access-user"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "A Zero Trust user's state before acting, by email or ID: their ID, last login and every active Access session. It changes nothing."
         static let input = JSONSchema.object(["user": .string("The user's email address, or their ID.")], required: ["user"])
 
@@ -549,6 +551,7 @@ extension Cloudflare {
     struct RevokeAccessSessions: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String }
         static let name = "revoke-access-sessions"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: nothing to undo; the person signs in again through Access with their identity provider and gets new sessions. A revocation cannot be reversed, and it does not stop them signing in again: if their account is taken over, suspend it at the identity provider too."
         static let summary = "End every Access session a Zero Trust user has, by their email, so each Access application asks them to sign in again. Confirmed only when their sessions, read again, are gone. \(recovery)"
         static let input = JSONSchema.object(["user": .string("The user's email address, as access-user gives it.")], required: ["user"])
@@ -761,6 +764,7 @@ extension Cloudflare {
     struct GatewayBlock: ServiceOperation {
         struct Input: Decodable, Sendable { let value: String; let reason: String }
         static let name = "gateway-block"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: gateway-unblock with the same value removes it from Pion's list, which lets devices resolve or reach it again at once, as far as Gateway's other rules allow."
         static let summary = "Block a domain (and its subdomains) or an IP address or range for every device using Gateway, by adding it to Pion's own Gateway list, which Pion makes the first time with a Gateway rule that blocks it; a domain is blocked in DNS, an address in network traffic through WARP. Refused when Pion's list already holds it. \(recovery)"
         static let input = JSONSchema.object(["value": .string("The domain, such as evil.example, or IP address or range."), "reason": Cloudflare.reasonField], required: ["value", "reason"])
@@ -817,6 +821,7 @@ extension Cloudflare {
     struct GatewayUnblock: ServiceOperation {
         struct Input: Decodable, Sendable { let value: String }
         static let name = "gateway-unblock"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: gateway-block again restores the block. Removing it lets devices resolve or reach it again at once."
         static let summary = "Remove a domain or IP address that gateway-block added to Pion's own Gateway list, so devices resolve or reach it again; anything else in the list, or in other lists, is left in place. Held, as it lifts a block. \(recovery)"
         static let input = JSONSchema.object(["value": .string("The domain or IP address, as gateway-block took it.")], required: ["value"])
@@ -897,6 +902,7 @@ extension Cloudflare {
     struct ContainmentDevice: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "device"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "A WARP device registration's state before acting, by its registration ID: the device, its user, whether it is revoked or deleted and when last seen. It changes nothing."
         static let input = JSONSchema.object(["id": .string("The registration's ID, as Cloudflare Detection's devices gives it.")], required: ["id"])
 
@@ -912,6 +918,7 @@ extension Cloudflare {
     struct RevokeDevice: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "revoke-device"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: unrevoke the registration, or have its user enrol the device in WARP again, in the Zero Trust dashboard (Team & Resources › Devices, or My Team › Devices); Pion offers no unrevoke, as it cannot verify who revoked a registration. Until then the device reaches nothing Zero Trust protects through it, and Gateway no longer filters it."
         static let summary = "Revoke one WARP device registration, by its ID, so the device can no longer reach Access applications or private networks through WARP. Reports the registration's state read after the request, which confirms the state, not who changed it. \(recovery)"
         static let input = JSONSchema.object(["id": .string("The registration's ID, as Cloudflare Detection's devices gives it.")], required: ["id"])
@@ -964,6 +971,7 @@ extension Cloudflare {
     struct ActionStatus: ServiceOperation {
         struct Input: Decodable, Sendable { let ruleId: String?, blocked: String?, zone: String?, gatewayValue: String?, user: String?, device: String? }
         static let name = "action-status"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Where an action stands: every IP Access rule for an address, range, network (AS number) or country, or one rule Pion made by its ID, and whether Pion's record says it made each; whether Pion's Gateway list holds a value and its rule blocks it; a user's active Access sessions; or a WARP registration's state. It changes nothing."
         static let input = JSONSchema.object([
             "ruleId": .string("An IP Access rule's ID, as a block gave it."),
@@ -1025,6 +1033,7 @@ extension Cloudflare {
     struct ContainmentCheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Verifies the token with Cloudflare (whose it is, whether active, when it expires), lists its own permissions when it may read them, tries what the actions read first (the account's IP Access rules, Gateway lists and rules, WARP registrations and Access users), and says what it reaches. It sends only reads, so the actions' edit permissions are verified only when the token's own record lists them."
         static let input = JSONSchema.object([:])
 

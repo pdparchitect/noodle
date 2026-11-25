@@ -87,12 +87,7 @@ extension AWS {
     {"Sid":"RevokeSessions","Effect":"Allow","Resource":"arn:aws:iam::*:role/*","Action":["iam:PutRolePolicy","iam:DeleteRolePolicy"]}
     """
 
-    public static let containmentAdapter = OperationAdapter(operations: [
-        DeactivateAccessKey(), ReactivateAccessKey(), QuarantinePrincipal(), ReleasePrincipal(), RevokeRoleSessions(), RemoveSessionRevocation(),
-        DeleteLoginProfile(), IsolateInstance(), UnisolateInstance(), DetachInstanceProfile(), StopInstance(), SnapshotVolumes(), ProtectInstance(),
-        BlockS3PublicAccess(), RestartLogging(), ArchiveGuardDutyFindings(), UnarchiveGuardDutyFindings(), GuardDutyFeedback(), SetFindingWorkflow(),
-        CloseFindings(), ContainmentCheckAccess(),
-    ])
+    public static let containmentAdapter = OperationAdapter(operations: operations, job: .containment)
 
     // MARK: Marks
 
@@ -252,6 +247,7 @@ extension AWS {
     struct DeactivateAccessKey: ServiceOperation {
         typealias Input = KeyInput
         static let name = "deactivate-access-key"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Turn off one of a user's access keys, ending what uses it, and tag the user as Pion's doing, saying the key's status before and its last use. Undo with reactivate-access-key."
         static let input = AWS.keyInput
         static let readOnly = false
@@ -285,6 +281,7 @@ extension AWS {
     struct ReactivateAccessKey: ServiceOperation {
         typealias Input = KeyInput
         static let name = "reactivate-access-key"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Undo deactivate-access-key: turn a key Pion turned off back on, only when the user still carries Pion's tag for it, and remove the tag."
         static let input = AWS.keyInput
         static let readOnly = false
@@ -318,6 +315,7 @@ extension AWS {
     struct QuarantinePrincipal: ServiceOperation {
         struct Input: Decodable, Sendable { let principal: String, policy: String?, account: String? }
         static let name = "quarantine-principal"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Cut a user or role off: attach AWS's AWSDenyAll policy, or AWSCompromisedKeyQuarantineV3, which also stops sessions and keys already in use, tagging it pion-quarantine first so release-principal removes only Pion's quarantine. Refuses Identity Center's, AWS's and the organisation's own roles."
         static let input = JSONSchema.object([
             "principal": .string("The user's or role's ARN."),
@@ -367,6 +365,7 @@ extension AWS {
     struct ReleasePrincipal: ServiceOperation {
         typealias Input = PrincipalInput
         static let name = "release-principal"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Undo quarantine-principal: detach the policy Pion attached and remove its pion-quarantine tag, only when the user or role carries that tag; a deny-all policy someone else attached stays."
         static let input = JSONSchema.object(["principal": .string("The user's or role's ARN."),
                                               "account": .string("The account it is in, by its ID or name. Needed unless the sign-in covers only one.")], required: ["principal"])
@@ -417,6 +416,7 @@ extension AWS {
     struct RevokeRoleSessions: ServiceOperation {
         typealias Input = PrincipalInput
         static let name = "revoke-role-sessions"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "End every session of a role made before now, whoever holds it, with an inline policy named PionRevokeOlderSessions denying them, as IAM's own revocation does; new sessions still work. Needs the optional permission from Setup Steps. Undo with remove-session-revocation."
         static let input = JSONSchema.object(["principal": .string("The role's ARN."),
                                               "account": .string("The account it is in, by its ID or name. Needed unless the sign-in covers only one.")], required: ["principal"])
@@ -444,6 +444,7 @@ extension AWS {
     struct RemoveSessionRevocation: ServiceOperation {
         typealias Input = PrincipalInput
         static let name = "remove-session-revocation"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Undo revoke-role-sessions: delete the role's PionRevokeOlderSessions policy, only when it is the one Pion wrote, letting sessions made before it work again until they expire."
         static let input = RevokeRoleSessions.input
         static let readOnly = false
@@ -468,6 +469,7 @@ extension AWS {
     struct DeleteLoginProfile: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String, account: String? }
         static let name = "delete-login-profile"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Remove a user's console password, so it can no longer sign in to the console. It cannot be undone: a new password must be set in IAM. Keys and sessions are untouched."
         static let input = JSONSchema.object(["user": .string("The user's ARN."),
                                               "account": .string("The account it is in, by its ID or name. Needed unless the sign-in covers only one.")], required: ["user"])
@@ -603,6 +605,7 @@ extension AWS {
     struct IsolateInstance: ServiceOperation {
         typealias Input = InstanceInput
         static let name = "isolate-instance"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Cut an instance off the network: move each of its network interfaces into a security group named pion-isolate and the instance's ID, made and tagged by Pion with no rules in or out, recording each interface's groups in a tag on it first, and say exactly what changed. It changes nothing unless every interface and its groups, and every rule of Pion's group, can be read, and refuses a group of that name Pion did not make or an interface whose record differs. Connections already open may continue until they close. Undo with unisolate-instance."
         static let input = AWS.instanceInput
         static let readOnly = false
@@ -726,6 +729,7 @@ extension AWS {
     struct UnisolateInstance: ServiceOperation {
         typealias Input = InstanceInput
         static let name = "unisolate-instance"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Undo isolate-instance: put back the groups recorded on each of the instance's network interfaces that is still only in Pion's isolation group, and remove the record, saying any record that could not be removed. An interface changed since is left as it is and said. Pion's empty group stays; delete it in the EC2 console."
         static let input = AWS.instanceInput
         static let readOnly = false
@@ -799,6 +803,7 @@ extension AWS {
     struct DetachInstanceProfile: ServiceOperation {
         typealias Input = InstanceInput
         static let name = "detach-instance-profile"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Take an instance's IAM role away by removing its instance profile, saying which it was so it can be put back. Credentials the instance already took stay good until they expire, so quarantine the role too."
         static let input = AWS.instanceInput
         static let readOnly = false
@@ -826,6 +831,7 @@ extension AWS {
     struct StopInstance: ServiceOperation {
         typealias Input = InstanceInput
         static let name = "stop-instance"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Stop an instance, ending everything running on it and what is only in its memory; its volumes stay. Snapshot them first with snapshot-volumes. Start it again in the EC2 console."
         static let input = AWS.instanceInput
         static let readOnly = false
@@ -850,6 +856,7 @@ extension AWS {
     struct SnapshotVolumes: ServiceOperation {
         struct Input: Decodable, Sendable { let instanceId: String, notes: String?, region: String?, account: String? }
         static let name = "snapshot-volumes"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Snapshot every EBS volume of an instance at the same moment, as evidence before it is changed or stopped, each tagged pion-evidence with the instance's ID."
         static let input = JSONSchema.object([
             "instanceId": .string("The instance's ID."), "notes": .string("Why, kept in the snapshots' description, up to 200 characters."),
@@ -878,6 +885,7 @@ extension AWS {
     struct ProtectInstance: ServiceOperation {
         typealias Input = InstanceInput
         static let name = "protect-instance"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Stop an instance being terminated, as evidence or a foothold an attacker may try to remove, by turning on its termination protection. Turn it off in the EC2 console."
         static let input = AWS.instanceInput
         static let readOnly = false
@@ -907,6 +915,7 @@ extension AWS {
     struct BlockS3PublicAccess: ServiceOperation {
         struct Input: Decodable, Sendable { let bucket: String?, wholeAccount: Bool?, region: String?, account: String? }
         static let name = "block-s3-public-access"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Turn on all four S3 Block Public Access settings for one bucket, or for the whole account, saying what they were before so they can be set back. Only a bucket the account owns is changed."
         static let input = JSONSchema.object([
             "bucket": .string("The bucket's name alone."), "wholeAccount": .boolean("Block public access for every bucket of the account instead."),
@@ -969,6 +978,7 @@ extension AWS {
     struct RestartLogging: ServiceOperation {
         struct Input: Decodable, Sendable { let trail: String?, guardDuty: Bool?, region: String?, account: String? }
         static let name = "restart-logging"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Start a CloudTrail trail that was stopped, by its ARN, or turn GuardDuty's detector back on in a region."
         static let input = JSONSchema.object([
             "trail": .string("The trail's ARN, such as arn:aws:cloudtrail:eu-west-1:111111111111:trail/org-trail."),
@@ -1039,6 +1049,7 @@ extension AWS {
     struct ArchiveGuardDutyFindings: ServiceOperation {
         typealias Input = FindingsInput
         static let name = "archive-guardduty-findings"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Archive GuardDuty findings, which takes them out of the alert watch, GuardDuty's current findings and responders' views. Reopen them with unarchive-guardduty-findings."
         static let input = AWS.findingsInput
         static let readOnly = false
@@ -1057,6 +1068,7 @@ extension AWS {
     struct UnarchiveGuardDutyFindings: ServiceOperation {
         typealias Input = FindingsInput
         static let name = "unarchive-guardduty-findings"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Reopen archived GuardDuty findings, bringing them back to current findings."
         static let input = AWS.findingsInput
         static let readOnly = false
@@ -1074,6 +1086,7 @@ extension AWS {
     struct GuardDutyFeedback: ServiceOperation {
         struct Input: Decodable, Sendable { let findingIds: [String], feedback: String, comments: String?, region: String?, account: String? }
         static let name = "guardduty-feedback"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Tell GuardDuty whether findings were useful, which neither archives nor hides them."
         static let input = JSONSchema.object([
             "findingIds": .array(.string("A GuardDuty finding's ID."), "Up to 50 findings."), "feedback": .string("The feedback.", oneOf: ["USEFUL", "NOT_USEFUL"]),
@@ -1141,6 +1154,7 @@ extension AWS {
     struct SetFindingWorkflow: ServiceOperation {
         typealias Input = WorkflowInput
         static let name = "set-finding-workflow"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Mark Security Hub findings NEW or NOTIFIED, such as to reopen one or say it is in hand, by their IDs from securityhub-findings. close-findings resolves or suppresses them."
         static let input = JSONSchema.object([
             "findingIds": .array(.string("A finding's ID."), "Up to 20 findings."), "status": .string("The workflow status.", oneOf: ["NEW", "NOTIFIED"]),
@@ -1158,6 +1172,7 @@ extension AWS {
     struct CloseFindings: ServiceOperation {
         typealias Input = WorkflowInput
         static let name = "close-findings"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Resolve or suppress Security Hub findings, which takes them out of the alert watch and Security Hub's open findings. Reopen them with set-finding-workflow."
         static let input = JSONSchema.object([
             "findingIds": .array(.string("A finding's ID."), "Up to 20 findings."),
@@ -1181,6 +1196,7 @@ extension AWS {
     struct ContainmentCheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable { let account: String? }
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Simulates each operation's actions against the permission set's own policies in an account and says which it lacks, exactly what to add, whether the optional session revocation is on, and whether it allows far more than containment. It changes nothing."
         static let input = JSONSchema.object(["account": .string("The account, by its ID or name. Needed unless the sign-in covers only one.")])
 

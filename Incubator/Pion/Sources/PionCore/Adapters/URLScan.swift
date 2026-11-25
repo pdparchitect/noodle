@@ -29,6 +29,7 @@ extension URLScan {
     struct Search: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String, limit: Int? }
         static let name = "search"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Search earlier scans, newest first, with each page's URL, domain, IP address, country, title and verdict."
         static let input = JSONSchema.object([
             "query": .string("A urlscan search, such as domain:example.com, page.ip:203.0.113.77 or hash:<sha256>."),

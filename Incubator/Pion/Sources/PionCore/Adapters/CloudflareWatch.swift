@@ -232,6 +232,7 @@ extension Cloudflare {
     struct SecurityEvents: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, until: String? }
         static let name = "security-events"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "What the alert watch wakes for, for a window, newest first and each kind in turn: high-risk changes in the account audit log (API tokens made or rolled, members and roles added, DNS changes on a zone's apex, MX or NS, firewall, WAF and Gateway rules turned off or deleted, Access policies and applications changed, WARP devices enrolled, revoked or unrevoked, and tunnels made) and bursts of blocked Access logins; saying, for each feed, what it searched, what is off, what it could not read and why, and what it does not watch."
         static let input = JSONSchema.object([
             "since": .string("The earliest time, in ISO 8601. The last 24 hours when left out, at most 30 days."),

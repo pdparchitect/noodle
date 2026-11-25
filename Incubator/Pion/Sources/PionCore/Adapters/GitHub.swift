@@ -45,6 +45,7 @@ extension GitHub {
     struct AuditLog: ServiceOperation {
         struct Input: Decodable, Sendable { let phrase: String?, limit: Int? }
         static let name = "audit-log"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "The organisation's audit log, newest first, filtered by a search phrase such as actor:mallory action:repo.destroy created:>=2026-11-13."
         static let input = JSONSchema.object([
             "phrase": .string("An audit log search phrase, such as actor:mallory action:repo.destroy created:>=2026-11-13."),
@@ -98,6 +99,7 @@ extension GitHub {
     struct People: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "people"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The organisation's members, which of them are owners, and its outside collaborators."
         static let input = JSONSchema.object([:])
 
@@ -169,6 +171,7 @@ extension GitHub {
     struct SecurityAlerts: ServiceOperation {
         struct Input: Decodable, Sendable { let kind: String?, since: String? }
         static let name = "security-alerts"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Open secret scanning, code scanning and Dependabot alerts across the organisation's repositories, newest first, by kind and time, with the repository, the severity and whether a secret is still valid."
         static let input = JSONSchema.object([
             "kind": .string("Only this kind: secrets found in code, code scanning results or vulnerable dependencies. All three when left out.",
@@ -229,6 +232,7 @@ extension GitHub {
     struct Teams: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "teams"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The organisation's teams, with their members and the team each sits within."
         static let input = JSONSchema.object([:])
 

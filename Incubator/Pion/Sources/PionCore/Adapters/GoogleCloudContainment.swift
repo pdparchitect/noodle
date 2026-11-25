@@ -91,11 +91,7 @@ extension GoogleCloud {
         "compute.zoneOperations.get", "compute.regionOperations.get", "compute.globalOperations.get",
     ]
 
-    public static let containmentAdapter = OperationAdapter(operations: [
-        DisableKey(), EnableKey(), DisableServiceAccount(), EnableServiceAccount(), RemoveIAMMember(), EnforcePublicAccessPrevention(),
-        RevertPublicAccessPrevention(), SnapshotDisks(), StopInstance(), IsolateInstance(), UnisolateInstance(), ComputeOperationStatus(),
-        ContainmentCheckAccess(),
-    ])
+    public static let containmentAdapter = OperationAdapter(operations: operations, job: .containment)
 
     // MARK: Hosts
 
@@ -389,6 +385,7 @@ extension GoogleCloud {
     struct DisableKey: ServiceOperation {
         typealias Input = KeyInput
         static let name = "disable-sa-key"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Turn off one user-managed service account key, ending whatever authenticates with it, saying when it was made. Tokens already minted with it last until they expire. To undo: enable-sa-key with the same key name turns it back on as it was."
         static let input = GoogleCloud.keyInputSchema
         static let readOnly = false
@@ -403,6 +400,7 @@ extension GoogleCloud {
     struct EnableKey: ServiceOperation {
         typealias Input = KeyInput
         static let name = "enable-sa-key"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Undo disable-sa-key: turn a disabled service account key back on, so whatever holds it, an attacker included if it leaked, can authenticate again. To undo: disable-sa-key with the same key name."
         static let input = GoogleCloud.keyInputSchema
         static let readOnly = false
@@ -447,6 +445,7 @@ extension GoogleCloud {
     struct DisableServiceAccount: ServiceOperation {
         typealias Input = AccountInput
         static let name = "disable-service-account"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Stop a service account authenticating at all: every key of it, and every workload that runs as it, loses its access; its keys, roles and resources are kept. To undo: enable-service-account restores it as it was."
         static let input = GoogleCloud.accountInputSchema
         static let readOnly = false
@@ -461,6 +460,7 @@ extension GoogleCloud {
     struct EnableServiceAccount: ServiceOperation {
         typealias Input = AccountInput
         static let name = "enable-service-account"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Undo disable-service-account: let a disabled service account authenticate again, with its enabled keys and the workloads that run as it. To undo: disable-service-account."
         static let input = GoogleCloud.accountInputSchema
         static let readOnly = false
@@ -549,6 +549,7 @@ extension GoogleCloud {
             let resource: String, role: String, member: String, condition: String?, allowSelf: Bool?, allowLastOwner: Bool?
         }
         static let name = "remove-iam-member"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Remove one member from one role binding of a project, folder or organisation's IAM policy, keeping every other member, binding and condition, written only if the policy is unchanged since Pion read it. Refuses the account signed in, checked with Google against the one entered, its domain and the last owner unless told to. Access through groups, other roles and folders or organisations above stays. To undo: grant the member the role again, with the same condition, as the result says; Pion does not grant access."
         static let input = JSONSchema.object([
             "resource": .string("projects/PROJECT-ID, folders/NUMBER or organizations/NUMBER."),
@@ -734,6 +735,7 @@ extension GoogleCloud {
     struct EnforcePublicAccessPrevention: ServiceOperation {
         typealias Input = BucketInput
         static let name = "enforce-public-access-prevention"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Stop a bucket and its objects being reached by allUsers or allAuthenticatedUsers, by enforcing its public access prevention, only if the bucket is unchanged since Pion read it. Its grants stay in the policy but no longer work, which breaks a site served from it on purpose. It returns the setting before and the bucket's metageneration after Pion's change. To undo: revert-public-access-prevention with those, which only reverts while nobody has changed the bucket since."
         static let input = JSONSchema.object(["bucket": .string("The bucket's name alone, such as payroll-exports.")], required: ["bucket"])
         static let readOnly = false
@@ -766,6 +768,7 @@ extension GoogleCloud {
     struct RevertPublicAccessPrevention: ServiceOperation {
         struct Input: Decodable, Sendable { let bucket: String, previous: String, metageneration: String }
         static let name = "revert-public-access-prevention"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Undo enforce-public-access-prevention: set a bucket's public access prevention back to inherited, conditional on the bucket, prior setting and metageneration given, which must be copied from enforce-public-access-prevention's result: Google makes the change only while the bucket is still at that metageneration, so a change made since is not undone. It cannot prove Pion made the enforcement; it acts on the values supplied. Grants to allUsers or allAuthenticatedUsers the bucket holds then work again, unless an organisation policy enforces prevention. To undo: enforce-public-access-prevention."
         static let input = JSONSchema.object([
             "bucket": .string("The bucket's name alone."),
@@ -921,6 +924,7 @@ extension GoogleCloud {
     struct SnapshotDisks: ServiceOperation {
         struct Input: Decodable, Sendable { let instance: String, notes: String? }
         static let name = "snapshot-disks"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Snapshot each persistent disk of a VM, as evidence before it is changed or stopped, each labelled pion-evidence with the VM's ID, returning the operations to read with operation-status. Local SSDs cannot be snapshotted. The snapshots stay until deleted."
         static let input = JSONSchema.object([
             "instance": .string("The VM's full name, projects/PROJECT-ID/zones/ZONE/instances/NAME."),
@@ -941,6 +945,7 @@ extension GoogleCloud {
     struct StopInstance: ServiceOperation {
         struct Input: Decodable, Sendable { let instance: String, snapshotFirst: Bool?, notes: String? }
         static let name = "stop-instance"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Stop a VM, ending everything running on it and what is only in its memory, snapshotting its persistent disks first when snapshotFirst is given. Its disks stay; an ephemeral external IP is released. It refuses a VM with a local SSD. To undo: start it again in the console or with gcloud compute instances start; it boots afresh."
         static let input = JSONSchema.object([
             "instance": .string("The VM's full name, projects/PROJECT-ID/zones/ZONE/instances/NAME."),
@@ -1120,6 +1125,7 @@ extension GoogleCloud {
     struct IsolateInstance: ServiceOperation {
         typealias Input = InstanceInput
         static let name = "isolate-instance"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Cut a VM off the network: add deny-all inbound and outbound VPC firewall rules at priority 0, the highest, for IPv4 and, where the VM has it, IPv6, on each of its networks, targeting a network tag pion-isolate and a digest of the VM's ID, wait for Compute Engine to confirm each, then add that tag to the VM only if its tags are unchanged since Pion read them, and wait for that too. It says isolated only once every change is confirmed done, and pending, with the operations to read, while any is still running. It refuses a rule of that name Pion did not make or someone turned off, and says exactly what was added when only part could be. Connections already open may continue until they close, the metadata server stays reachable, and allow rules of hierarchical firewall policies are evaluated first. To undo: unisolate-instance removes only that tag and those rules."
         static let input = JSONSchema.object(["instance": .string("The VM's full name, projects/PROJECT-ID/zones/ZONE/instances/NAME.")], required: ["instance"])
         static let readOnly = false
@@ -1245,6 +1251,7 @@ extension GoogleCloud {
     struct UnisolateInstance: ServiceOperation {
         struct Input: Decodable, Sendable { let instance: String, firewallRules: [String]? }
         static let name = "unisolate-instance"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Undo isolate-instance: remove Pion's isolation tag from the VM, only if its tags are unchanged since Pion read them, then delete Pion's isolation rules for it, each checked first to be exactly a rule Pion made for this VM on the network its name was made for, from the rules isolate-instance reported when given them, else those of the VM's networks now. Compute Engine takes no condition on deleting a rule, so Pion reads each just before deleting it. To undo: isolate-instance."
         static let input = JSONSchema.object([
             "instance": .string("The VM's full name, projects/PROJECT-ID/zones/ZONE/instances/NAME."),
@@ -1356,6 +1363,7 @@ extension GoogleCloud {
     struct ComputeOperationStatus: ServiceOperation {
         struct Input: Decodable, Sendable { let operation: String }
         static let name = "operation-status"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "How a Compute Engine operation this tool started is going, by the path it returned: pending, running, done, or done with errors."
         static let input = JSONSchema.object(["operation": .string("The operation's path an action returned, such as projects/PROJECT-ID/zones/ZONE/operations/NAME, or projects/PROJECT-ID/global/operations/NAME.")],
                                              required: ["operation"])
@@ -1394,6 +1402,7 @@ extension GoogleCloud {
     struct ContainmentCheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable { let project: String? }
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Asks Google which of the Pion Containment role's permissions the account signed in holds on the scope, and on a project when given, and whether the APIs containment uses are enabled, saying exactly what to add for each action that lacks something, and warning when the account can do far more. It changes nothing."
         static let input = JSONSchema.object(["project": .string("A project inside the scope, as projects/PROJECT-ID, to check the Compute Engine and Cloud Storage APIs and the permissions held there; the scope's own project for a project's account when left out.")])
 

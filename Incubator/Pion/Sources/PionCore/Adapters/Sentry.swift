@@ -63,6 +63,7 @@ extension Sentry {
     struct Projects: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "projects"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "The organisation's projects, with each one's ID, slug and platform."
         static let input = JSONSchema.object([:])
 
@@ -80,6 +81,7 @@ extension Sentry {
     struct Issues: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String?, project: String?, period: String?, sort: String?, limit: Int? }
         static let name = "issues"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Search the organisation's issues, with each one's short ID, level, status, counts and when it was first and last seen."
         static let input = JSONSchema.object([
             "query": .string("Sentry's issue search, such as is:unresolved level:error or user.email:a@b.c. Unresolved issues when left out."),
@@ -118,6 +120,7 @@ extension Sentry {
     struct IssueEvent: ServiceOperation {
         struct Input: Decodable, Sendable { let issue: String }
         static let name = "issue-event"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "An issue's latest event: its exception and the frames in the service's own code, the request, the user and its tags."
         static let input = JSONSchema.object(["issue": .string("The issue's ID, from issues.")], required: ["issue"])
 

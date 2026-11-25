@@ -288,6 +288,7 @@ extension Entra {
     struct SecurityEvents: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, until: String? }
         static let name = "security-events"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "What the alert watch wakes for, for a window, newest first and each kind in turn: privileged directory roles granted, made eligible or activated, secrets or certificates added to apps, admin consent and consent to high-privilege permissions, federation and domains changed, Conditional Access policies and named locations changed or deleted, sign-in methods changed by an admin, and users and sign-ins Identity Protection rates at high risk; saying, for each feed, what it searched, what is off, what it could not read and why, and what it does not watch."
         static let input = JSONSchema.object([
             "since": .string("The earliest time, in ISO 8601. The last 24 hours when left out, at most 30 days."),

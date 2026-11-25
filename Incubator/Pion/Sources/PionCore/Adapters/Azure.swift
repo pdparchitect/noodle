@@ -53,9 +53,14 @@ public enum Azure {
         "Copy the **Subscription ID** from the subscription's **Overview**, and the **Directory (tenant) ID** and **Application (client) ID** from the app's **Overview**. Then choose **Add & Connect** and ask an agent to run check-access.",
     ]
 
-    public static let adapter = OperationAdapter(operations: [
+    /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
+    static let operations: [any ServiceOperation] = [
         ActivityLog(), SecurityEvents(), DefenderAlerts(), ResourceGraph(), RoleAssignments(), DenyAssignments(), CheckAccess(),
-    ], trigger: NewSecurityEvents())
+        RemoveRoleAssignment(), DeallocateVM(), IsolateVM(), UnisolateVM(), RotateStorageKey(), RestrictStorage(), AddLock(), SnapshotDisk(),
+        SetAlertStatus(), CloseAlert(), OperationStatus(), ContainmentCheckAccess(),
+    ]
+
+    public static let adapter = OperationAdapter(operations: operations, job: .detection, trigger: NewSecurityEvents())
 
     // MARK: Versions and limits
 
@@ -268,6 +273,7 @@ extension Azure {
             let failuresOnly: Bool?, since: String?, until: String?, limit: Int?
         }
         static let name = "activity-log"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Subscription activity log events, newest first, by time, caller, one of resource group, resource, resource provider or correlation ID, operation and outcome, with each event's caller IP, claims, the permission it used and its correlation ID, saying when it stopped before reading everything."
         static let input = JSONSchema.object([
             "caller": .string("Only this caller: a user's sign-in name or an app's ID, as the log records it."),
@@ -381,6 +387,7 @@ extension Azure {
     struct DefenderAlerts: ServiceOperation {
         struct Input: Decodable, Sendable { let severity: String?, status: String?, since: String?, limit: Int? }
         static let name = "defender-alerts"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Microsoft Defender for Cloud alerts, newest first, by severity, status and time, with their entities, techniques and evidence."
         static let input = JSONSchema.object([
             "severity": .string("The severity.", oneOf: ["Informational", "Low", "Medium", "High"]),
@@ -415,6 +422,7 @@ extension Azure {
     struct ResourceGraph: ServiceOperation {
         struct Input: Decodable, Sendable { let query: String }
         static let name = "resource-graph"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Run a KQL query over the subscription's resources and return its columns and rows, saying when more matched than were read. Read-only."
         static let input = JSONSchema.object(["query": .string("The KQL query. End with take or summarize to keep results small.")], required: ["query"])
 
@@ -461,6 +469,7 @@ extension Azure {
     struct RoleAssignments: ServiceOperation {
         struct Input: Decodable, Sendable { let principalId: String?, atScope: Bool? }
         static let name = "role-assignments"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Who has access to the subscription, with each assignment's role name and scope, and the roles eligible through Privileged Identity Management, saying what it does not cover."
         static let input = JSONSchema.object([
             "principalId": .string("Only this principal's object ID."),
@@ -530,6 +539,7 @@ extension Azure {
     struct DenyAssignments: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "deny-assignments"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Deny assignments on the subscription: which actions are denied to whom, at which scope, and who is exempt."
         static let input = JSONSchema.object([:])
 
@@ -565,6 +575,7 @@ extension Azure {
     struct CheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Tries each thing this tool reads once and says what works and, for what does not, exactly what to change: a role, the subscription or tenant, or the app's secret; which Defender for Cloud plans are on, as only they raise threat alerts; whether the directory activity log, where elevated access is recorded, can be read; and whether the app could change anything. It changes nothing."
         static let input = JSONSchema.object([:])
 

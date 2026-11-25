@@ -52,6 +52,7 @@ extension Proofpoint {
     struct SIEMEvents: ServiceOperation {
         struct Input: Decodable, Sendable { let minutes: Int? }
         static let name = "siem-events"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Threat messages delivered and blocked, and clicks on threat links permitted and blocked, over the last minutes, up to an hour."
         static let input = JSONSchema.object(["minutes": .integer("How far back, in minutes. 60 when left out.", minimum: 1, maximum: 60)])
 

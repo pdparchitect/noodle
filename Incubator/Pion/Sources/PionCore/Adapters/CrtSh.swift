@@ -60,6 +60,7 @@ public enum CrtSh {
     struct Certificates: ServiceOperation {
         struct Input: Decodable, Sendable { let domain: String, subdomains: Bool?, expired: Bool?, limit: Int? }
         static let name = "certificates"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "The hosts under a domain and the other domains they share certificates with, from every certificate issued for its names, newest first."
         static let input = JSONSchema.object([
             "domain": .string("The domain, such as example.com."),

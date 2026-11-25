@@ -92,6 +92,7 @@ extension Cloudflare {
     struct AccessLogs: ServiceOperation {
         struct Input: Decodable, Sendable { let email: String?, blocked: Bool?, since: String?, until: String?, limit: Int? }
         static let name = "access-logs"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Access authentication logs, newest first: who signed in to which Access application, allowed or blocked, from which IP address and country, by person, outcome and time; says when more matched than it kept."
         static let input = JSONSchema.object([
             "email": .string("Only logins by this email address, exactly."),
@@ -165,6 +166,7 @@ extension Cloudflare {
     struct AccessApps: ServiceOperation {
         struct Input: Decodable, Sendable { let search: String?, limit: Int? }
         static let name = "access-apps"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Access applications, with each one's ID, type, domain, session length and when it last changed, optionally whose name or domain contains some words; access-app reads one with its policies. Says when it read only part."
         static let input = JSONSchema.object([
             "search": .string("Only applications whose name or domain contains this."),
@@ -189,6 +191,7 @@ extension Cloudflare {
     struct AccessApp: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String }
         static let name = "access-app"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "One Access application by its ID, with every policy that applies to it in order, reusable ones included: each one's decision (allow, deny, bypass or service auth), who it includes, requires and excludes, and when it last changed. Bypass and service-auth policies are evaluated first, then the rest in order."
         static let input = JSONSchema.object(["id": .string("The application's ID, a UUID, as access-apps lists it.")], required: ["id"])
 
@@ -238,6 +241,7 @@ extension Cloudflare {
     struct AccessUsers: ServiceOperation {
         struct Input: Decodable, Sendable { let search: String?, limit: Int? }
         static let name = "access-users"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Zero Trust users, with each one's ID, email, last successful login, active devices and seats, optionally whose name or email contains some words; access-user reads one with its sessions. Says when it read only part."
         static let input = JSONSchema.object([
             "search": .string("Only users whose name or email contains this."),
@@ -301,6 +305,7 @@ extension Cloudflare {
     struct AccessUser: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String }
         static let name = "access-user"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "One Zero Trust user by email or ID: last successful login, active devices and seats, every active Access session with the applications it reaches and when it expires, and what Cloudflare last saw of their identity: address, country, identity provider, device and its posture results. Says what it could not read."
         static let input = JSONSchema.object(["user": .string("The user's email address, or their ID as access-users gives it.")], required: ["user"])
 
@@ -348,6 +353,7 @@ extension Cloudflare {
     struct GatewayActivity: ServiceOperation {
         struct Input: Decodable, Sendable { let kind: String?, since: String?, until: String?, limit: Int? }
         static let name = "gateway-activity"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "Gateway's decisions for a window, from Cloudflare's GraphQL Analytics API, which gives them only as counts by group: DNS queries by domain and resolver decision, HTTP requests by host and action, or how many network sessions there were. Cloudflare samples these, so counts are estimates; per-person and per-device logs come only from Logpush or the dashboard."
         static let input = JSONSchema.object([
             "kind": .string("Which decisions. dns when left out.", oneOf: Cloudflare.gatewayKinds),
@@ -431,6 +437,7 @@ extension Cloudflare {
     struct GatewayRules: ServiceOperation {
         struct Input: Decodable, Sendable { let kind: String? }
         static let name = "gateway-rules"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Gateway's policies in order of precedence: each one's action, the traffic it applies to (DNS, HTTP, network), its expression, identity and device posture conditions, whether it is turned off, and when it last changed; a rule turned off or an allow ahead of a block can open a path. Says when it read only part."
         static let input = JSONSchema.object(["kind": .string("Only rules on this traffic.", oneOf: ["dns", "http", "l4", "egress", "dns_resolver"])])
 
@@ -451,6 +458,7 @@ extension Cloudflare {
     struct GatewayLists: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String? }
         static let name = "gateway-lists"
+        static let jobs: Set<ToolJob> = [.audit]
         static let summary = "Gateway's lists, such as domains, IP addresses or URLs that rules name, with each one's ID, type, how many items it holds and when it changed; with an ID, that list's items in full. Says when it read only part."
         static let input = JSONSchema.object(["id": .string("A list's ID, a UUID, to read its items.")])
 
@@ -496,6 +504,7 @@ extension Cloudflare {
     struct Devices: ServiceOperation {
         struct Input: Decodable, Sendable { let search: String?, status: String?, seenSince: String?, limit: Int? }
         static let name = "devices"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "WARP device registrations, most recently seen first: each device and its registration ID, its user, whether it is revoked or deleted, its client and version, its device profile and when last seen, by search, status and time. Cloudflare gives no posture results per device; access-user gives those of a user's last seen device. Says when more matched than it kept."
         static let input = JSONSchema.object([
             "search": .string("Only registrations whose details, such as the device's name or user's email, contain this."),
@@ -528,6 +537,7 @@ extension Cloudflare {
     struct Tunnels: ServiceOperation {
         struct Input: Decodable, Sendable { let id: String?, includeDeleted: Bool? }
         static let name = "tunnels"
+        static let jobs: Set<ToolJob> = [.detection, .audit]
         static let summary = "Cloudflare Tunnels, with each one's ID, status (healthy, degraded, down or inactive), when it was made and last connected or disconnected; with an ID, that tunnel's connectors and their connections: the data centre, origin IP address, version and when each opened. A tunnel nobody expected is a way into the network. Says when it read only part."
         static let input = JSONSchema.object([
             "id": .string("A tunnel's ID, a UUID, to read its connections."),

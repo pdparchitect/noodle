@@ -633,6 +633,7 @@ extension GoogleCloud {
     struct SecurityEvents: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, until: String?, project: String?, resourceNames: [String]? }
         static let name = "security-events"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "What the alert watch wakes for, for a window, newest first and each kind in turn: Security Command Center's active, unmuted, high and critical findings, threats first, and the Admin Activity audit log entries across the scope that open the way in or hide what follows: service account keys made or uploaded, owner, editor, token creator and other powerful roles granted, anything granted to everyone, Data Access logging turned off, log sinks, exclusions and buckets changed, workload identity federation set up, security organisation policies loosened, firewalls opened to the internet, SSH keys planted, projects deleted, data made public, VMs made with GPUs or in numbers, service accounts made and encryption keys destroyed, reading first where the watch found what it woke the agents for, saying what it searched and what it could not; project or resourceNames read only those."
         static let input = JSONSchema.object([
             "since": .string("The earliest time, in ISO 8601. The last 24 hours when left out."),

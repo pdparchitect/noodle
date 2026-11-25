@@ -28,6 +28,7 @@ extension Shodan {
     struct HostReport: ServiceOperation {
         struct Input: Decodable, Sendable { let ip: String }
         static let name = "host-report"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "An IP address's open ports and services, known vulnerabilities, hostnames, owner and location, as Shodan last saw them."
         static let input = JSONSchema.object(["ip": .string("An IPv4 or IPv6 address.")], required: ["ip"])
 
@@ -78,6 +79,7 @@ extension Shodan {
     struct Resolve: ServiceOperation {
         struct Input: Decodable, Sendable { let hostnames: [String] }
         static let name = "dns-resolve"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "The IP address each hostname resolves to."
         static let input = JSONSchema.object(["hostnames": .array(.string("A hostname."), "Up to 20 hostnames.")], required: ["hostnames"])
 
@@ -93,6 +95,7 @@ extension Shodan {
     struct Reverse: ServiceOperation {
         struct Input: Decodable, Sendable { let ips: [String] }
         static let name = "dns-reverse"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "The hostnames each IP address points back to."
         static let input = JSONSchema.object(["ips": .array(.string("An IPv4 or IPv6 address."), "Up to 20 addresses.")], required: ["ips"])
 

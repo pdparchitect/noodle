@@ -58,10 +58,7 @@ extension Okta {
         "Give your org's domain, such as `acme.okta.com`, and the app's **Client ID**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
 
-    public static let containmentAdapter = OperationAdapter(operations: [
-        ContainmentUser(), Suspend(), Unsuspend(), Deactivate(), ClearSessions(), ResetFactors(), DeleteFactor(), ExpirePassword(),
-        RemoveFromGroup(), RevokeAdminRole(), RevokeAppGrants(), RevokeAPIToken(), ContainmentCheckAccess(),
-    ], simultaneousRequests: 4)
+    public static let containmentAdapter = OperationAdapter(operations: operations, job: .containment, simultaneousRequests: 4)
 
     // MARK: Who is acted on
 
@@ -159,6 +156,7 @@ extension Okta {
     struct ContainmentUser: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String }
         static let name = "user"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "A user's state before acting: status, last sign-in, admin roles with each assignment's ID and whether held through a group, groups with their IDs and types, sign-in factors with their IDs, and how many apps they granted access. It changes nothing."
         static let input = JSONSchema.object(["user": Okta.userField], required: ["user"])
 
@@ -206,6 +204,7 @@ extension Okta {
     struct Suspend: ServiceOperation {
         typealias Input = UserInput
         static let name = "suspend"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: unsuspend restores sign-in, with the user's groups and apps as they were; sessions ended meanwhile are not restored. Suspending does not end sessions already open: clear-sessions does."
         static let summary = "Suspend an active user, so they cannot sign in to Okta. \(recovery)"
         static let input = Okta.userSchema
@@ -226,6 +225,7 @@ extension Okta {
     struct Unsuspend: ServiceOperation {
         typealias Input = UserInput
         static let name = "unsuspend"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: suspend again. Restoring access can let an attacker back in, so before it reset their factors and password and revoke their app grants, as the champion decides."
         static let summary = "Restore a suspended user's sign-in. Held like the rest, as it gives access back. \(recovery)"
         static let input = Okta.userSchema
@@ -245,6 +245,7 @@ extension Okta {
     struct Deactivate: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String; let allowSuperAdmin: Bool?; let confirmDeprovision: Bool? }
         static let name = "deactivate"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: there is no simple undo. Okta deprovisions the user from every app, which may delete their data there; reactivating needs a new activation, and their app access and data must be restored by hand. Prefer suspend."
         static let summary = "Deactivate a user, only with confirmDeprovision set: it ends their sign-in and deprovisions them from every app. \(recovery)"
         static let input = JSONSchema.object(["user": Okta.userField, "allowSuperAdmin": Okta.superAdminField,
@@ -270,6 +271,7 @@ extension Okta {
     struct ClearSessions: ServiceOperation {
         typealias Input = UserInput
         static let name = "clear-sessions"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: nothing to restore; the user signs in afresh, and OAuth apps need a new sign-in and re-consent. Sessions apps keep for themselves are not ended by Okta: end those in each app."
         static let summary = "End every Okta session of a user, revoke the OAuth and OpenID Connect tokens Okta issued them and forget their remembered devices. \(recovery)"
         static let input = Okta.userSchema
@@ -290,6 +292,7 @@ extension Okta {
     struct ResetFactors: ServiceOperation {
         typealias Input = UserInput
         static let name = "reset-factors"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: the user must re-enroll every MFA factor at their next sign-in, so make sure it is them, as whoever signs in next enrolls."
         static let summary = "Reset all of a user's sign-in factors, so an attacker's push, phone or key no longer works, listing those removed. \(recovery)"
         static let input = Okta.userSchema
@@ -312,6 +315,7 @@ extension Okta {
     struct DeleteFactor: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String; let factor: String; let allowSuperAdmin: Bool? }
         static let name = "delete-factor"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: the user must enroll that factor again."
         static let summary = "Remove one of a user's sign-in factors, by its ID from user, such as a phone an attacker enrolled. \(recovery)"
         static let input = JSONSchema.object(["user": Okta.userField, "factor": .string("The factor's ID, as user lists it."), "allowSuperAdmin": Okta.superAdminField],
@@ -340,6 +344,7 @@ extension Okta {
     struct ExpirePassword: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String; let allowSuperAdmin: Bool? }
         static let name = "expire-password"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: the user must change their password at their next sign-in. Expiry alone does not stop a stolen password, as whoever signs in first with it chooses the new one: suspend or clear sessions too. If the user needs a temporary password, an admin issues one in the Okta Admin Console; Pion never makes one."
         static let summary = "Expire a user's password, so it must be changed at their next sign-in. \(recovery)"
         static let input = Okta.userSchema
@@ -360,6 +365,7 @@ extension Okta {
     struct RemoveFromGroup: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String; let groups: [String]; let allowSuperAdmin: Bool? }
         static let name = "remove-from-group"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: re-add the user to each group by hand; a group rule may add them back by itself, so check the group's rules."
         static let summary = "Remove a user from one or more Okta groups, by their IDs from user, ending the apps and roles each gave; checks every group first and reports each removal. \(recovery)"
         static let input = JSONSchema.object(["user": Okta.userField, "groups": .array(.string("A group's ID, 00g…."), "Between 1 and 20 groups."),
@@ -398,6 +404,7 @@ extension Okta {
     struct RevokeAdminRole: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String; let assignments: [String]; let allowSuperAdmin: Bool? }
         static let name = "revoke-admin-role"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: re-assign each role by hand in Security › Administrators."
         static let summary = "Revoke one or more admin roles a user holds directly, by their assignment IDs from user; roles held through a group are refused, as they are the group's. Okta lets only a super administrator do this. \(recovery)"
         static let input = JSONSchema.object(["user": Okta.userField, "assignments": .array(.string("A role assignment's ID, as user lists it."), "Between 1 and 20 assignments."),
@@ -431,6 +438,7 @@ extension Okta {
     struct RevokeAppGrants: ServiceOperation {
         struct Input: Decodable, Sendable { let user: String; let grant: String?; let allowSuperAdmin: Bool? }
         static let name = "revoke-app-grants"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: the user must consent to each app again; an admin-granted consent must be granted again by an admin."
         static let summary = "Revoke every OAuth grant a user gave apps, or one by its ID from Okta Detection's user-grants, so the apps can no longer act for them. \(recovery)"
         static let input = JSONSchema.object(["user": Okta.userField, "grant": .string("Only this grant's ID. Every grant when left out."),
@@ -461,6 +469,7 @@ extension Okta {
     struct RevokeAPIToken: ServiceOperation {
         struct Input: Decodable, Sendable { let token: String }
         static let name = "revoke-api-token"
+        static let jobs: Set<ToolJob> = [.containment]
         static let recovery = "Recovery: none. A revoked token is gone for good; whatever used it needs a new token made by an admin."
         static let summary = "Revoke one API token, by its ID from Okta Detection's api-tokens, saying whose it was. This connection signs in through OAuth, not with an API token. \(recovery)"
         static let input = JSONSchema.object(["token": .string("The API token's ID, 00T….")], required: ["token"])
@@ -498,6 +507,7 @@ extension Okta {
     struct ContainmentCheckAccess: ServiceOperation {
         struct Input: Decodable, Sendable {}
         static let name = "check-access"
+        static let jobs: Set<ToolJob> = [.containment]
         static let summary = "Reads the admin roles of the signed-in admin and says which containment operations they allow, what permission to add for the rest, and when they allow far more; and which scopes the sign-in holds. It changes nothing."
         static let input = JSONSchema.object([:])
 

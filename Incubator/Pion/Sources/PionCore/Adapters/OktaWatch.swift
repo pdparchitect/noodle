@@ -151,6 +151,7 @@ extension Okta {
     struct SecurityEvents: ServiceOperation {
         struct Input: Decodable, Sendable { let since: String?, until: String? }
         static let name = "security-events"
+        static let jobs: Set<ToolJob> = [.detection]
         static let summary = "What the alert watch wakes for, for a window, newest first and each kind in turn: admin roles granted to users or groups, API tokens created, sign-in factors changed or reset by someone other than their user, policies and policy rules turned off or changed, admins impersonating users, identity providers and apps added, network zones changed, threats ThreatInsight detected, suspicious activity users reported and org rate limits hit; saying what it searched, whether it read everything and why not, and what it does not watch."
         static let input = JSONSchema.object([
             "since": .string("The earliest time, in ISO 8601. The last 24 hours when left out, at most 90 days."),
