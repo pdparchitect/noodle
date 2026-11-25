@@ -90,18 +90,4 @@ extension PionModel {
         }
         if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: save) } else { panel.begin(completionHandler: save) }
     }
-
-    /// Asks where to save an Assessment's report, named after it and its latest run's date, then writes it there.
-    func exportReport(_ assessment: Investigation) {
-        guard canExportReport(assessment) else { return }
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [UTType("net.daringfireball.markdown") ?? UTType(filenameExtension: "md") ?? .plainText]
-        panel.nameFieldStringValue = AssessmentReport.fileName(of: assessment, runs: assessmentRuns(assessment.id))
-        let save = { [weak self] (response: NSApplication.ModalResponse) in
-            guard response == .OK, let destination = panel.url, let self else { return }
-            do { try self.writeReport(of: assessment, to: destination) }
-            catch { self.problem = "\(assessment.reference)'s report could not be exported: \(error.localizedDescription)" }
-        }
-        if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: save) } else { panel.begin(completionHandler: save) }
-    }
 }

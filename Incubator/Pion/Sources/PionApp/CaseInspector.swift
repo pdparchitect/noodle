@@ -47,7 +47,6 @@ struct CaseRecordView: View {
         let record = model.caseRecord(investigation.id)
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if investigation.isAssessment { ChecksSection(model: model, investigation: investigation) }
                 if let note = investigation.closingNote {
                     VStack(alignment: .leading, spacing: 6) {
                         Heading(title: "Closing Note")
@@ -74,109 +73,12 @@ struct CaseRecordView: View {
                         }
                     }
                 }
-                if record.entities.isEmpty && record.evidence.isEmpty && record.findings.isEmpty && !investigation.isAssessment {
+                if record.entities.isEmpty && record.evidence.isEmpty && record.findings.isEmpty {
                     Text("No records yet.").font(.callout).foregroundStyle(.secondary)
                 }
             }
             .padding(14)
         }
-    }
-}
-
-/// An Assessment's checks as the latest run left them, the only results that stand now, each marked new or fixed
-/// against the run before.
-private struct ChecksSection: View {
-    let model: PionModel
-    let investigation: Investigation
-
-    var body: some View {
-        let runs = model.assessmentRuns(investigation.id)
-        VStack(alignment: .leading, spacing: 6) {
-            Heading(title: "Checks", count: runs.last?.results.count)
-            if let latest = runs.last {
-                let before = runs.dropLast().last.map { Dictionary($0.results.map { ($0.checkID, $0.status) }, uniquingKeysWith: { first, _ in first }) }
-                // A problem every check that couldn't run shares is said here once, not on each.
-                let shared = latest.sharedProblem?.reason
-                let notes = [latest.sharedProblemLine, latest.policyGaps.map { "Policy incomplete: \($0)." }].compactMap { $0 }
-                Text((["\(latest.tally) Last run \(latest.date.pionShort)\(latest.connection.map { " on \($0)" } ?? "")."] + notes)
-                    .joined(separator: " "))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                ForEach(latest.results, id: \.checkID) { result in
-                    CheckRow(result: result, previous: before.map { $0[result.checkID] }, saysReason: result.reason != shared)
-                }
-            } else {
-                Text(model.isRunningChecks(investigation.id) ? "Running checks…" : "No checks run yet.")
-                    .font(.callout).foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
-private struct CheckRow: View {
-    let result: CheckResult
-    /// The check's status in the run before, nil when it had none; nil altogether on the first run.
-    let previous: CheckStatus??
-    /// False when the section already said why it couldn't run, as the reason many shared.
-    var saysReason = true
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: symbol).foregroundStyle(color).frame(width: 16)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(result.title).font(.callout).fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 4)
-                    if let change { Tag(text: change.text, color: change.color) }
-                    Tag(text: result.severity.title, color: result.status == .fail ? result.severity.color : .secondary)
-                }
-                if result.status == .couldNotRun, saysReason, let reason = result.reason {
-                    Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                }
-            }
-        }
-        .contentShape(Rectangle())
-        .help(detail)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(result.title): \(result.status.title)")
-        .contextMenu {
-            Button("Copy", systemImage: "doc.on.doc") { copyText("\(result.title): \(result.status.title). \(detail)") }
-        }
-    }
-
-    private var detail: String {
-        var lines = [result.summary ?? result.reason ?? result.status.title]
-        if result.offenderCount > 0 {
-            let shown = result.offenders.prefix(10)
-            lines.append(shown.joined(separator: ", ") + (result.offenderCount > shown.count ? ", and \(result.offenderCount - shown.count) more" : ""))
-        }
-        let cited = [result.evidenceID, result.findingID].compactMap { $0 }
-        if !cited.isEmpty { lines.append(cited.joined(separator: ", ")) }
-        return lines.joined(separator: "\n")
-    }
-
-    private var symbol: String {
-        switch result.status {
-        case .pass: "checkmark.circle.fill"
-        case .fail: "xmark.octagon.fill"
-        case .couldNotRun: "questionmark.circle"
-        }
-    }
-
-    private var color: Color {
-        switch result.status {
-        // Monochrome, as Pion is: a failure stands out by its weight, and in red only when critical.
-        case .pass, .couldNotRun: .secondary
-        case .fail: result.severity.color
-        }
-    }
-
-    /// New where it fails now but didn't before; Fixed where it passes now but failed before.
-    private var change: (text: String, color: Color)? {
-        guard case .some(let before) = previous else { return nil }
-        if result.status == .fail, before != .fail { return ("New", .primary) }
-        if result.status == .pass, before == .fail { return ("Fixed", .secondary) }
-        return nil
     }
 }
 

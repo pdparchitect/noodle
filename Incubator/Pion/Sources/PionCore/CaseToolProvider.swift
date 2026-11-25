@@ -245,7 +245,6 @@ public struct CaseToolProvider: ToolProvider {
             switch actor {
             case .agent(let id): agentName(id) ?? "an agent"
             case .champion(let name): name + " (champion)"
-            case .checks(let champion): "Pion's checks, run by \(champion)"
             }
         }
         var lines = [
@@ -254,9 +253,6 @@ public struct CaseToolProvider: ToolProvider {
             "Champion: \(investigation.champion). Lead: \(lead.flatMap(agentName) ?? "none, until the champion chooses one").",
             "Objective: \(investigation.objective)",
         ]
-        if investigation.isAssessment {
-            lines.append("Kind: Assessment. Pion's checks recorded each result as evidence and each failure as a finding; explain and prioritise them, don't add checks.")
-        }
         lines.append("\nEntities (\(record.entities.count)):")
         lines += record.entities.map { "- \($0.id) \($0.kind.rawValue) \($0.name)\($0.detail.map { ": \($0)" } ?? "") [last seen \(date.string(from: $0.lastSeen))]" }
         lines.append("\nEvidence (\(record.evidence.count)):")

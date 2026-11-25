@@ -164,11 +164,10 @@ struct Sidebar: View {
             ToolbarItem {
                 Menu {
                     Button("New Investigation") { window.sheet = .newInvestigation }.disabled(model.agents.isEmpty)
-                    Button("New Assessment") { window.sheet = .newAssessment }.disabled(model.agents.isEmpty)
                     Button("New Group") { window.sheet = .newGroup }.disabled(model.agents.isEmpty)
                     Button("New Agent") { window.sheet = .newAgent }
                 } label: { Label("New", systemImage: "plus") }
-                    .help("New Investigation, Assessment, Group or Agent")
+                    .help("New Investigation, Group or Agent")
             }
         }
     }
@@ -310,18 +309,8 @@ struct ConversationPicture: View {
 
     var body: some View {
         if let investigation = model.investigation(conversation.id) {
-            if investigation.isAssessment {
-                // An Assessment holds a setup to a policy rather than rating something that happened.
-                Image(systemName: "checklist")
-                    .font(.system(size: size * 0.7))
-                    .foregroundStyle(investigation.isClosed ? Color.secondary.opacity(0.6) : Color.secondary)
-                    .frame(width: size, height: size)
-                    .help("Assessment")
-                    .accessibilityLabel("Assessment")
-            } else {
-                SeverityGlyph(severity: investigation.severity, closed: investigation.isClosed)
-                    .scaleEffect(size / 18).frame(width: size, height: size)
-            }
+            SeverityGlyph(severity: investigation.severity, closed: investigation.isClosed)
+                .scaleEffect(size / 18).frame(width: size, height: size)
         } else if conversation.kind == .direct, let agent = model.agent(conversation.participantIDs.first) {
             AgentMark(agent: agent, size: size, phase: model.phase(of: agent))
         } else {
@@ -435,18 +424,8 @@ struct InvestigationRow: View {
     var body: some View {
         SidebarItemRow(title: investigation.title, detail: investigation.sidebarDetail,
                        timestamp: SidebarTimestamp.text(for: investigation.updatedAt)) { size in
-            if investigation.isAssessment {
-                // An Assessment holds a setup to a policy rather than rating something that happened.
-                Image(systemName: "checklist")
-                    .font(.system(size: size * 0.7))
-                    .foregroundStyle(investigation.isClosed ? Color.secondary.opacity(0.6) : Color.secondary)
-                    .frame(width: size, height: size)
-                    .help("Assessment")
-                    .accessibilityLabel("Assessment")
-            } else {
-                SeverityGlyph(severity: investigation.severity, closed: investigation.isClosed)
-                    .scaleEffect(size / 18).frame(width: size, height: size)
-            }
+            SeverityGlyph(severity: investigation.severity, closed: investigation.isClosed)
+                .scaleEffect(size / 18).frame(width: size, height: size)
         }
         .modifier(UnreadMark(model: model, id: investigation.id))
     }

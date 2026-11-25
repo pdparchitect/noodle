@@ -311,8 +311,6 @@ struct PionCommands: Commands {
             Button("New Investigation") { activeWindow.sheet = .newInvestigation }
                 .appShortcut(PionShortcuts.newInvestigation)
                 .disabled(model.agents.isEmpty)
-            Button("New Assessment") { activeWindow.sheet = .newAssessment }
-                .disabled(model.agents.isEmpty)
             Button("New Group") { activeWindow.sheet = .newGroup }
                 .appShortcut(PionShortcuts.newGroup)
                 .disabled(model.agents.isEmpty)

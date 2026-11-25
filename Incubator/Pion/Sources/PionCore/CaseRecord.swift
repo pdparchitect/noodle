@@ -1,18 +1,15 @@
 import Foundation
 
-/// Who wrote something into a case: an agent, the champion, or Pion's checks, which the champion ran.
+/// Who wrote something into a case: an agent or the champion.
 public enum CaseActor: Codable, Hashable, Sendable {
     case agent(UUID)
     case champion(String)
-    /// An Assessment's checks, run by the champion named: what they record is the checks' reading, not the person's.
-    case checks(champion: String)
 
-    private enum CodingKeys: String, CodingKey { case agent, champion, checks }
+    private enum CodingKeys: String, CodingKey { case agent, champion }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         if let id = try container.decodeIfPresent(UUID.self, forKey: .agent) { self = .agent(id) }
-        else if let champion = try container.decodeIfPresent(String.self, forKey: .checks) { self = .checks(champion: champion) }
         else { self = .champion(try container.decode(String.self, forKey: .champion)) }
     }
 
@@ -21,7 +18,6 @@ public enum CaseActor: Codable, Hashable, Sendable {
         switch self {
         case .agent(let id): try container.encode(id, forKey: .agent)
         case .champion(let name): try container.encode(name, forKey: .champion)
-        case .checks(let champion): try container.encode(champion, forKey: .checks)
         }
     }
 }

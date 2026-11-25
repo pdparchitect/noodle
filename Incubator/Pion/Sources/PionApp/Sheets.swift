@@ -17,14 +17,12 @@ struct ConversationSheets: ViewModifier {
         content.sheet(item: $window.sheet) { sheet in
             switch sheet {
             case .newInvestigation: NewInvestigationSheet(model: model)
-            case .newAssessment: NewInvestigationSheet(model: model, kind: .assessment)
             case .newGroup: GroupEditorSheet(model: model)
             case .newAgent: AgentEditorSheet(model: model)
             case .editAgent(let agent): AgentEditorSheet(model: model, agent: model.agent(agent.id) ?? agent)
             case .editGroup(let group): GroupEditorSheet(model: model, group: model.conversation(group.id) ?? group)
             case .editInvestigation(let investigation): NewInvestigationSheet(model: model, investigation: model.investigation(investigation.id) ?? investigation)
             case .close(let investigation): CloseInvestigationSheet(model: model, investigation: investigation)
-            case .editPolicy(let assessment): EditPolicySheet(model: model, assessment: model.investigation(assessment.id) ?? assessment)
             }
         }
     }
@@ -99,28 +97,16 @@ private struct SheetNoteEditor: View {
     }
 }
 
-/// A new or edited Investigation, or a new Assessment, which also answers its policy.
 struct NewInvestigationSheet: View {
     let model: PionModel
     let investigation: Investigation?
-    private let kind: Investigation.Kind
     @State private var draft = PionModel.Draft()
-    @State private var policy = AssessmentPolicy()
-    @State private var policyBody = ""
-    @State private var keepsTemplate = false
     @State private var loaded = false
     @State private var error: String?
     @FocusState private var titleFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
-    init(model: PionModel, investigation: Investigation? = nil, kind: Investigation.Kind = .investigation) {
-        self.model = model; self.investigation = investigation
-        self.kind = investigation?.kind ?? kind
-    }
-
-    private var noun: String { kind == .assessment ? "Assessment" : "Investigation" }
-    /// Only a new Assessment answers its policy here; an open one's is changed with Edit Policy….
-    private var answersPolicy: Bool { kind == .assessment && investigation == nil }
+    init(model: PionModel, investigation: Investigation? = nil) { self.model = model; self.investigation = investigation }
 
     private var canSave: Bool {
         loaded && investigation?.isClosed != true && !draft.members.isEmpty
@@ -129,12 +115,12 @@ struct NewInvestigationSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(heading: investigation == nil ? "New \(noun)" : "Edit \(noun)", title: investigation == nil ? "Create" : "Save",
+            SheetHeader(heading: investigation == nil ? "New Investigation" : "Edit Investigation", title: investigation == nil ? "Create" : "Save",
                         enabled: canSave, action: save)
             Divider()
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 14) {
-                    SymbolMark(symbol: kind == .assessment ? "checklist" : "shield.lefthalf.filled", size: 56)
+                    SymbolMark(symbol: "shield.lefthalf.filled", size: 56)
                     VStack(alignment: .leading, spacing: 5) {
                         TextField("Title", text: $draft.title, axis: .horizontal)
                             .lineLimit(1)
@@ -148,16 +134,11 @@ struct NewInvestigationSheet: View {
                     }
                 }
                 // As Noodle's group sheets: what it is for, who is on it, then the folders they share.
-                SheetDescriptionField(title: "Objective", prompt: "Describe what this \(noun.lowercased()) must establish…", text: $draft.objective,
+                SheetDescriptionField(title: "Objective", prompt: "Describe what this investigation must establish…", text: $draft.objective,
                                       footnote: "Shared with every agent on the team as the goal they work toward.")
                 GroupMemberPicker(model: model, selection: $draft.staff, lead: $draft.lead)
-                TeamFootnote(isNew: investigation == nil, setsSeverity: kind != .assessment, isEmpty: draft.members.isEmpty)
+                TeamFootnote(isNew: investigation == nil, setsSeverity: true, isEmpty: draft.members.isEmpty)
                 FoldersSettingsRow(folders: $draft.folders, owner: .group)
-                if answersPolicy {
-                    Divider()
-                    PolicyForm(policy: $policy, notes: $policyBody)
-                    Toggle("Start new Assessments from these answers", isOn: $keepsTemplate)
-                }
                 if let error { Text(error).foregroundStyle(.red).font(.callout) }
             }
             .padding(20)
@@ -166,11 +147,7 @@ struct NewInvestigationSheet: View {
             guard !loaded else { return }
             if let investigation, let group = model.conversation(investigation.id) {
                 draft = PionModel.Draft(title: investigation.title, objective: investigation.objective,
-                    lead: group.lead, staff: Set(group.participantIDs), folders: group.folders ?? [], kind: investigation.kind)
-            } else if kind == .assessment {
-                draft.title = "Google Workspace assessment"
-                draft.objective = "Hold how Google Workspace is set up to our policy: explain each check that fails, what it exposes and how urgent it is, and order the fixes."
-                (policy, policyBody) = model.policyTemplate
+                    lead: group.lead, staff: Set(group.participantIDs), folders: group.folders ?? [])
             }
             loaded = true
             titleFocused = true
@@ -184,9 +161,6 @@ struct NewInvestigationSheet: View {
         do {
             if let investigation {
                 try model.updateInvestigation(investigation, draft: draft)
-            } else if kind == .assessment {
-                let created = try model.openAssessment(draft, policy: policy, body: policyBody, keepingAsTemplate: keepsTemplate)
-                model.selection = created.id
             } else {
                 let created = try model.open(draft)
                 model.selection = created.id
@@ -550,125 +524,6 @@ struct CloseInvestigationSheet: View {
         }
         .frame(width: 480)
         .noodleSheetSizing()
-    }
-}
-
-/// An Assessment's policy, which its checks hold the service to from the next run on.
-struct EditPolicySheet: View {
-    let model: PionModel
-    let assessment: Investigation
-    @State private var policy = AssessmentPolicy()
-    @State private var policyBody = ""
-    @State private var loaded = false
-    @State private var error: String?
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(heading: "Edit Policy", title: "Save", enabled: loaded && !assessment.isClosed, action: save)
-            Divider()
-            VStack(alignment: .leading, spacing: 18) {
-                Text("\(assessment.reference) \(assessment.title)").font(.headline)
-                PolicyForm(policy: $policy, notes: $policyBody)
-                if let error { Text(error).foregroundStyle(.red).font(.callout) }
-            }
-            .padding(20)
-        }
-        .onAppear {
-            guard !loaded else { return }
-            policy = model.policy(of: assessment) ?? AssessmentPolicy()
-            policyBody = model.policyBody(of: assessment)
-            loaded = true
-        }
-        .frame(width: 540)
-        .noodleSheetSizing()
-    }
-
-    private func save() {
-        do {
-            try model.savePolicy(policy, body: policyBody, of: assessment)
-            dismiss()
-        } catch { self.error = error.localizedDescription }
-    }
-}
-
-/// The questions an Assessment's policy answers, each of which may stay unanswered, and the organisation's own words
-/// under them. A check whose answer is missing doesn't run.
-struct PolicyForm: View {
-    @Binding var policy: AssessmentPolicy
-    @Binding var notes: String
-    @State private var apps = ""
-    @State private var appsLoaded = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Policy").font(.caption.weight(.semibold))
-            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 8) {
-                GridRow {
-                    Text("2-step verification")
-                    answer($policy.twoStepVerification, [(.required, "Required"), (.optional, "Optional")])
-                }
-                GridRow {
-                    Text("Devices")
-                    answer($policy.devices, [(.companyOnly, "Company-owned only"), (.personalAllowed, "Personal allowed")])
-                }
-                GridRow {
-                    Text("Sharing outside")
-                    answer($policy.externalSharing, [(.notAllowed, "Not allowed"), (.trustedDomainsOnly, "Trusted domains only"), (.allowed, "Allowed")])
-                }
-                GridRow {
-                    Text("Super admins")
-                    count($policy.maxSuperAdmins, start: 3, range: 1...50, step: 1) { "At most \($0)" }
-                }
-                GridRow {
-                    Text("Inactive accounts")
-                    count($policy.inactiveAccountDays, start: 90, range: 1...730, step: 15) { "Unused for \($0) days" }
-                }
-                GridRow {
-                    Text("Stale devices")
-                    count($policy.staleDeviceDays, start: 90, range: 1...730, step: 15) { "Unsynced for \($0) days" }
-                }
-                GridRow {
-                    Text("Approved apps")
-                    TextField("OAuth client IDs, separated by commas", text: $apps)
-                        .textFieldStyle(.roundedBorder)
-                        .autocorrectionDisabled()
-                }
-            }
-            .font(.callout)
-            Text("Any answer left unanswered skips the checks that need it. An empty list of apps approves none.")
-                .font(.caption).foregroundStyle(.secondary)
-            SheetNoteEditor(title: "Notes", prompt: "Describe anything else the policy says, such as exceptions and who approved them…",
-                            text: $notes, footnote: "Kept with the policy for the team to read.")
-        }
-        .onAppear {
-            guard !appsLoaded else { return }
-            apps = policy.approvedApps?.joined(separator: ", ") ?? ""
-            appsLoaded = true
-        }
-        .onChange(of: apps) {
-            guard appsLoaded else { return }
-            policy.approvedApps = apps.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        }
-    }
-
-    private func answer<Value: Hashable>(_ value: Binding<Value?>, _ choices: [(Value, String)]) -> some View {
-        Picker("", selection: value) {
-            ForEach(choices, id: \.0) { Text($0.1).tag(Optional($0.0)) }
-            Divider()
-            Text("Unanswered").tag(Value?.none)
-        }
-        .labelsHidden()
-        .fixedSize()
-    }
-
-    /// A number, shown as unanswered until it is first changed, which starts from `start`.
-    private func count(_ value: Binding<Int?>, start: Int, range: ClosedRange<Int>, step: Int, label: @escaping (Int) -> String) -> some View {
-        Stepper(value: Binding(get: { value.wrappedValue ?? start }, set: { value.wrappedValue = $0 }), in: range, step: step) {
-            Text(value.wrappedValue.map(label) ?? "Unanswered")
-                .foregroundStyle(value.wrappedValue == nil ? .secondary : .primary)
-                .monospacedDigit()
-        }
     }
 }
 

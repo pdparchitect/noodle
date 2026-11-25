@@ -95,65 +95,9 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 
 </details>
 
-<details>
-<summary><b>Assessments</b></summary>
-
-An Assessment checks how a service is set up against your organisation's policy, rather than
-investigating something that happened. It is a conversation with a team and a case record,
-like an Investigation, and Pion's own checks do the reading. For now it covers Google Workspace;
-the [Google Workspace guide](docs/tools/google-workspace.md#assessments) lists its checks.
-
-**Starting one.** Choose **File → New Assessment**, pick the team and its lead, and answer the
-policy's questions:
-
-- whether 2-step verification is required;
-- whether devices must be company-owned or personal ones are allowed;
-- whether Drive files may be shared outside the organisation: not at all, only with trusted
-  domains, or freely;
-- how many super admins there may be;
-- after how many days without signing in an account counts as unused, and after how many days
-  unsynced a phone or tablet counts as stale;
-- which apps are approved, by their OAuth client IDs.
-
-Add any exceptions in your own words under **Notes**. An answer can stay unanswered: the checks
-that need it don't run, and the run is marked **policy incomplete** until you answer it with
-**Edit Policy…** in the Export menu. Turn on **Start new Assessments from these answers** to
-start the next one from the same answers.
-
-**Running the checks.** They run as soon as the Assessment opens, and again whenever you press
-**Run Checks**. They read only through the Google Workspace Detection connection given to an agent
-on the team, and only with tools that read; they never change anything. Each result goes into the
-case record as evidence, and each failure as a finding; the lead explains them and orders the
-fixes. The case record shows every check's latest result.
-
-**When a check can't run**, it says why:
-
-- No connection: no agent on the team holds Google Workspace Detection, or it needs signing in
-  again. When every check stopped for the same reason, Pion says it once.
-- An answer the policy doesn't give yet.
-- A limit of what Google lets Pion read, which is not an error: the checks of the organisation's
-  settings need a super admin to read them, which the setup keeps Pion's admin from being, and
-  each says where in the Admin console to check instead; a list too long to read whole can't
-  prove a pass. The checks of apps and domain-wide delegation go by Google's logs, which keep
-  about 180 days, so they say they can't see a grant older than that.
-
-**Running again.** Each run is compared with the one before. A failure that is unchanged keeps its
-finding; one whose offenders changed gets a new finding that replaces the old one; one that now
-passes gets a finding saying it is **fixed since the last run**. Only the latest run's results
-stand, though every earlier finding stays in the record.
-
-**The report.** **Export Report…** in the Export menu saves the latest run as a Markdown file,
-once the checks have run at least once: a summary, the failures most severe first with who or what
-fails each, why it matters, how to fix it, its evidence and the agents' notes, what changed since
-the run before, what couldn't be checked and why, what passed, and the policy as it stood.
-
-</details>
-
 ## Features
 
 - **Investigations** with a lead agent, a team, a severity and a status you control.
-- **Assessments** that check how Google Workspace is set up against your policy, run after run,
-  with a report to share.
 - **A case record** beside each one: findings with the evidence they cite, evidence with the
   query that produced it, and the entities involved.
 - **An Audit Log** of every change to the case, only ever added to.

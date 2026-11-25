@@ -37,20 +37,12 @@ public struct Investigation: Codable, Identifiable, Hashable, Sendable {
         public static func < (lhs: Self, rhs: Self) -> Bool { lhs.rank < rhs.rank }
     }
 
-    /// What it is for: an Investigation into something that happened, or an Assessment of how a service is set up,
-    /// against a policy, by Pion's checks.
-    public enum Kind: String, Codable, Sendable {
-        case investigation, assessment
-    }
-
     /// Unassessed first, then low to critical, for sorting.
     public var severityRank: Int { severity.map { Severity.allCases.firstIndex(of: $0)! + 1 } ?? 0 }
 
     public let id: UUID
     /// Shown as INV-0007; numbers are never reused.
     public let number: Int
-    /// Nil for an Investigation, as all were before Assessments, so their files read as they are.
-    public var kind: Kind?
     public var title: String
     public var objective: String
     public var status: Status
@@ -69,10 +61,9 @@ public struct Investigation: Codable, Identifiable, Hashable, Sendable {
 
     public init(id: UUID, number: Int, title: String, objective: String, severity: Severity? = nil,
                 champion: String, source: String? = nil,
-                status: Status = .open, kind: Kind? = nil, openedAt: Date = Date()) {
+                status: Status = .open, openedAt: Date = Date()) {
         self.id = id
         self.number = number
-        self.kind = kind
         self.title = title
         self.objective = objective
         self.status = status
@@ -85,7 +76,6 @@ public struct Investigation: Codable, Identifiable, Hashable, Sendable {
 
     public var reference: String { String(format: "INV-%04d", number) }
     public var isClosed: Bool { status == .closed }
-    public var isAssessment: Bool { kind == .assessment }
     /// What its severity reads as, "Unassessed" until the lead sets it.
     public var severityTitle: String { severity?.title ?? "Unassessed" }
 
