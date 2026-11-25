@@ -130,6 +130,10 @@ jobs:
         shell: zsh {0}
         run: zsh scripts/package-xcode-release.sh Pion "pion-v$PION_VERSION"
 
+      - name: Build the Setup Guide and User Guide
+        shell: zsh {0}
+        run: zsh scripts/build-guides.sh Pion "dist/pion-$PION_VERSION"
+
       - name: Save verified release assets
         run: cp "$RUNNER_TEMP/pion-notes.md" "dist/pion-$PION_VERSION/release-notes.md"
 

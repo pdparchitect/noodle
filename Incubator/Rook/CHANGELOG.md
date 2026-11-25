@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Help › Setup Guide** and **Help › User Guide** open PDF guides published with each release, also linked from the download page: the Setup Guide for whoever prepares Rook for a team, and the User Guide for the people using Rook. Both grow as the documentation does.
 - Before Rook is first used, after its welcome, it explains the risks of running autonomous attacking agents and asks you to type “I understand the risks” to accept them; Quit is the only other way out. It asks once.
 - A Mission has a Scope: one rule per line, such as `*.example.com`, `example.com`, `203.0.113.0/24` or an address, with `deny` in front of anything out of scope. Its agents are told the scope with the objective, again whenever it changes, and when they read the Mission. Only the champion sets it, and the audit log keeps each version.
 - A Mission's Linux computers reach the network only through a gateway of its own, which lets through its scope, the services opened under Exceptions and package sources such as Kali's, and stops everything else. Every kind of scan crosses it as it would without one. What it stops goes in the Mission's audit log, once per address, as do addresses that a name in scope and a denied one share. A computer added to a Mission, or taken out, moves at once; one in no Mission uses the network as before. A Mission's gateway holds up to three running computers.

@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # AWS
 
 Pion has two AWS tools. Each signs in through your organisation's

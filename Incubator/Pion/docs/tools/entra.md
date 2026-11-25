@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # Microsoft Entra ID
 
 Pion has two Microsoft Entra ID tools, each added per tenant with a sign-in of

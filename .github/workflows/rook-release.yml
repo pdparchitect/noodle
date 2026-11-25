@@ -137,6 +137,10 @@ jobs:
         shell: zsh {0}
         run: zsh scripts/package-xcode-release.sh Rook "rook-v$ROOK_VERSION"
 
+      - name: Build the Setup Guide and User Guide
+        shell: zsh {0}
+        run: zsh scripts/build-guides.sh Rook "dist/rook-$ROOK_VERSION"
+
       - name: Save verified release assets
         run: cp "$RUNNER_TEMP/rook-notes.md" "dist/rook-$ROOK_VERSION/release-notes.md"
 

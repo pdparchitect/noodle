@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # Duo
 
 Pion has two Duo tools, each added per Duo account with keys of its own:

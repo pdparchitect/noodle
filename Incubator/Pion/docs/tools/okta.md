@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # Okta
 
 Pion has two Okta tools, each added per org with a sign-in of its own:

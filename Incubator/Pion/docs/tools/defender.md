@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # Microsoft Defender XDR
 
 Pion has two Microsoft Defender XDR tools, each added per tenant with a sign-in

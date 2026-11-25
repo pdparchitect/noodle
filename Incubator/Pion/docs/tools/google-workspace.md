@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # Google Workspace
 
 Pion has two Google Workspace tools, each with its own sign-in:

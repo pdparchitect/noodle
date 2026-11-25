@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # Hunt.io
 
 Pion has two Hunt.io tools, each added with a key of its own:

@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # SentinelOne
 
 Pion has two SentinelOne tools, each added per management console with a

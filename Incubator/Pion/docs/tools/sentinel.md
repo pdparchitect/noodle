@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # Microsoft Sentinel
 
 **Microsoft Sentinel** queries the logs in the Log Analytics workspace behind

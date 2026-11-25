@@ -14,3 +14,9 @@ seen the code or the author's machine, conversation or work history.
 - Do not narrate history: describe what is true now. Release history belongs in
   the changelog.
 - Update an existing guide before adding a file.
+- Each release turns these pages into two PDFs: the Setup Guide, for whoever
+  prepares Pion's accounts and access, and the User Guide, for the people using
+  it. A page joins one or both through front matter at its top, `guides: [setup]`,
+  `guides: [user]` or `guides: [setup, user]`, and may set `order:` (100 when not
+  given; pages then go by title). Its first heading is its chapter title. A page
+  without `guides` stays out of both.

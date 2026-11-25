@@ -20,6 +20,12 @@ repo="pdparchitect/noodle"
 channel="$product-latest"
 assets="$project_root/dist/$product-$version"
 disk_image="${archive:r}.dmg"
+# Pion and Rook publish their guides with each release; the channel's copies keep fixed addresses for their Help menus.
+guides=()
+if [[ "$app" == Pion || "$app" == Rook ]]; then
+    guides=("$assets/$app-Setup-Guide.pdf" "$assets/$app-User-Guide.pdf")
+    for guide in $guides; do [[ -s "$guide" ]] || { print -u2 "Missing ${guide:t}"; exit 1; }; done
+fi
 page="$(<"$folder/Support/download-page.md")"
 [[ -s "$assets/$disk_image" && -s "$assets/$disk_image.sha256" ]]
 (cd "$assets"; shasum -a 256 -c "$archive.sha256" "$disk_image.sha256")
@@ -36,7 +42,7 @@ if [[ -n "$channel_title" ]]; then
     autoload -Uz is-at-least
     is-at-least "$previous" "$version" || { print -u2 "Refusing to roll back the $app update channel"; exit 1; }
 fi
-gh release create "$tag" "$assets/$archive" "$assets/$archive.sha256" "$assets/$disk_image" "$assets/$disk_image.sha256" "$assets/appcast.xml" \
+gh release create "$tag" "$assets/$archive" "$assets/$archive.sha256" "$assets/$disk_image" "$assets/$disk_image.sha256" "$assets/appcast.xml" $guides \
     --repo "$repo" --verify-tag --draft --latest=false --title "$title $version" --notes-file "$notes"
 gh release edit "$tag" --repo "$repo" --draft=false --latest=false
 
@@ -49,14 +55,14 @@ page="${page//\{dmg\}/$downloads/$disk_image}"
 page="${page//\{zip\}/$downloads/$archive}"
 page="${page//\{release\}/https://github.com/$repo/releases/tag/$tag}"
 if [[ -z "$channel_title" ]]; then
-    gh release create "$channel" "$assets/$archive" "$assets/$archive.sha256" "$assets/$disk_image" "$assets/$disk_image.sha256" "$assets/appcast.xml" \
+    gh release create "$channel" "$assets/$archive" "$assets/$archive.sha256" "$assets/$disk_image" "$assets/$disk_image.sha256" "$assets/appcast.xml" $guides \
         --repo "$repo" --target "$(git -C "$project_root" rev-parse "$tag^{commit}")" \
         --draft --latest=false --title "$title $version" --notes "$page"
     gh release edit "$channel" --repo "$repo" --draft=false --latest=false
 else
     # Replace fixed-name downloads only on the mutable channel. Publish its feed
     # after the downloads and checksums upload successfully; immutable versioned releases are never replaced.
-    gh release upload "$channel" "$assets/$archive" "$assets/$archive.sha256" "$assets/$disk_image" "$assets/$disk_image.sha256" --repo "$repo" --clobber
+    gh release upload "$channel" "$assets/$archive" "$assets/$archive.sha256" "$assets/$disk_image" "$assets/$disk_image.sha256" $guides --repo "$repo" --clobber
     gh release upload "$channel" "$assets/appcast.xml" --repo "$repo" --clobber
     gh release edit "$channel" --repo "$repo" --latest=false --title "$title $version" --notes "$page"
 fi

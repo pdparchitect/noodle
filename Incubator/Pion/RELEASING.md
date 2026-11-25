@@ -11,7 +11,7 @@ Pion is incubating and releases on its own: never with Noodle, its companions or
 4. Watch **Release Pion** through completion and verify the download channel.
 
 **Release Pion** runs when either file changes on `main`, or by hand. It tests PionCore and the app,
-signs, notarizes and verifies the app, creates `pion-vX.Y.Z`, publishes the ZIP and DMG, and updates
+signs, notarizes and verifies the app, creates `pion-vX.Y.Z`, publishes the ZIP and DMG with the Setup Guide and User Guide PDFs, and updates
 `pion-latest`. A version that is already released, or has no dated section, publishes nothing.
 
 Pion uses the same signing secrets and Sparkle key as Noodle. The repository and release assets must be
@@ -19,7 +19,7 @@ public for unauthenticated downloads and updates.
 
 ## Downloads and updates
 
-- Versioned release: `pion-vX.Y.Z`, containing `Pion-arm64.zip`, `Pion-arm64.dmg`, their checksums, signed `appcast.xml`, and notes.
+- Versioned release: `pion-vX.Y.Z`, containing `Pion-arm64.zip`, `Pion-arm64.dmg`, their checksums, signed `appcast.xml`, `Pion-Setup-Guide.pdf`, `Pion-User-Guide.pdf`, and notes.
 - [Download channel](https://github.com/pdparchitect/noodle/releases/tag/pion-latest): copies of the current release's assets.
 - [Direct DMG download](https://github.com/pdparchitect/noodle/releases/download/pion-latest/Pion-arm64.dmg) and [ZIP](https://github.com/pdparchitect/noodle/releases/download/pion-latest/Pion-arm64.zip): fixed URLs available after the first release.
 - [Update feed](https://github.com/pdparchitect/noodle/releases/download/pion-latest/appcast.xml): points to the immutable versioned archive.
@@ -42,6 +42,7 @@ Run from the repository root:
 swift test --disable-sandbox --package-path Incubator/Pion --scratch-path .build/pion
 PION_DATA_CONTAINER=production zsh Incubator/Pion/scripts/build.sh
 zsh scripts/verify-pion-release.sh .build/Pion.app
+zsh scripts/build-guides.sh Pion
 ```
 
 The release archives the same project with `scripts/package-xcode-release.sh Pion`, signs with

@@ -5,12 +5,15 @@ import CryptoKit
 // No GitHub connection, credentials, tags or real release assets are involved.
 let source = URL(fileURLWithPath: CommandLine.arguments[1]).standardizedFileURL
 let fm = FileManager.default
-for app in ["Computer", "Applet", "Browser", "Hub", "Pion"] {
+for app in ["Computer", "Applet", "Browser", "Hub", "Pion", "Rook"] {
 let product = app.lowercased()
-// Companions are Noodle APP in APP/; Pion, incubating, is named on its own in Incubator/Pion.
-let folder = app == "Pion" ? "Incubator/Pion" : app
-let base = app == "Pion" ? "Pion" : "Noodle-\(app)"
-let title = app == "Pion" ? "Pion" : "Noodle \(app)"
+// Companions are Noodle APP in APP/; Pion and Rook, incubating, are named on their own in Incubator/APP.
+let incubating = ["Pion", "Rook"].contains(app)
+let folder = incubating ? "Incubator/\(app)" : app
+let base = incubating ? app : "Noodle-\(app)"
+let title = incubating ? app : "Noodle \(app)"
+// Pion and Rook publish their guides with each release.
+let guides = incubating ? ["\(app)-Setup-Guide.pdf", "\(app)-User-Guide.pdf"] : []
 let root = fm.temporaryDirectory.appendingPathComponent("\(app)Release-Test-\(UUID().uuidString)")
 defer { try? fm.removeItem(at: root) }
 for path in ["scripts", "\(folder)/Support", "bin", "dist/\(product)-1.2.3"] {
@@ -29,6 +32,7 @@ for file in ["\(base)-arm64.zip", "\(base)-arm64.dmg", "appcast.xml"] {
         try write("\(fixtureDigest)  \(file)\n", "dist/\(product)-1.2.3/" + file + ".sha256")
     }
 }
+for guide in guides { try write("fixture", "dist/\(product)-1.2.3/" + guide) }
 try write("""
 #!/bin/zsh
 print -r -- "$*" >> "$PUBLISH_TEST_LOG"
@@ -87,6 +91,7 @@ for mode in ["first", "upgrade"] {
     precondition(writes.first!.contains("/\(base)-arm64.zip "))
     precondition(writes.first!.contains("/\(base)-arm64.dmg "))
     precondition(writes.first!.contains("/\(base)-arm64.dmg.sha256 "))
+    for guide in guides { precondition(writes.first!.contains("/\(guide) "), "The release carries \(guide)") }
     let publication = log.range(of: "release edit \(product)-v1.2.3")!
     let channel = log.range(of: mode == "first" ? "release create \(product)-latest" : "release upload \(product)-latest")!
     precondition(publication.lowerBound < channel.lowerBound, "Channel must follow version publication")
@@ -97,6 +102,7 @@ for mode in ["first", "upgrade"] {
     precondition(channelCommand.contains("/\(base)-arm64.zip.sha256 "))
     precondition(channelCommand.contains("/\(base)-arm64.dmg "))
     precondition(channelCommand.contains("/\(base)-arm64.dmg.sha256 "))
+    for guide in guides { precondition(channelCommand.contains("/\(guide) "), "The channel keeps \(guide) at a fixed address") }
     if mode == "first" {
         precondition(channelCommand.contains("/appcast.xml "))
     } else {
@@ -118,6 +124,15 @@ for mode in ["rollback", "existing", "private"] {
     let (status, log) = try run(mode)
     precondition(status != 0)
     precondition(!log.contains("release create") && !log.contains("release edit") && !log.contains("release upload"))
+}
+// A release without its guides publishes nothing.
+for guide in guides {
+    let path = root.appendingPathComponent("dist/\(product)-1.2.3/" + guide)
+    try fm.removeItem(at: path)
+    let (status, log) = try run("missing-guide")
+    precondition(status != 0, "Publishing without \(guide) must fail")
+    precondition(!log.contains("release create") && !log.contains("release edit") && !log.contains("release upload"))
+    try write("fixture", "dist/\(product)-1.2.3/" + guide)
 }
 for mode in ["version-failure", "archive-failure", "checksum-failure", "dmg-failure", "dmg-checksum-failure", "feed-failure"] {
     let (status, log) = try run(mode)

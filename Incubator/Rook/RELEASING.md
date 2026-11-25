@@ -11,7 +11,7 @@ Rook is incubating and releases on its own: never with Noodle, its companions or
 4. Watch **Release Rook** through completion and verify the download channel.
 
 **Release Rook** runs when either file changes on `main`, or by hand. It tests RookCore and the app,
-signs, notarizes and verifies the app, creates `rook-vX.Y.Z`, publishes the ZIP and DMG, and updates
+signs, notarizes and verifies the app, creates `rook-vX.Y.Z`, publishes the ZIP and DMG with the Setup Guide and User Guide PDFs, and updates
 `rook-latest`. A version that is already released, or has no dated section, publishes nothing.
 
 Rook uses the same signing secrets and Sparkle key as Noodle. The repository and release assets must be
@@ -19,7 +19,7 @@ public for unauthenticated downloads and updates.
 
 ## Downloads and updates
 
-- Versioned release: `rook-vX.Y.Z`, containing `Rook-arm64.zip`, `Rook-arm64.dmg`, their checksums, signed `appcast.xml`, and notes.
+- Versioned release: `rook-vX.Y.Z`, containing `Rook-arm64.zip`, `Rook-arm64.dmg`, their checksums, signed `appcast.xml`, `Rook-Setup-Guide.pdf`, `Rook-User-Guide.pdf`, and notes.
 - [Download channel](https://github.com/pdparchitect/noodle/releases/tag/rook-latest): copies of the current release's assets.
 - [Direct DMG download](https://github.com/pdparchitect/noodle/releases/download/rook-latest/Rook-arm64.dmg) and [ZIP](https://github.com/pdparchitect/noodle/releases/download/rook-latest/Rook-arm64.zip): fixed URLs available after the first release.
 - [Update feed](https://github.com/pdparchitect/noodle/releases/download/rook-latest/appcast.xml): points to the immutable versioned archive.
@@ -42,6 +42,7 @@ Run from the repository root:
 swift test --disable-sandbox --package-path Incubator/Rook --scratch-path .build/rook
 ROOK_DATA_CONTAINER=production zsh Incubator/Rook/scripts/build.sh
 zsh scripts/verify-rook-release.sh .build/Rook.app
+zsh scripts/build-guides.sh Rook
 ```
 
 The release archives the same project with `scripts/package-xcode-release.sh Rook`, signs with

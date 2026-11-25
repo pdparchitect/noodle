@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # Sentry
 
 Pion has two Sentry tools, each added per Sentry organisation with a sign-in of

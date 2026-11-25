@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # Google Cloud Detection
 
 **Google Cloud Detection** reads a Google Cloud organisation, folder or project the

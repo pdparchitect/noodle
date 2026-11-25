@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Help › Setup Guide** and **Help › User Guide** open PDF guides published with each release, also linked from the download page: the Setup Guide for whoever prepares Pion's accounts and access, with a chapter for each service that needs the most setting up, and the User Guide for the people using Pion. Both grow as the documentation does.
 - Hunt.io: two new tools, each with a key of its own. **Hunt.io Detection** looks attacker infrastructure up in Hunt.io: whether an IPv4 address hosts known malware or C2, is named in threat reports, is a TOR exit node or VPN and which threat actor it is linked to, then its network and the services Hunt.io saw on it; a domain's DNS, WHOIS and subdomains; a certificate by its SHA-256 fingerprint; the IOC Hunter reports that name an IP address, network or host, or the file hashes reported for an actor or malware family; a summary of an open directory AttackCapture indexed, never its files; and threat actors by name, alias or country. It only reads, never scans, submits or downloads anything, and says plainly when the organisation's monthly quota runs low or out; `check-access` shows the plan and the quota left. **Hunt.io** connects to Hunt.io's own MCP server with a dedicated MCP key, as its sign-in would need a client secret from Hunt.io. Hunt.io has no free plan, only paid plans from Researcher up and a 2-week trial. The new Hunt.io guide explains the access each tool asks for.
 
 ### Changed

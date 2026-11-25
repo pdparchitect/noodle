@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # Vercel
 
 Pion has three Vercel tools:

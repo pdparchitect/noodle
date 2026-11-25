@@ -288,6 +288,13 @@ struct PionCommands: Commands {
             Button("\(pionAppName) Help") {
                 NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/tree/main/Incubator/Pion")!)
             }
+            // Each release publishes the guides, built from the docs folder, and keeps copies at these fixed addresses.
+            Button("Setup Guide") {
+                NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/releases/download/pion-latest/Pion-Setup-Guide.pdf")!)
+            }
+            Button("User Guide") {
+                NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/releases/download/pion-latest/Pion-User-Guide.pdf")!)
+            }
             Button("License") {
                 NSWorkspace.shared.open(URL(string: "https://github.com/pdparchitect/noodle/blob/main/Incubator/Pion/LICENSE.md")!)
             }

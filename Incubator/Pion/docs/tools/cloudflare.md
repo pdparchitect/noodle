@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # Cloudflare
 
 Pion has two Cloudflare tools, each added per Cloudflare account with a sign-in

@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # Microsoft Azure
 
 Pion has two Azure tools, each added per subscription and signed in as an admin

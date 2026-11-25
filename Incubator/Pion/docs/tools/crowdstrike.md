@@ -1,3 +1,7 @@
+---
+guides: [setup]
+---
+
 # CrowdStrike Falcon
 
 Pion has two CrowdStrike Falcon tools, each added per Falcon customer (CID)

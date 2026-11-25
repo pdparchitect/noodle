@@ -6,4 +6,6 @@ AI-assisted cyber defence: a team of AI agents monitors your environment, invest
 
 Requires macOS 26 or later. Open the DMG and drag Rook.app to Applications.
 
+[Setup Guide](https://github.com/pdparchitect/noodle/releases/download/rook-latest/Rook-Setup-Guide.pdf) · [User Guide](https://github.com/pdparchitect/noodle/releases/download/rook-latest/Rook-User-Guide.pdf)
+
 [Release notes and checksum]({release})
