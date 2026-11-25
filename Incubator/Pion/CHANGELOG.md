@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-25
+
 ### Added
 
 - Duo: two new tools on Duo's Admin API. **Duo Detection** reads one account: the authentication log by user, result, reason, factor, application and time, with where each attempt came from and the device that approved it; what administrators changed; the SMS and calls Duo sent; one user's status, phones, hardware tokens, security keys and bypass codes (counted, never shown); and, for an audit, users led by those in bypass status, unenrolled or locked out, administrators without a hardware token or security key, applications led by Admin API applications that can change Duo, phones led by jailbroken, unencrypted or unlocked ones, policies led by SMS or phone calls allowed, new users let in without a second factor and networks that skip Duo, bypass codes that never expire, and global settings; its alert watch wakes agents for fraud users report, attempts denied from anonymous networks or restricted locations, bypass codes made, users set to bypass, administrators and Admin API applications added, secret keys viewed, policy and settings changes, and Trust Monitor's events. **Duo Containment** disables or restores a user, takes them out of bypass status, deletes their bypass codes, removes a phone, hardware token or security key, and sends enrollment or Duo Mobile activation, each only once you approve it. Duo's Admin API has no OAuth, so each tool uses an Admin API application of its own: its integration key and secret key are kept in Keychain and sign each request, and the secret key is never sent. Duo can't end sessions in the applications it protects, so no tool claims to. The new Duo guide explains the permissions each tool asks for.

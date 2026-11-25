@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.97.0] - 2026-11-25
+
 ### Changed
 
 - Markdown attachments open in a window of their own, laid out with headings, lists, tables and code; Preview and Source in its header switch between that and the text as written. Metal shaders open there too, playing or as their source. Both annotate as any other preview.

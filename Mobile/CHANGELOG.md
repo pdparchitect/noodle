@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.61.0] - 2026-11-25
+
 ### Changed
 
 - Markdown files open laid out with headings, lists, tables and code, and Metal shaders open playing; Preview and Source under the title switch to the text as written, where you can select text and comment on it. Mark Up works on both.
