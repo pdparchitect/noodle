@@ -14,6 +14,7 @@ All notable changes to Noodle are documented here, following
 
 - Bots' harnesses run with their usage and error reports to Anthropic, OpenAI, xAI and Meta turned off, using each one's own setting and the standard DO_NOT_TRACK, including bots with extended access, which the network silo does not cover.
 - The Help menu sets Noodle Help apart from License with a separator.
+- "Waiting on you" in a task's popover is no longer in the accent colour, so it no longer looks like a link.
 
 ### Fixed
 

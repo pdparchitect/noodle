@@ -6,6 +6,10 @@
 
 - License in the Help menu, between Help and the bug and feature links.
 
+### Changed
+
+- "Waiting on you" on a task's sheet is no longer in the accent colour, so it no longer looks like a link.
+
 ## [0.61.0] - 2026-11-25
 
 ### Changed

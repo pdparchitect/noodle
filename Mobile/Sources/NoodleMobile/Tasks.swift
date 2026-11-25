@@ -80,7 +80,7 @@ struct TaskFeedbackSheet: View {
             Form {
                 Section {
                     Label(entry.stateLine, systemImage: entry.symbol)
-                        .foregroundStyle(entry.task.waitingOn == .you ? Color.accentColor : .secondary)
+                        .foregroundStyle(entry.task.waitingOn == .you ? .primary : .secondary)
                     if let note = entry.task.note { Text(note).foregroundStyle(.secondary) }
                 } header: {
                     Text(entry.bot.draft.name)

@@ -120,7 +120,7 @@ private struct TaskFeedbackPopover: View {
                     .foregroundStyle(.secondary)
             }
             Label(TaskState.line(for: task, store: store), systemImage: TaskState.symbol(for: task))
-                .foregroundStyle(task.waitingOn == .user ? Color.accentColor : .secondary)
+                .foregroundStyle(task.waitingOn == .user ? .primary : .secondary)
             if let note = task.note {
                 Text(note)
                     .foregroundStyle(.secondary)
