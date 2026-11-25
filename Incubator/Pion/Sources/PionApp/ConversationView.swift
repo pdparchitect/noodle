@@ -228,9 +228,29 @@ struct ConversationView: View {
                 .help("Status")
             }
         }
+        if let investigation, investigation.isAssessment {
+            ToolbarItem {
+                let running = model.isRunningChecks(investigation.id)
+                Button { model.startChecks(on: investigation) } label: {
+                    if running {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Label("Run Checks", systemImage: "checklist.checked")
+                    }
+                }
+                .disabled(investigation.isClosed || running)
+                .help(investigation.isClosed ? "Reopen this Assessment to run its checks" : running ? "Running checks…" : "Run Checks")
+                .accessibilityLabel(running ? "Running checks" : "Run Checks")
+            }
+        }
         if let investigation {
             ToolbarItem {
                 Menu {
+                    if investigation.isAssessment {
+                        Button("Edit Policy…") { window.sheet = .editPolicy(investigation) }
+                            .disabled(investigation.isClosed)
+                        Divider()
+                    }
                     Button("Export as Zip…") { model.exportInvestigation(investigation) }
                     Button("Show in Finder") { model.reveal(conversation) }
                 } label: {

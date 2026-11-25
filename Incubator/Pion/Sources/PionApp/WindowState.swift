@@ -7,16 +7,19 @@ import SwiftUI
 /// The main window's sheets and panels, which menu commands open too.
 @MainActor @Observable final class WindowState {
     enum Sheet: Identifiable {
-        case newInvestigation, newGroup, newAgent, editAgent(AgentRecord), editGroup(BotConversation), editInvestigation(Investigation), close(Investigation)
+        case newInvestigation, newAssessment, newGroup, newAgent, editAgent(AgentRecord), editGroup(BotConversation), editInvestigation(Investigation),
+             close(Investigation), editPolicy(Investigation)
         var id: String {
             switch self {
             case .newInvestigation: "new-investigation"
+            case .newAssessment: "new-assessment"
             case .newGroup: "new-group"
             case .newAgent: "new-agent"
             case .editAgent(let agent): "edit-agent-\(agent.id)"
             case .editGroup(let group): "edit-group-\(group.id)"
             case .editInvestigation(let investigation): "edit-investigation-\(investigation.id)"
             case .close(let investigation): "close-\(investigation.id)"
+            case .editPolicy(let assessment): "edit-policy-\(assessment.id)"
             }
         }
     }

@@ -92,6 +92,11 @@ import UniformTypeIdentifiers
     var problem: String?
     /// Phases a scenario sets for its agents.
     var scriptedPhases: [UUID: AgentRuntimePhase] = [:]
+    /// The runs of Assessments' checks going now, by Assessment.
+    private var checkRuns: [UUID: Task<AssessmentRun?, Never>] = [:]
+    /// How an Assessment's checks call a connection's tool; nil calls it as the alert watch does. Tests put a stand-in
+    /// here, which the read-only guard still wraps.
+    @ObservationIgnored var assessmentCall: ((ToolConnection) -> AssessmentCall)?
 
     private let messenger: MessengerBroker
     private var toolBroker: ToolBridgeBroker?
@@ -1302,6 +1307,8 @@ import UniformTypeIdentifiers
         var lead: UUID?
         var staff: Set<UUID> = []
         var folders: [AgentFolder] = []
+        /// Nil for an Investigation.
+        var kind: Investigation.Kind?
         /// The lead is always one of them.
         var members: Set<UUID> { staff.union(lead.map { [$0] } ?? []) }
     }
@@ -1374,7 +1381,7 @@ import UniformTypeIdentifiers
     @discardableResult
     func open(_ draft: Draft, openedBy: CaseActor? = nil) throws -> Investigation {
         let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { throw CaseError("Give the Investigation a title.") }
+        guard !title.isEmpty else { throw CaseError("Give the \(draft.kind == .assessment ? "Assessment" : "Investigation") a title.") }
         let members = draft.members
         guard !members.isEmpty else { throw CaseError("Add at least one agent.") }
         let folders = try AgentFolder.validated(draft.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
@@ -1382,10 +1389,10 @@ import UniformTypeIdentifiers
         let group = try createGroup(name: Self.groupName(number: number, title: title), description: draft.objective,
                                     members: members, folders: folders, lead: draft.lead)
         let investigation = try store.open(id: group.id, title: title, objective: draft.objective,
-                                           champion: champion, number: number, openedBy: openedBy, now: now)
+                                           champion: champion, kind: draft.kind, number: number, openedBy: openedBy, now: now)
         reload()
         readTranscript(group.id)
-        guard openedBy == nil else { return investigation }
+        guard openedBy == nil, !investigation.isAssessment else { return investigation }
         let leading = draft.lead.flatMap { agent($0)?.displayName }
             .map { "@\($0) leads, and sets the severity once the evidence allows." }
             ?? "There is no lead yet, so the severity stays unassessed until I choose one."
@@ -1442,6 +1449,157 @@ import UniformTypeIdentifiers
             // Closing is for the record: the agents can no longer answer there, so it does not wake them.
             try send(line + ".", in: investigation.id, waking: status != .closed)
         } catch { problem = error.localizedDescription }
+    }
+
+    // MARK: Assessments
+
+    /// Opens an Assessment with its policy, the answers and the prose under them, and starts its checks at once. With
+    /// `keepingAsTemplate`, the answers also become what the next Assessment's questionnaire starts from.
+    @discardableResult
+    func openAssessment(_ draft: Draft, policy: AssessmentPolicy, body: String, keepingAsTemplate: Bool = false) throws -> Investigation {
+        var draft = draft
+        draft.kind = .assessment
+        let assessment = try open(draft)
+        try store.writePolicy(policy, in: assessment.id, body: body, by: .champion(champion), now: now)
+        if keepingAsTemplate {
+            do { try store.writePolicyTemplate(policy) } catch { problem = "The policy could not be kept as the template: \(error.localizedDescription)" }
+        }
+        let leading = draft.lead.flatMap { agent($0)?.displayName }.map { "@\($0) leads." }
+            ?? "There is no lead yet, so nobody explains the results until I choose one."
+        // The checks' results follow and wake the team; this only says what the Assessment is.
+        try send("""
+            **\(assessment.reference): \(assessment.title)**. \(leading)
+
+            Objective: \(draft.objective.isEmpty ? assessment.title : draft.objective)
+
+            Pion's checks are running against this Assessment's policy; their results follow here.
+            """, in: assessment.id, waking: false)
+        startChecks(on: assessment)
+        return assessment
+    }
+
+    func policy(of assessment: Investigation) -> AssessmentPolicy? {
+        _ = caseRevision
+        return store.readPolicy(assessment.id)
+    }
+
+    /// The prose under an Assessment's answers.
+    func policyBody(of assessment: Investigation) -> String {
+        (try? String(contentsOf: store.policyURL(assessment.id), encoding: .utf8)).map(AssessmentPolicy.body(of:)) ?? ""
+    }
+
+    func savePolicy(_ policy: AssessmentPolicy, body: String, of assessment: Investigation) throws {
+        try store.writePolicy(policy, in: assessment.id, body: body, by: .champion(champion), now: now)
+    }
+
+    /// The policy and prose a new Assessment's questionnaire starts from: the template kept, or Pion's defaults.
+    var policyTemplate: (policy: AssessmentPolicy, body: String) {
+        (store.readPolicyTemplate() ?? .defaults, store.policyTemplateBody() ?? "")
+    }
+
+    func assessmentRuns(_ id: UUID) -> [AssessmentRun] {
+        _ = caseRevision
+        return store.assessmentRuns(id)
+    }
+
+    func isRunningChecks(_ id: UUID) -> Bool { checkRuns[id] != nil }
+
+    /// The adapters an Assessment of Google Workspace reads through: Detection's, and Containment's for what only it reads.
+    static let detectionAdapter = "google-workspace", containmentAdapter = "google-workspace-containment"
+
+    /// The connection an Assessment reads through with `adapter`: one given to an agent on its team, the lead's first,
+    /// then the others' by name, and one signed in before one that isn't. Nil when no agent on it has one.
+    func assessmentConnection(_ adapter: String, for assessment: Investigation) -> ToolConnection? {
+        guard let group = conversation(assessment.id) else { return nil }
+        let registry = connectionsController.registry
+        let held = members(of: group).flatMap { registry.assigned(to: $0.id).filter { $0.adapter == adapter } }
+        return held.first(where: connectionsController.isConnected) ?? held.first
+    }
+
+    /// Starts an Assessment's checks, or hands back the run already going. A closed one runs none.
+    @discardableResult
+    func startChecks(on assessment: Investigation) -> Task<AssessmentRun?, Never>? {
+        if let running = checkRuns[assessment.id] { return running }
+        guard let current = store.investigation(assessment.id), current.isAssessment else {
+            problem = "\(assessment.reference) is not an Assessment, so it has no checks."
+            return nil
+        }
+        guard !current.isClosed else { problem = "Reopen \(current.reference) before running its checks."; return nil }
+        let task = Task { [weak self] () -> AssessmentRun? in
+            guard let self else { return nil }
+            defer { self.checkRuns[current.id] = nil }
+            return await self.performChecks(on: current)
+        }
+        checkRuns[current.id] = task
+        return task
+    }
+
+    /// Runs an Assessment's checks, or waits for the run already going, and returns what was recorded.
+    @discardableResult
+    func runChecks(on assessment: Investigation) async -> AssessmentRun? {
+        await startChecks(on: assessment)?.value
+    }
+
+    /// Reads what the checks need through the team's Google Workspace connections, only ever with their read-only
+    /// tools, records the run in the name of the checks the champion ran, and hands it to the lead to explain.
+    private func performChecks(on assessment: Investigation) async -> AssessmentRun? {
+        let id = assessment.id
+        let policy = store.readPolicy(id) ?? AssessmentPolicy()
+        let detection = assessmentConnection(Self.detectionAdapter, for: assessment)
+        let containment = assessmentConnection(Self.containmentAdapter, for: assessment)
+        let call = assessmentCall ?? { [service = connectionsController.service] connection in
+            { tool, arguments in
+                try await service.perform(MCPBridgeRequest(session: "", connectionID: connection.id, action: .call, tool: tool,
+                                                           arguments: arguments), connection: connection)
+            }
+        }
+        var detectionCall: AssessmentCall?, containmentCall: AssessmentCall?
+        if let detection { detectionCall = await Self.readOnly(call(detection), on: detection) }
+        if let containment { containmentCall = await Self.readOnly(call(containment), on: containment) }
+        let run = await AssessmentRunner.run(GoogleWorkspaceChecks.all, policy: policy, connection: detection?.name,
+                                             detection: detectionCall, containment: containmentCall, now: now)
+        let previous = store.assessmentRuns(id).last
+        do {
+            let recorded = try store.recordAssessment(run, in: id, by: .checks(champion: champion), now: now)
+            let usedContainment = recorded.results.contains { $0.reads.contains(where: \.needsContainment) }
+            for connection in [detection, usedContainment ? containment : nil].compactMap({ $0 }) {
+                connectionsController.recordActivity(connection.id, "Ran \(assessment.reference)'s checks", detail: recorded.tally)
+            }
+            try send(recorded.announcement(changes: previous.map { recorded.changes(since: $0) }), in: id, waking: true)
+            return recorded
+        } catch {
+            problem = "\(assessment.reference)'s checks could not be recorded: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    /// `call`, refusing any tool that isn't one of `connection`'s adapter's read-only operations, as its own listing
+    /// marks them, so a check can never change anything, whatever tool it names.
+    nonisolated static func readOnly(_ call: @escaping AssessmentCall, on connection: ToolConnection) async -> AssessmentCall {
+        let (offered, reads) = await tools(of: connection)
+        return { tool, arguments in
+            guard reads.contains(tool) else {
+                throw CaseError(offered.contains(tool)
+                    ? "The check named \(tool), a tool that changes things, so Pion did not call it: checks only read."
+                    : "The check named \(tool), which \(connection.name) doesn't offer, so Pion did not call it.")
+            }
+            return try await call(tool, arguments)
+        }
+    }
+
+    /// The tools `connection`'s adapter offers, and those of them that only read and never cut anything off.
+    nonisolated static func tools(of connection: ToolConnection) async -> (offered: Set<String>, readOnly: Set<String>) {
+        guard let adapter = connection.adapter.flatMap({ PionAdapters.all[$0] }),
+              let data = try? await adapter.tools(for: connection),
+              let listed = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["tools"] as? [[String: Any]] else { return ([], []) }
+        var offered: Set<String> = [], reads: Set<String> = []
+        for tool in listed {
+            guard let name = tool["name"] as? String else { continue }
+            offered.insert(name)
+            let hints = tool["annotations"] as? [String: Any]
+            if hints?["readOnlyHint"] as? Bool == true, hints?["destructiveHint"] as? Bool != true { reads.insert(name) }
+        }
+        return (offered, reads)
     }
 }
 
