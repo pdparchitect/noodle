@@ -10,6 +10,9 @@ jobs:
   release:
     # Windows computers use macOS 27's custom Virtio devices; the standard macOS 26 image has no SDK 27.
     runs-on: xcode-27
+    # The image defaults to Xcode 27.1, whose builds broke Pion 0.12.0's text fields; 27.2 builds them correctly.
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6

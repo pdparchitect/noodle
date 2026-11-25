@@ -37,6 +37,9 @@ jobs:
     needs: plan
     if: needs.plan.outputs.release == 'true'
     runs-on: xcode-27
+    # The image defaults to Xcode 27.1, whose builds broke Pion 0.12.0's text fields; 27.2 builds them correctly.
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
@@ -57,6 +60,9 @@ jobs:
     needs: [plan, test]
     # Rook ships the Apple harness with compiled MLX shaders, so it builds as Noodle and the Hub do.
     runs-on: xcode-27
+    # The image defaults to Xcode 27.1, whose builds broke Pion 0.12.0's text fields; 27.2 builds them correctly.
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6

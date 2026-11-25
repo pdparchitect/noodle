@@ -6,6 +6,10 @@
 
 - Each service's Detection and Containment tools now draw on one list of its operations, each naming whether it serves detection, audit or containment, so an Audit tool of its own can later offer its share; until then Detection keeps the audit reads it has, but never one that needs Containment's access, such as Google Workspace's tokens. Every tool offers exactly what it did.
 
+### Fixed
+
+- AWS Detection and AWS Containment can be added again, and an AWS connection keeps its name and icon instead of showing as Tool: 0.12.0 refused every AWS access portal URL with "on one line". Google Cloud Containment's account that signs in is accepted again too.
+
 ## [0.12.0] - 2026-11-25
 
 ### Changed
