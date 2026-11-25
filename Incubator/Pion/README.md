@@ -104,7 +104,7 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 - **Groups** of agents for the work between incidents.
 - **Tasks** waiting on you, at the top of the sidebar.
 - **Woken by alerts**: new high alerts and incidents in Microsoft Defender XDR Detection, Microsoft Defender for Cloud, Microsoft Sentinel, CrowdStrike Falcon Detection,
-  SentinelOne Detection, Microsoft Entra ID Detection, Proofpoint, Wiz, Google Cloud Detection, Google Workspace Detection, Cloudflare Detection, Vercel Detection, Duo Detection and GitHub, and CVEs joining the top of the
+  SentinelOne Detection, Microsoft Entra ID Detection, Proofpoint, Wiz, Google Cloud Detection, Google Workspace Detection, Cloudflare Detection, Vercel Detection, Duo Detection and GitHub Detection, and CVEs joining the top of the
   cve.now Index, wake the agents those tools are assigned to, who read them and decide how far to look.
 - **Approvals**: agents investigate freely; a change that cuts off access or deletes something
   waits for you, at the top of the sidebar and in a notification, and runs only once you approve it.
@@ -126,7 +126,7 @@ to the agents that should use it.
 | **Identity** | Okta Detection, Okta Containment, Microsoft Entra ID Detection, Microsoft Entra ID Containment, Google Workspace Detection, Google Workspace Containment, Duo Detection, Duo Containment |
 | **Endpoint and email** | CrowdStrike Falcon Detection, CrowdStrike Falcon Containment, Microsoft Defender XDR Detection, Microsoft Defender XDR Containment, SentinelOne Detection, SentinelOne Containment, Proofpoint TAP |
 | **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |
-| **Cloud and code** | AWS Detection, AWS Containment, Google Cloud Detection, Google Cloud Containment, Microsoft Azure Detection, Microsoft Azure Containment, Cloudflare Detection, Cloudflare Containment, Vercel Detection, Vercel Containment, Vercel, Wiz, GitHub |
+| **Cloud and code** | AWS Detection, AWS Containment, Google Cloud Detection, Google Cloud Containment, Microsoft Azure Detection, Microsoft Azure Containment, Cloudflare Detection, Cloudflare Containment, Vercel Detection, Vercel Containment, Vercel, Wiz, GitHub Detection, GitHub Containment |
 
 Any MCP server works too. AWS Detection and AWS Containment each sign in through your organisation's
 IAM Identity Center, with a permission set of their own, and cover every account you are assigned:
@@ -134,9 +134,11 @@ the detection role only reads, and the containment role holds only the actions i
 also reads Identity Center's assignments, AWS Config's history, S3 exposure, Inspector and Macie. Google Cloud
 Detection, Google Cloud Containment and both Google Workspace tools sign in with your Google account,
 each tool with a sign-in of its own, so only Google Cloud Containment holds Google Cloud's full
-scope and a custom role limits it to the actions it takes; GitHub signs in with a
-code, through an OAuth app your organisation registers, and Sentry and Self-Hosted Sentry likewise, through a
-public API application you register, with scopes that only read and only the organisation you choose. Microsoft Azure Detection and Microsoft Azure Containment each use an app
+scope and a custom role limits it to the actions it takes. GitHub Detection and GitHub Containment each sign in
+with a code, through a private GitHub App of their own that your organisation registers, with no client secret:
+the detection App's permissions only read, and the containment App holds only the write permissions its actions
+take. Sentry and Self-Hosted Sentry sign in with a code too, through a public API application you register, with
+scopes that only read and only the organisation you choose. Microsoft Azure Detection and Microsoft Azure Containment each use an app
 registration of their own, through which each signs in as an admin of their own with no client secret, one
 subscription per account: the detection admin holds only Reader and Security Reader, and the containment admin
 only a custom role with the actions it takes. Okta Detection and Okta Containment

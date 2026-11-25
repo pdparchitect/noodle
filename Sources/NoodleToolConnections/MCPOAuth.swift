@@ -80,7 +80,8 @@ struct MCPOAuth {
             }.joined(separator: "&").data(using: .utf8)
         }
         let (status, object) = try await answer(to: request)
-        if object["error"] as? String == "invalid_grant" || object["error"] as? String == "invalid_client" {
+        // GitHub refuses a spent or revoked refresh token as bad_refresh_token, with HTTP 200.
+        if ["invalid_grant", "invalid_client", "bad_refresh_token"].contains(object["error"] as? String ?? "") {
             throw ToolConnectionServiceError.signInRequired
         }
         guard (200..<300).contains(status) else { throw ToolConnectionServiceError.network(status) }

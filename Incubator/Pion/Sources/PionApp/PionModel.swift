@@ -123,6 +123,8 @@ import UniformTypeIdentifiers
         Cloudflare.keepContainmentRecords(at: store.root.appendingPathComponent("cloudflare-containment.json"))
         // The firewall rules Vercel Containment made, which alone it may remove, kept across launches.
         Vercel.keepContainmentRecords(at: store.root.appendingPathComponent("vercel-containment.json"))
+        // What GitHub Containment did and what undoing each takes, which its undo operations act from, kept across launches.
+        GitHub.keepContainmentRecords(at: store.root.appendingPathComponent("github-containment.json"))
         var environment = ProcessInfo.processInfo.environment
         if hidesInstalledHarnesses { environment["NOODLE_SIMULATE_NO_HARNESSES"] = "1" }
         let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses, environment: environment)

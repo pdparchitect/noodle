@@ -34,6 +34,7 @@ private final class GoogleFixture: @unchecked Sendable {
     var requestedScope = GmailPreset.scope
     var grantedScope = GmailPreset.scope
     var invalidGrant = false
+    var badRefreshToken = false
     func remember(code: String, challenge: String) { lock.withLock { challenges[code] = challenge } }
     func response(_ request: URLRequest) throws -> (Int, [String: Any]) {
         try lock.withLock {
@@ -46,6 +47,7 @@ private final class GoogleFixture: @unchecked Sendable {
                 XCTAssertNil(values["client_secret"])
                 XCTAssertEqual(values["client_id"], GmailPreset.production.id)
                 if invalidGrant { return (400, ["error": "invalid_grant"]) }
+                if badRefreshToken { return (200, ["error": "bad_refresh_token"]) }
                 if let code = values["code"] {
                     let challenge = Data(SHA256.hash(data: Data(values["code_verifier", default: ""].utf8)))
                         .base64EncodedString().replacingOccurrences(of: "+", with: "-")
@@ -315,6 +317,22 @@ final class MCPGoogleOAuthTests: XCTestCase {
             XCTFail("Expired grant accepted")
         } catch ToolConnectionServiceError.signInRequired {}
         XCTAssertNil(vault.load(record.id)?.accessToken)
+        XCTAssertNil(vault.load(record.id)?.refreshToken)
+    }
+
+    /// GitHub refuses a spent refresh token with HTTP 200 and bad_refresh_token, which asks for a new sign-in too.
+    func testARefusedRefreshTokenAnsweredWith200RequiresReconnect() async throws {
+        let vault = GoogleTestVault(), client = service(vault)
+        let record = try ToolConnection(name: "Gmail", endpoint: GmailPreset.endpoint)
+        try await client.signIn(record, redirectURI: GmailPreset.production.redirectURI, browser: Self.browser)
+        var stored = vault.load(record.id)!
+        stored.expiresAt = .distantPast
+        vault.save(stored, id: record.id)
+        GoogleProtocol.fixture.badRefreshToken = true
+        do {
+            _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: record.id, action: .tools, tool: nil, arguments: nil), connection: record)
+            XCTFail("Refused refresh token accepted")
+        } catch ToolConnectionServiceError.signInRequired {}
         XCTAssertNil(vault.load(record.id)?.refreshToken)
     }
 }

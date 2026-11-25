@@ -13,6 +13,8 @@ final class ToolJobTests: XCTestCase {
         let detection: OperationAdapter, containment: OperationAdapter
         let detectionTools: Set<String>, containmentTools: Set<String>
         let detectionRequests: Int?, containmentRequests: Int?
+        /// The Detection tool the alert watch names.
+        var watched = "security-events"
     }
 
     private static let services = [
@@ -95,6 +97,16 @@ final class ToolJobTests: XCTestCase {
                 containmentTools: ["user", "disable-user", "enable-user", "clear-bypass", "delete-bypass-codes", "remove-phone", "remove-token",
                                    "remove-security-key", "send-enrollment", "send-activation", "check-access"],
                 detectionRequests: 2, containmentRequests: 2),
+        Service(name: "GitHub", operations: GitHub.operations, detection: GitHub.adapter, containment: GitHub.containmentAdapter,
+                detectionTools: ["audit-log", "people", "teams", "security-alerts", "check-access", "org-settings", "members-without-2fa",
+                                 "app-installations", "webhooks", "repo-security", "deploy-keys", "fine-grained-tokens", "actions-settings",
+                                 "credential-authorizations"],
+                containmentTools: ["remove-member", "reinstate-member", "remove-outside-collaborator", "restore-collaborator", "cancel-invitation",
+                                   "block-user", "unblock-user", "demote-owner", "restore-owner", "remove-from-team", "restore-team-membership",
+                                   "revoke-fine-grained-token", "delete-deploy-key", "restore-deploy-key", "disable-webhook", "enable-webhook",
+                                   "revoke-sso-credential", "disable-actions", "enable-actions", "cancel-workflow-run", "report-leaked-token",
+                                   "check-access", "undo-records"],
+                detectionRequests: 8, containmentRequests: 2, watched: "security-alerts"),
     ]
 
     private let connection = try! ToolConnection(name: "Any", endpoint: URL(string: "https://api.example.com")!, tokenHeader: "x-api-key", adapter: "any")
@@ -140,7 +152,7 @@ final class ToolJobTests: XCTestCase {
             XCTAssertEqual(Set(containment), service.containmentTools, "\(service.name) Containment")
             XCTAssertEqual(detection.count, Set(detection).count, "\(service.name) Detection offers a name twice")
             XCTAssertEqual(containment.count, Set(containment).count, "\(service.name) Containment offers a name twice")
-            XCTAssertEqual(service.detection.watchedTool, "security-events", service.name)
+            XCTAssertEqual(service.detection.watchedTool, service.watched, service.name)
             XCTAssertNil(service.containment.watchedTool, service.name)
             XCTAssertEqual(service.detection.simultaneousRequests, service.detectionRequests, service.name)
             XCTAssertEqual(service.containment.simultaneousRequests, service.containmentRequests, service.name)
@@ -167,6 +179,8 @@ final class ToolJobTests: XCTestCase {
         XCTAssertTrue(Defender.auditScopes.allSatisfy { $0.contains(".Read") && !$0.contains("Write") }, "\(Defender.auditScopes)")
         XCTAssertTrue(Okta.auditScopes.allSatisfy { $0.hasSuffix(".read") || $0.hasSuffix(".read.self") }, "\(Okta.auditScopes)")
         XCTAssertTrue(CrowdStrike.auditScopes.allSatisfy { $0.access == "Read" }, "\(CrowdStrike.auditScopes)")
+        // A GitHub App takes no scopes: Detection's App holds only read permissions.
+        XCTAssertTrue(GitHub.detectionPermissions.allSatisfy { !$0.write }, "\(GitHub.detectionPermissions.map(\.title))")
     }
 
     /// Every read of each Google Workspace tool is run against a service that answers everything, and each request it
