@@ -143,6 +143,7 @@ struct NewMissionSheet: View {
                 if let computers {
                     MissionComputersRow(computers: computers, selection: $draft.computers, names: $draft.computerNames)
                 }
+                MissionScopeRow(scope: $draft.scope)
                 if let error { Text(error).foregroundStyle(.red).font(.callout) }
             }
             .padding(20)
@@ -151,7 +152,8 @@ struct NewMissionSheet: View {
             guard !loaded else { return }
             if let mission, let group = model.conversation(mission.id) {
                 draft = RookModel.Draft(title: mission.title, objective: mission.objective,
-                    lead: group.lead, staff: Set(group.participantIDs), folders: group.folders ?? [], computers: mission.computers)
+                    lead: group.lead, staff: Set(group.participantIDs), folders: group.folders ?? [], computers: mission.computers,
+                    scope: mission.scope)
             }
             loaded = true
             titleFocused = true
@@ -171,6 +173,74 @@ struct NewMissionSheet: View {
             }
             dismiss()
         } catch { self.error = error.localizedDescription }
+    }
+}
+
+/// What the Mission's agents may target, as the Computers row shows its computers: a count, and a sheet to edit them.
+private struct MissionScopeRow: View {
+    @Binding var scope: [String]
+    @State private var editing = false
+
+    var body: some View {
+        Button { editing = true } label: {
+            HStack {
+                Label("Scope", systemImage: "scope")
+                Spacer()
+                Text(scope.isEmpty ? "None" : "\(scope.count)").foregroundStyle(.secondary)
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+            }.padding(12).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .help("What the agents in this Mission may target. Every one of them is told it.")
+        .sheet(isPresented: $editing) { MissionScopeSheet(scope: $scope) }
+    }
+}
+
+/// The scope as text, one rule per line; Done stays off while a line is not a rule, which is named under it.
+private struct MissionScopeSheet: View {
+    @Binding var scope: [String]
+    @State private var text: String
+    @Environment(\.dismiss) private var dismiss
+    private static let font = Font.system(size: 13, design: .monospaced)
+
+    init(scope: Binding<[String]>) {
+        _scope = scope
+        _text = State(initialValue: scope.wrappedValue.joined(separator: "\n"))
+    }
+
+    private var parsed: Result<[String], Error> { Result { try MissionScope.parse(text) } }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            SheetHeader(heading: "Scope", title: "Done", enabled: (try? parsed.get()) != nil) {
+                guard let rules = try? parsed.get() else { return }
+                scope = rules
+                dismiss()
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                TextEditor(text: $text)
+                    .font(Self.font)
+                    .autocorrectionDisabled(true)
+                    .accessibilityLabel("Scope")
+                    .frame(height: 200)
+                    .overlay(alignment: .topLeading) {
+                        if text.isEmpty {
+                            Text("*.example.com\n203.0.113.0/24\ndeny payments.example.com")
+                                .font(Self.font).foregroundStyle(.tertiary).padding(.leading, 5).allowsHitTesting(false)
+                        }
+                    }
+                    .roundedBorderEditor()
+                    .help("One rule per line: a domain, *.domain for every name under it, an address or a network. "
+                          + "deny in front takes a rule out of scope, even where another covers it.")
+                if case .failure(let error) = parsed {
+                    Text(error.localizedDescription).foregroundStyle(.red).font(.callout)
+                }
+            }
+            .padding(20)
+        }
+        .frame(width: 480)
+        .noodleSheetSizing()
     }
 }
 

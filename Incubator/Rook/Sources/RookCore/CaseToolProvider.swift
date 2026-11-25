@@ -9,7 +9,7 @@ public struct CaseToolProvider: ToolProvider {
     public let manifest = ToolProviderManifest(
         id: "case", title: "Case", summary: "Read a Mission and record entities, evidence and findings.",
         instructions: """
-        Every group you are in is a Mission. Once the champion closes one, you can still read it but not record in it or post there; ask them in your direct conversation if it needs reopening. Pass its conversation ID as --conversation. Start with read: it returns the objective, the status, the severity and the case record so far.
+        Every group you are in is a Mission. Once the champion closes one, you can still read it but not record in it or post there; ask them in your direct conversation if it needs reopening. Pass its conversation ID as --conversation. Start with read: it returns the objective, the scope, the status, the severity and the case record so far.
 
         Every result also carries its data as JSON in structuredContent, such as the new item's id, for scripts that chain calls with tool --run. Record as you work, not at the end. entity records a host, service, account, credential or artifact by its exact name, and link joins two of them into the attack graph, such as a credential that unlocks an account, or a host you pivoted to from another — so the whole path you took can be rebuilt and read back. evidence records what you collected, with the source and the query or method, and returns an ID such as V-3. finding records a claim and cites those evidence IDs with a confidence; a finding without evidence is refused.
 
@@ -66,7 +66,7 @@ public struct CaseToolProvider: ToolProvider {
             ], required: ["title", "objective"], inMission: false),
         ]
         return try JSONSerialization.data(withJSONObject: ["tools": opening + [
-            tool("read", "Read the Mission: objective, status, severity and the whole case record.", [:], required: [], readOnly: true),
+            tool("read", "Read the Mission: objective, scope, status, severity and the whole case record.", [:], required: [], readOnly: true),
             tool("entity", "Record a host, service, account, credential or artifact, or mark one already recorded as seen again.", [
                 "kind": ["type": "string", "enum": CaseRecord.Entity.Kind.allCases.map(\.rawValue), "description": "What it is."],
                 "name": string("Its exact name, such as web-01, shop.example/login, deploy-ci or an AKIA… key."),
@@ -233,13 +233,13 @@ public struct CaseToolProvider: ToolProvider {
 
     /// A Mission and its case record as a script reads them.
     struct CaseView: Encodable {
-        let reference: String, title: String, objective: String, status: String
+        let reference: String, title: String, objective: String, scope: [String], status: String
         let outcome: String?, severity: String?, champion: String, source: String?
         let lead: UUID?, leadName: String?
         let entities: [CaseRecord.Entity], evidence: [CaseRecord.Evidence], findings: [CaseRecord.Finding], links: [CaseRecord.Link]
 
         init(_ mission: Mission, _ record: CaseRecord, lead: UUID?, leadName: String?) {
-            reference = mission.reference; title = mission.title; objective = mission.objective
+            reference = mission.reference; title = mission.title; objective = mission.objective; scope = mission.scope
             status = mission.status.rawValue; outcome = mission.outcome?.rawValue
             severity = mission.severity?.rawValue; champion = mission.champion; source = mission.source
             self.lead = lead; self.leadName = leadName
@@ -266,6 +266,8 @@ public struct CaseToolProvider: ToolProvider {
             "Status: \(mission.status.title)\(mission.outcome.map { " (\($0.title))" } ?? ""). Severity: \(mission.severityTitle).",
             "Champion: \(mission.champion). Lead: \(lead.flatMap(agentName) ?? "none, until the champion chooses one").",
             "Objective: \(mission.objective)",
+            MissionScope.agentText(mission.scope)
+                ?? "Scope: none set yet. Ask the champion what is in scope before you go near a target.",
         ]
         lines.append("\nEntities (\(record.entities.count)):")
         lines += record.entities.map { "- \($0.id) \($0.kind.rawValue) \($0.name)\($0.detail.map { ": \($0)" } ?? "") [last seen \(date.string(from: $0.lastSeen))]" }

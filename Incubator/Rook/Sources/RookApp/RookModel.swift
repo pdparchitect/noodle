@@ -1286,6 +1286,8 @@ import UniformTypeIdentifiers
         var computers: [UUID] = []
         /// What each computer the sheet offered is called, for the audit log.
         var computerNames: [UUID: String] = [:]
+        /// What its agents may target, one rule per line; only the champion sets it.
+        var scope: [String] = []
         /// The lead is always one of them.
         var members: Set<UUID> { staff.union(lead.map { [$0] } ?? []) }
     }
@@ -1310,9 +1312,11 @@ import UniformTypeIdentifiers
         let members = draft.members
         guard !members.isEmpty else { throw CaseError("Add at least one agent.") }
         let folders = try AgentFolder.validated(draft.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
+        let scope = try MissionScope.parse(draft.scope.joined(separator: "\n"))
         guard let before = conversation(current.id) else { throw WorkspaceError.missingConversation(current.id) }
+        // The group's description is what its agents are told it is for, so a new scope wakes them as a new objective does.
         let group = try repository.updateGroup(conversationID: current.id, named: Self.groupName(number: current.number, title: title),
-            publicDescription: draft.objective, participantIDs: Array(members), existingAgents: everyAgent, folders: folders, now: now)
+            publicDescription: MissionScope.groupDescription(objective: draft.objective, scope: scope), participantIDs: Array(members), existingAgents: everyAgent, folders: folders, now: now)
         let updated = try store.update(current.id, by: .champion(champion), now: now) { value in
             var events: [(event: String, detail: String)] = []
             if value.title != title { events.append(("title", title)); value.title = title }
@@ -1321,6 +1325,7 @@ import UniformTypeIdentifiers
             if (before.folders ?? []) != folders { events.append(("folders", "Updated shared folders (\(folders.count)).")) }
             return events
         }
+        try store.setScope(scope, of: current.id, by: .champion(champion), now: now)
         try applyComputers(of: draft, to: current.id)
         reload()
         readTranscript(group.id)
@@ -1374,14 +1379,18 @@ import UniformTypeIdentifiers
         let members = draft.members
         guard !members.isEmpty else { throw CaseError("Add at least one agent.") }
         let folders = try AgentFolder.validated(draft.folders, protecting: AgentFolder.protectedLocations(root: repository.rootURL))
+        let scope = try MissionScope.parse(draft.scope.joined(separator: "\n"))
         let number = (missions.map(\.number).max() ?? 0) + 1
-        let group = try createGroup(name: Self.groupName(number: number, title: title), description: draft.objective,
+        let group = try createGroup(name: Self.groupName(number: number, title: title),
+                                    description: MissionScope.groupDescription(objective: draft.objective, scope: scope),
                                     members: members, folders: folders, lead: draft.lead)
-        let mission = try store.open(id: group.id, title: title, objective: draft.objective,
+        var mission = try store.open(id: group.id, title: title, objective: draft.objective,
                                            champion: champion, number: number, openedBy: openedBy, now: now)
+        if !scope.isEmpty { try store.setScope(scope, of: mission.id, by: .champion(champion), now: now) }
         try applyComputers(of: draft, to: mission.id)
         reload()
         readTranscript(group.id)
+        mission = store.mission(mission.id) ?? mission
         guard openedBy == nil else { return mission }
         let leading = draft.lead.flatMap { agent($0)?.displayName }
             .map { "@\($0) leads, and sets the severity once the evidence allows." }
@@ -1389,7 +1398,7 @@ import UniformTypeIdentifiers
         try send("""
             **\(mission.reference): \(title)**. \(leading)
 
-            Objective: \(draft.objective.isEmpty ? title : draft.objective)
+            Objective: \(draft.objective.isEmpty ? title : draft.objective)\(MissionScope.agentText(scope).map { "\n\n" + $0 } ?? "")
 
             Record what you find with the case tool as you go, and clear anything intrusive with me first.
             """, in: group.id)

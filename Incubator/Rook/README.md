@@ -78,8 +78,10 @@ releases, and the odd rough edge. Use it only against systems you are authorized
 The sidebar lists your Missions, most severe first, then your groups and your agents.
 **View → Sidebar** can also list closed Missions and the tasks waiting on you.
 
-A Mission is a conversation with its team, with an objective, a status, a severity and a
-case record. One agent leads it; you own it. It starts unassessed until the lead sets its
+A Mission is a conversation with its team, with an objective, a scope, a status, a severity
+and a case record. One agent leads it; you own it. The scope lists what its agents may
+target, one rule per line (`*.example.com`, `example.com`, `203.0.113.0/24`, or `deny` in
+front of anything out of scope); they are told it with the objective. It starts unassessed until the lead sets its
 severity from the evidence. The lead can bring in agents it already works with in another
 group or Mission, and take out those whose part is done; the Audit Log says who it added or
 removed. The status menu in the toolbar moves it between open, active

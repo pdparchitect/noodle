@@ -122,6 +122,26 @@ import XCTest
                        ["Added Linux.", "Added Jump box.", "Removed Linux."])
     }
 
+    /// The scope is set in the Mission's sheet and reaches the agents in the group's description, with the objective.
+    func testMissionScopeIsToldToTheTeamWithTheObjective() throws {
+        let lead = try agent()
+        var draft = RookModel.Draft(title: "Portal", objective: "Get into the portal", lead: lead.id)
+        draft.scope = ["*.Target.com", "deny payments.target.com"]
+        let mission = try model.open(draft)
+        XCTAssertEqual(model.store.mission(mission.id)?.scope, ["*.target.com", "deny payments.target.com"])
+        XCTAssertEqual(model.conversation(mission.id)?.publicDescription,
+                       MissionScope.groupDescription(objective: "Get into the portal", scope: ["*.target.com", "deny payments.target.com"]))
+        draft.scope = ["not a target"]
+        XCTAssertThrowsError(try model.updateMission(mission, draft: draft))
+        XCTAssertEqual(model.store.mission(mission.id)?.scope, ["*.target.com", "deny payments.target.com"])
+        draft.scope = []
+        try model.updateMission(mission, draft: draft)
+        XCTAssertEqual(model.store.mission(mission.id)?.scope, [])
+        XCTAssertEqual(model.conversation(mission.id)?.publicDescription, "Get into the portal")
+        let opened = try model.open(byAgent: lead.id, .init(title: "Side door", objective: "Check the VPN"))
+        XCTAssertEqual(opened.scope, [], "only the champion sets a scope")
+    }
+
     func testClosedMissionsCannotChangeResourceGrants() throws {
         let lead = try agent()
         let other = try agent("Brisk Otter")

@@ -129,6 +129,17 @@ public final class RookStore: @unchecked Sendable {
         }
     }
 
+    /// Replaces what the Mission has in scope; only its champion sets it, and the audit log keeps every version.
+    public func setScope(_ scope: [String], of id: UUID, by actor: CaseActor, now: Date = Date()) throws {
+        guard case .champion = actor else { throw CaseError("Only the champion sets a Mission's scope.") }
+        let rules = try MissionScope.parse(scope.joined(separator: "\n"))
+        try update(id, by: actor, now: now) { mission in
+            guard mission.scope != rules else { return [] }
+            mission.scope = rules
+            return [("scope", rules.isEmpty ? "Cleared the scope." : "Set the scope: \(rules.joined(separator: ", ")).")]
+        }
+    }
+
     /// Takes a deleted computer out of every Mission that had it.
     public func forgetComputer(_ computer: UUID, named name: String, by actor: CaseActor, now: Date = Date()) throws {
         for mission in missions() where mission.computers.contains(computer) {

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- A Mission has a Scope: one rule per line, such as `*.example.com`, `example.com`, `203.0.113.0/24` or an address, with `deny` in front of anything out of scope. Its agents are told the scope with the objective, again whenever it changes, and when they read the Mission. Only the champion sets it, and the audit log keeps each version. Rook does not hold computers to it yet.
+
 ## [0.7.0] - 2026-11-25
 
 ### Changed
