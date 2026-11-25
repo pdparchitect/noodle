@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Changed
+
+- The Help menu sets Noodle Help apart from License with a separator.
+
 ## [0.97.0] - 2026-11-25
 
 ### Changed
