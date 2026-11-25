@@ -227,7 +227,7 @@ struct MCPOAuth {
             ])
         }
         var relay: URL?
-        let registered: Object
+        var registered: Object
         do {
             registered = try await register(redirect)
         } catch ToolConnectionServiceError.network(400) {
@@ -235,7 +235,15 @@ struct MCPOAuth {
             // and hands the result on to the app's own address.
             guard let known = Self.relays[redirect.absoluteString] else { throw ToolConnectionServiceError.network(400) }
             relay = known
-            registered = try await register(known)
+            do {
+                registered = try await register(known)
+            } catch ToolConnectionServiceError.network(400) {
+                // Others, such as Vercel, register only apps they approved and loopback addresses; the app
+                // listens there itself while the sign-in lasts.
+                let loopback = Self.loopbackRelay()
+                relay = loopback
+                registered = try await register(loopback)
+            }
         }
         guard let clientID = registered["client_id"] as? String, !clientID.isEmpty,
               (registered["token_endpoint_auth_method"] as? String ?? "none") == "none" else {
@@ -275,6 +283,18 @@ struct MCPOAuth {
         "pion://mcp/oauth/callback": URL(string: "https://usenoodle.app/oauth/callback/pion/")!,
         "pion-dev://mcp/oauth/callback": URL(string: "https://usenoodle.app/oauth/callback/pion/dev/")!
     ]
+
+    /// Where the app listens for a sign-in's result, only while it waits for one, for services that register
+    /// neither the app's own address nor an https relay. A random port for each sign-in, registered afresh.
+    static func loopbackRelay() -> URL {
+        URL(string: "http://127.0.0.1:\(loopbackPorts.randomElement()!)/mcp/oauth/callback")!
+    }
+    static let loopbackPorts = 49_152...65_535
+    static func isLoopbackRelay(_ url: URL) -> Bool {
+        guard let parts = URLComponents(url: url, resolvingAgainstBaseURL: false), let port = parts.port else { return false }
+        return parts.scheme == "http" && parts.host == "127.0.0.1" && loopbackPorts.contains(port) &&
+            parts.path == "/mcp/oauth/callback" && parts.query == nil && parts.fragment == nil && parts.user == nil && parts.password == nil
+    }
 
     /// Metadata must name the issuer it was discovered for. Some servers list it with
     /// a trailing slash and report it without, or the reverse; that is the same URL,

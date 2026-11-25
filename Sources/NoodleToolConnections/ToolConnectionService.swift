@@ -368,6 +368,9 @@ public actor ToolConnectionService {
     public func icon(for connection: ToolConnection) async -> Data? {
         await MCPIcon.load(serverIcons[connection.id] ?? [], endpoint: connection.endpoint)
     }
+    /// Whether `url` is a loopback address a sign-in returns to, for a service that registers neither the app's
+    /// address nor a relay page; the app listens there while the sign-in lasts.
+    public nonisolated static func isLoopbackRedirect(_ url: URL) -> Bool { MCPOAuth.isLoopbackRelay(url) }
     public nonisolated static func configuredRedirectURI(for endpoint: URL,
                                                          bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> URL? {
         configuredRedirectURI(connectionConfiguration(for: endpoint), bundleIdentifier: bundleIdentifier)
@@ -497,7 +500,9 @@ public actor ToolConnectionService {
             let configuration = Self.oauthConfiguration(for: connection)
             var stored = try MCPOAuth.preconfiguredCredentials(endpoint: connection.endpoint, redirect: redirectURI, configuration: configuration)
                 ?? credentials.load(connection.id)
-            if stored?.endpoint != connection.endpoint || stored?.redirectURI != redirectURI {
+            // A loopback address is registered afresh with a new port each time, so no other app can be waiting on it.
+            if stored?.endpoint != connection.endpoint || stored?.redirectURI != redirectURI
+                || stored?.relayURI.map(MCPOAuth.isLoopbackRelay) == true {
                 stored = nil
             }
             if stored == nil {

@@ -199,4 +199,30 @@ import XCTest
         let outcome = try await result(retry)
         XCTAssertEqual(try outcome.get(), callback("second"))
     }
+
+    /// A sign-in returning to a loopback address is caught by a listener that is there only while the sign-in is.
+    func testLoopbackCallbackIsCaughtByAListenerThatClosesOnArrival() async throws {
+        let loopback = "http://127.0.0.1:\(Int.random(in: 49_152...65_535))/mcp/oauth/callback"
+        var page = URLComponents(string: "https://example.com/authorize")!
+        page.queryItems = [.init(name: "redirect_uri", value: loopback), .init(name: "state", value: "loop-state")]
+        let opened = expectation(description: "Browser opened")
+        let browser = MCPBrowserAuthorization { _ in opened.fulfill(); return true }
+        let task = Task { try await browser.authorize(url: page.url!, callbackURL: redirect) }
+        addTeardownBlock { task.cancel() }
+        await fulfillment(of: [opened], timeout: 2)
+
+        let session = URLSession(configuration: .ephemeral)
+        let (_, refused) = try await session.data(from: URL(string: loopback + "?state=wrong&code=fixture")!)
+        XCTAssertEqual((refused as? HTTPURLResponse)?.statusCode, 400)
+        let (body, accepted) = try await session.data(from: URL(string: loopback + "?state=loop-state&code=fixture")!)
+        XCTAssertEqual((accepted as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertTrue(String(decoding: body, as: UTF8.self).contains("close this tab"))
+        let outcome = try await result(task)
+        XCTAssertEqual(try outcome.get(), callback("loop-state"))
+
+        do {
+            _ = try await session.data(from: URL(string: loopback + "?state=loop-state&code=fixture")!)
+            XCTFail("The listener outlived its sign-in")
+        } catch let error as URLError where error.code == .cannotConnectToHost { }
+    }
 }

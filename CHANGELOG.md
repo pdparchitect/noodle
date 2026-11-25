@@ -15,6 +15,10 @@ All notable changes to Noodle are documented here, following
 - Bots' harnesses run with their usage and error reports to Anthropic, OpenAI, xAI and Meta turned off, using each one's own setting and the standard DO_NOT_TRACK, including bots with extended access, which the network silo does not cover.
 - The Help menu sets Noodle Help apart from License with a separator.
 
+### Fixed
+
+- Signing in to MCP services that accept only apps they approved, such as Vercel, no longer fails with HTTP 400: Noodle receives the sign-in on this Mac, on a random port it listens on only until the sign-in ends.
+
 ## [0.97.0] - 2026-11-25
 
 ### Changed

@@ -1,4 +1,5 @@
 import AppKit
+import Network
 import Observation
 import NoodleCore
 import NoodleToolConnections
@@ -362,6 +363,7 @@ public final class ToolConnectionsController {
     private var state: String?
     private var continuation: CheckedContinuation<URL, Error>?
     private var timeout: Task<Void, Never>?
+    private var listener: LoopbackCallbackListener?
     private let openURL: (URL) -> Bool
     private let timeoutDuration: Duration
 
@@ -378,6 +380,9 @@ public final class ToolConnectionsController {
               pendingID == nil, states.count == 1, let state = states.first?.value, !state.isEmpty else {
             throw ToolConnectionServiceError.invalidCallback
         }
+        let redirects = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.filter { $0.name == "redirect_uri" } ?? []
+        let loopback = redirects.count == 1 ? redirects.first?.value.flatMap(URL.init(string:))
+            .flatMap { ToolConnectionService.isLoopbackRedirect($0) ? $0 : nil } : nil
         let id = UUID()
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
@@ -390,9 +395,21 @@ public final class ToolConnectionsController {
                     try? await Task.sleep(for: self?.timeoutDuration ?? .seconds(180))
                     if !Task.isCancelled { self?.finish(id, .failure(ToolConnectionServiceError.timedOut)) }
                 }
-                if !openURL(url) {
-                    finish(id, .failure(ToolConnectionError.message("Could not open your browser. Check your default browser and try again.")))
+                let open = { [weak self] in
+                    guard let self, self.pendingID == id, !self.openURL(url) else { return }
+                    self.finish(id, .failure(ToolConnectionError.message("Could not open your browser. Check your default browser and try again.")))
                 }
+                guard let loopback else { return open() }
+                // The service returns to this Mac itself: listen there only until the sign-in ends, and open the page once listening.
+                let refused = ToolConnectionError.message("This Mac could not get ready to receive the sign-in. Connect again.")
+                listener = LoopbackCallbackListener(address: loopback, ready: open, failed: { [weak self] in
+                    self?.finish(id, .failure(refused))
+                }, deliver: { [weak self] query in
+                    guard let self, var callback = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else { return false }
+                    callback.percentEncodedQuery = query
+                    return callback.url.map { self.receive($0) } ?? false
+                })
+                if listener == nil { finish(id, .failure(refused)) }
             }
         } onCancel: {
             Task { @MainActor [weak self] in self?.finish(id, .failure(CancellationError())) }
@@ -421,7 +438,84 @@ public final class ToolConnectionsController {
         let continuation = continuation
         self.continuation = nil
         timeout?.cancel(); timeout = nil
+        listener?.cancel(); listener = nil
         continuation?.resume(with: result)
+    }
+}
+
+/// Takes a sign-in's result at a loopback address, on the loopback interface alone, and answers the browser
+/// with a page saying whether it was taken. Its handlers run on the main queue; it listens until cancelled.
+final class LoopbackCallbackListener: @unchecked Sendable {
+    private let listener: NWListener
+    private let path: String
+    private let deliver: @MainActor (String?) -> Bool
+
+    /// Nil when `address` names no port or the listener cannot be made; `failed` runs when it cannot listen there.
+    init?(address: URL, ready: @escaping @MainActor () -> Void, failed: @escaping @MainActor () -> Void,
+          deliver: @escaping @MainActor (_ percentEncodedQuery: String?) -> Bool) {
+        guard let number = address.port, let port = NWEndpoint.Port(rawValue: UInt16(clamping: number)) else { return nil }
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: port)
+        parameters.acceptLocalOnly = true
+        parameters.allowLocalEndpointReuse = true
+        guard let listener = try? NWListener(using: parameters) else { return nil }
+        self.listener = listener
+        path = address.path
+        self.deliver = deliver
+        var reported = false
+        listener.stateUpdateHandler = { state in
+            MainActor.assumeIsolated {
+                guard !reported else { return }
+                switch state {
+                case .ready: reported = true; ready()
+                case .failed, .waiting: reported = true; failed()
+                default: break
+                }
+            }
+        }
+        listener.newConnectionHandler = { [weak self] connection in
+            connection.start(queue: .main)
+            self?.read(connection, Data())
+        }
+        listener.start(queue: .main)
+    }
+
+    func cancel() {
+        listener.stateUpdateHandler = nil
+        listener.newConnectionHandler = nil
+        listener.cancel()
+    }
+
+    private func read(_ connection: NWConnection, _ received: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 8_192) { [weak self] data, _, complete, error in
+            guard let self else { return connection.cancel() }
+            let buffer = received + (data ?? Data())
+            guard let end = buffer.range(of: Data("\r\n\r\n".utf8)) else {
+                // A request line and headers fit in a few kilobytes; anything else is not a browser returning.
+                if complete || error != nil || buffer.count > 16_384 { connection.cancel() } else { self.read(connection, buffer) }
+                return
+            }
+            let line = String(decoding: buffer[..<end.lowerBound], as: UTF8.self).split(separator: "\r\n").first ?? ""
+            let parts = line.split(separator: " ")
+            guard parts.count == 3, parts[0] == "GET", let target = URLComponents(string: String(parts[1])), target.path == path else {
+                return self.respond(connection, status: "404 Not Found", message: "Nothing is here.")
+            }
+            let taken = MainActor.assumeIsolated { self.deliver(target.percentEncodedQuery) }
+            let app = ProductIdentity.current.name
+            if taken {
+                self.respond(connection, status: "200 OK", message: "Signed in. You can close this tab and return to \(app).")
+            } else {
+                self.respond(connection, status: "400 Bad Request", message: "This sign-in has ended. Start it again in \(app).")
+            }
+        }
+    }
+
+    private func respond(_ connection: NWConnection, status: String, message: String) {
+        let body = Data("<!doctype html><meta charset=utf-8><title>\(message)</title><p style=\"font: 15px -apple-system, sans-serif; margin: 3em\">\(message)</p>".utf8)
+        let head = "HTTP/1.1 \(status)\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(body.count)\r\n" +
+            "Cache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'\r\n" +
+            "Connection: close\r\n\r\n"
+        connection.send(content: Data(head.utf8) + body, completion: .contentProcessed { _ in connection.cancel() })
     }
 }
 

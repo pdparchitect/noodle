@@ -134,6 +134,8 @@ private final class FixtureState: @unchecked Sendable {
     var metadataDocumentClients = false
     /// Whether registration refuses redirects that are not https, as Cloudflare's does.
     var httpsRedirectsOnly = false
+    /// Whether registration refuses every redirect but a loopback one, as Vercel's does for apps it has not approved.
+    var loopbackRedirectsOnly = false
     var tokenRedirects: [String] = []
     var listedIssuer = "https://service.example"
     var reportedIssuer = "https://service.example"
@@ -159,6 +161,9 @@ private final class FixtureState: @unchecked Sendable {
                 let body = (try? JSONSerialization.jsonObject(with: Self.body(request))) as? [String: Any]
                 if httpsRedirectsOnly, (body?["redirect_uris"] as? [String])?.allSatisfy({ $0.hasPrefix("https://") }) != true {
                     return (400, ["error": "invalid_client_metadata", "error_description": "Redirect URI must use https"])
+                }
+                if loopbackRedirectsOnly, (body?["redirect_uris"] as? [String])?.allSatisfy({ $0.hasPrefix("http://127.0.0.1:") }) != true {
+                    return (400, ["error": "invalid_redirect_uri", "error_description": "The provided redirect URIs are not approved"])
                 }
                 return (201, ["client_id": "client-\(registrations)", "token_endpoint_auth_method": "none"])
             case "/v3/files/abc":
@@ -1703,6 +1708,35 @@ final class ToolConnectionServiceTests: XCTestCase {
         }
         XCTAssertEqual(FixtureProtocol.state.tokenRedirects, ["https://usenoodle.app/oauth/callback/dev/"])
         XCTAssertEqual(vault.load(record.id)?.accessToken, "private-token")
+    }
+    func testRegistrationRefusingTheAppAddressAndTheRelayUsesALoopbackAddress() async throws {
+        FixtureProtocol.state.loopbackRedirectsOnly = true
+        let vault = TestVault()
+        let record = try ToolConnection(name: "Test", endpoint: endpoint)
+        let client = service(vault: vault)
+        var addresses: [String] = []
+        for registration in [3, 6] {
+            try await client.signIn(record, redirectURI: redirect) { url in
+                let query = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
+                XCTAssertEqual(query.first { $0.name == "client_id" }?.value, "client-\(registration)")
+                let address = try XCTUnwrap(query.first { $0.name == "redirect_uri" }?.value)
+                XCTAssertTrue(ToolConnectionService.isLoopbackRedirect(URL(string: address)!), address)
+                addresses.append(address)
+                // The app's own listener on that address hands the result on as if it came to the app's address.
+                var callback = URLComponents(url: self.redirect, resolvingAgainstBaseURL: false)!
+                callback.queryItems = [.init(name: "code", value: "one-time-code"), query.first { $0.name == "state" }!]
+                return callback.url!
+            }
+            XCTAssertEqual(vault.load(record.id)?.accessToken, "private-token")
+        }
+        // Each sign-in registers a port of its own, so a port another app holds is never reused.
+        XCTAssertEqual(FixtureProtocol.state.registrations, 6)
+        XCTAssertEqual(FixtureProtocol.state.tokenRedirects, addresses)
+        for address in ["http://127.0.0.1:80/mcp/oauth/callback", "http://localhost:50000/mcp/oauth/callback",
+                        "https://127.0.0.1:50000/mcp/oauth/callback", "http://127.0.0.1:50000/other",
+                        "http://127.0.0.1/mcp/oauth/callback", "http://127.0.0.1:50000/mcp/oauth/callback?next=x"] {
+            XCTAssertFalse(ToolConnectionService.isLoopbackRedirect(URL(string: address)!), address)
+        }
     }
     func testRegistrationRefusingAnUnknownAppAddressFails() async throws {
         FixtureProtocol.state.httpsRedirectsOnly = true
