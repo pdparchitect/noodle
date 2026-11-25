@@ -108,6 +108,11 @@ final class DocumentModeControl: NSSegmentedControl {
 
     required init?(coder: NSCoder) { nil }
 
+    func show(source: Bool) {
+        selectedSegment = source ? 1 : 0
+        changed()
+    }
+
     @objc private func changed() { model.showsSource = selectedSegment == 1 }
 }
 

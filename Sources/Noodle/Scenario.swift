@@ -4,10 +4,12 @@ import AppKit
 import Darwin
 import NoodleBrand
 import NoodleCore
+import NoodleDocument
 import NoodleLaunchChecks
 import SwiftUI
 import UniformTypeIdentifiers
 import NoodleRuntime
+import NoodleWallpaperCore
 
 /// A screenshot scenario: `Scenarios/NAME/scenario.json`, replayed through the real repository with
 /// scripted bots in place of harnesses. Development builds only.
@@ -208,11 +210,13 @@ struct Scenario: Codable {
             var floating: Bool?
             var activity: String?
             var settings: String?
-            /// The key of a message whose patch opens for review.
+            /// The key of a message whose patch opens for review, or whose Markdown or shader document opens.
             var attachment: String?
             /// Files of that patch to tick off as viewed, and to open, by path.
             var viewed: [String]?
             var expanded: [String]?
+            /// Shows the document's source rather than the document.
+            var source: Bool?
         }
 
         /// Every sheet of the main window; the ones left out are closed.
@@ -507,16 +511,21 @@ extension Scenario {
             }
             for window in present.windows ?? [] {
                 try require([window.conversation, window.activity, window.settings, window.attachment].compactMap({ $0 }).count == 1,
-                            "A window is a conversation, a bot's activity, a settings tab or a message's patch.")
+                            "A window is a conversation, a bot's activity, a settings tab or a message's patch or document.")
                 if let key = window.attachment {
-                    try require(messageKeys.contains(key), "present.windows opens the patch of \"\(key)\", which no earlier message is called.")
+                    try require(messageKeys.contains(key), "present.windows opens the attachment of \"\(key)\", which no earlier message is called.")
                     let file = attachments(ofMessage: key).first?.file
-                    try require(file.map { Patch.isPatchFile(name: $0, mediaType: "") } == true,
-                                "present.windows opens the attachment of \"\(key)\", which is not a .patch or .diff file.")
-                    try require(Patch(contentsOf: try asset(file ?? "")) != nil, "\(file ?? "") does not read as a patch.")
+                    let isDocument = file.map { MarkdownDocument.isMarkdown(name: $0, mediaType: "") ||
+                        ShaderSourceFile.isShader(URL(fileURLWithPath: $0)) } == true
+                    try require(isDocument || file.map { Patch.isPatchFile(name: $0, mediaType: "") } == true,
+                                "present.windows opens the attachment of \"\(key)\", which is not a patch, Markdown or shader file.")
+                    try require(isDocument || Patch(contentsOf: try asset(file ?? "")) != nil, "\(file ?? "") does not read as a patch.")
+                    try require(!isDocument || window.viewed == nil && window.expanded == nil,
+                                "Only a window that opens a patch has files viewed or expanded.")
+                    try require(isDocument || window.source == nil, "Only a window that opens a document shows its source.")
                 }
-                try require(window.attachment != nil || window.viewed == nil && window.expanded == nil,
-                            "Only a window that opens a patch has files viewed or expanded.")
+                try require(window.attachment != nil || window.viewed == nil && window.expanded == nil && window.source == nil,
+                            "Only a window that opens a patch has files viewed or expanded, and only a document shows its source.")
                 if let key = window.conversation { try require(members[key] != nil, "present.windows names \"\(key)\", which does not exist.") }
                 try require(window.frame.map { $0.count == 4 } ?? true, "A window frame is [x, y, width, height].")
                 try require(window.settings.map { Self.settingsTabs[$0] != nil } ?? true, "\"\(window.settings ?? "")\" is not a settings tab.")
@@ -1229,12 +1238,17 @@ extension Scenario {
             if !initial, let id = extra.conversation.flatMap({ seeded.conversations[$0]?.id }) {
                 if extra.floating == true { store.floatConversation(id) } else { store.dockConversation(id) }
             }
-            if let message = extra.attachment.flatMap({ messages[$0] }),
-               let attachment = store.attachments(for: message).first(where: \.isPatchFile),
-               let patch = PatchCache.patchNow(at: store.attachmentFileURL(attachment)) {
-                if let viewed = extra.viewed { store.saveViewedPatchFiles(Set(viewed), for: attachment) }
-                store.attachmentWindows.open(attachment, patch: patch, store: store, frame: extra.frame.map(ScenarioSupport.rect))
-                store.attachmentWindows.model(for: attachment)?.expanded.formUnion(extra.expanded ?? [])
+            if let message = extra.attachment.flatMap({ messages[$0] }) {
+                let attachments = store.attachments(for: message)
+                if let attachment = attachments.first(where: \.isPatchFile),
+                   let patch = PatchCache.patchNow(at: store.attachmentFileURL(attachment)) {
+                    if let viewed = extra.viewed { store.saveViewedPatchFiles(Set(viewed), for: attachment) }
+                    store.attachmentWindows.open(attachment, patch: patch, store: store, frame: extra.frame.map(ScenarioSupport.rect))
+                    store.attachmentWindows.model(for: attachment)?.expanded.formUnion(extra.expanded ?? [])
+                } else if let attachment = attachments.first(where: \.opensAsDocument) {
+                    store.attachmentWindows.openDocument(attachment, store: store, frame: extra.frame.map(ScenarioSupport.rect),
+                                                         source: extra.source)
+                }
             }
         }
         if initial {

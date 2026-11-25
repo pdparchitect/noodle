@@ -86,6 +86,8 @@ import SwiftUI
         let attachment: ConversationAttachment
         /// A patch's review; nil for a document.
         let patch: PatchReviewModel?
+        /// A document and its Preview | Source switch; nil for a patch.
+        var document: (model: DocumentPreviewModel, control: DocumentModeControl)?
         let fileURL: URL
         /// The editor every other preview comments with.
         let editor = AttachmentPreviewController()
@@ -129,17 +131,26 @@ import SwiftUI
     }
 
     /// Opens a Markdown or shader document, or brings it forward; false when `attachment` is neither or can't be read.
+    /// `source` switches it to its source, or back to the document; nil leaves it as it is.
     @discardableResult
-    func openDocument(_ attachment: ConversationAttachment, store: any PatchReviewHost, frame: NSRect? = nil) -> Bool {
-        if bringForward(attachment, frame: frame) { return true }
+    func openDocument(_ attachment: ConversationAttachment, store: any PatchReviewHost, frame: NSRect? = nil,
+                      source: Bool? = nil) -> Bool {
+        if bringForward(attachment, frame: frame) {
+            if let source, let document = reviews[attachment.id]?.document { document.control.show(source: source) }
+            return reviews[attachment.id]?.document != nil
+        }
         let url = store.attachmentFileURL(attachment)
         guard let model = DocumentPreviewModel(attachment, url: url) else { return false }
+        model.showsSource = source ?? false
         let content = NSHostingView(rootView: DocumentPreviewView(model: model).environment(\.colorScheme, .dark))
         content.sizingOptions = []
+        let control = DocumentModeControl(model: model)
         let panel = makePanel(size: model.kind == .shader ? NSSize(width: 880, height: 560) : NSSize(width: 820, height: 900),
                               minSize: NSSize(width: 420, height: 320), title: attachment.originalFilename,
-                              content: content, kindLabel: model.kind.label, accessories: [DocumentModeControl(model: model)])
-        show(Review(panel: panel, attachment: attachment, patch: nil, fileURL: url, host: NSApp.keyWindow), store: store, frame: frame)
+                              content: content, kindLabel: model.kind.label, accessories: [control])
+        let review = Review(panel: panel, attachment: attachment, patch: nil, fileURL: url, host: NSApp.keyWindow)
+        review.document = (model, control)
+        show(review, store: store, frame: frame)
         return true
     }
 
