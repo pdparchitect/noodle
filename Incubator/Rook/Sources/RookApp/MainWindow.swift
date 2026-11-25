@@ -382,6 +382,7 @@ struct ConversationRowMenu: View {
             if let mission {
                 Button("Export Mission…") { model.exportMission(mission) }
                 if let computers {
+                    Divider()
                     Button("Show Network Log") { computers.showLog(.network, of: mission) }
                     Button("Show DNS Log") { computers.showLog(.dns, of: mission) }
                 }
