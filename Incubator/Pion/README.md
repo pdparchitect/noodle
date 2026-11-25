@@ -160,7 +160,7 @@ the run before, what couldn't be checked and why, what passed, and the policy as
 - **Groups** of agents for the work between incidents.
 - **Tasks** waiting on you, at the top of the sidebar.
 - **Woken by alerts**: new high alerts and incidents in Microsoft Defender XDR Detection, Microsoft Defender for Cloud, Microsoft Sentinel, CrowdStrike Falcon Detection,
-  SentinelOne Detection, Microsoft Entra ID Detection, Proofpoint, Wiz, Google Cloud Detection, Google Workspace Detection, Cloudflare Detection and GitHub, and CVEs joining the top of the
+  SentinelOne Detection, Microsoft Entra ID Detection, Proofpoint, Wiz, Google Cloud Detection, Google Workspace Detection, Cloudflare Detection, Vercel Detection and GitHub, and CVEs joining the top of the
   cve.now Index, wake the agents those tools are assigned to, who read them and decide how far to look.
 - **Approvals**: agents investigate freely; a change that cuts off access or deletes something
   waits for you, at the top of the sidebar and in a notification, and runs only once you approve it.
@@ -182,7 +182,7 @@ to the agents that should use it.
 | **Identity** | Okta Detection, Okta Containment, Microsoft Entra ID Detection, Microsoft Entra ID Containment, Google Workspace Detection, Google Workspace Containment |
 | **Endpoint and email** | CrowdStrike Falcon Detection, CrowdStrike Falcon Containment, Microsoft Defender XDR Detection, Microsoft Defender XDR Containment, SentinelOne Detection, SentinelOne Containment, Proofpoint TAP |
 | **Logs and monitoring** | Splunk, Elastic, Microsoft Sentinel, Sumo Logic, Grafana, Sentry |
-| **Cloud and code** | AWS Detection, AWS Containment, Google Cloud Detection, Google Cloud Containment, Microsoft Azure Detection, Microsoft Azure Containment, Cloudflare Detection, Cloudflare Containment, Wiz, GitHub |
+| **Cloud and code** | AWS Detection, AWS Containment, Google Cloud Detection, Google Cloud Containment, Microsoft Azure Detection, Microsoft Azure Containment, Cloudflare Detection, Cloudflare Containment, Vercel Detection, Vercel Containment, Vercel, Wiz, GitHub |
 
 Any MCP server works too. AWS Detection and AWS Containment each sign in through your organisation's
 IAM Identity Center, with a permission set of their own, and cover every account you are assigned:
@@ -211,7 +211,9 @@ one console under `sentinelone.net`: the detection user holds only the Viewer ro
 custom role with only the actions it takes, each sent with the exact IDs approved.
 Cloudflare Detection and Cloudflare Containment each use a scoped API token of their own, sent only to
 `api.cloudflare.com`: the detection token holds only Read permissions, for the edge and Zero Trust, and the
-containment token only the edit permissions its actions take.
+containment token only the edit permissions its actions take. Vercel Detection and Vercel Containment each use
+an access token of a team member of their own, sent only to `api.vercel.com`: Vercel's tokens cannot be narrowed,
+so the detection member holds only the Viewer role and the containment member the Member role.
 
 Some services have a guide in [docs/tools](docs/tools) explaining the access each tool asks for,
 the least access to set it up with, and its caveats.

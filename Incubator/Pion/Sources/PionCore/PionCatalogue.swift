@@ -33,6 +33,6 @@ public enum PionCatalogue {
         Splunk.preset, Elastic.preset, Sentinel.preset, Cloudflare.preset, Cloudflare.containment, Cloudflare.radar, Wiz.preset, GitHub.preset, AbuseIPDB.preset,
         URLScan.preset, GreyNoise.preset, CrowdSec.cti, OTX.preset, NVD.preset, CrtSh.preset, DNS.preset, CVENow.preset, HaveIBeenPwned.preset, AWS.preset, AWS.containment, GoogleCloud.preset, Azure.preset, Azure.containment, GoogleWorkspace.preset, GoogleWorkspace.containment,
         Proofpoint.preset, SumoLogic.preset, Tenable.preset, Censys.preset, Grafana.cloud, Grafana.server, Sentry.cloud, Sentry.server,
-        GoogleCloud.containment,
+        GoogleCloud.containment, Vercel.preset, Vercel.containment, Vercel.mcp,
     ] + ToolCatalog.noodle.filter { keptFromNoodle.contains($0.id) }
 }

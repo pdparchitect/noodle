@@ -129,6 +129,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | todoist.icon | https://www.todoist.com/static/favicon.ico |
 | upstash.icon (2026-10-06) | https://upstash.com/icons/apple-touch-icon.png |
 | urlscan.icon (2026-11-18) | https://urlscan.io/favicon.ico |
+| vercel.icon (2026-11-25) | https://vercel.com/apple-touch-icon.png |
 | virustotal.icon (2026-11-18) | https://www.virustotal.com/gui/images/favicon.png |
 | webflow.icon | https://cdn.prod.website-files.com/686294e263eb7e215bd232f7/686d53ceda66a40cb6b6d546_favicon.png |
 | whimsical.icon (2026-10-06) | https://whimsical.com/_next_public/favicon-32.png |

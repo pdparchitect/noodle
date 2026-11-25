@@ -126,6 +126,8 @@ import UniformTypeIdentifiers
         SentinelOne.keepBlocklistRecords(at: store.root.appendingPathComponent("sentinelone-blocklist.json"))
         // The IP Access rules and Gateway list items Cloudflare Containment made, which alone it may remove, kept across launches.
         Cloudflare.keepContainmentRecords(at: store.root.appendingPathComponent("cloudflare-containment.json"))
+        // The firewall rules Vercel Containment made, which alone it may remove, kept across launches.
+        Vercel.keepContainmentRecords(at: store.root.appendingPathComponent("vercel-containment.json"))
         var environment = ProcessInfo.processInfo.environment
         if hidesInstalledHarnesses { environment["NOODLE_SIMULATE_NO_HARNESSES"] = "1" }
         let discovery = HarnessDiscovery(managedHarnesses: repository.managedHarnesses, environment: environment)

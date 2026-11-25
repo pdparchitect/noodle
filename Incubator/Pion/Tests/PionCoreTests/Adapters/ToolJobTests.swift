@@ -83,6 +83,12 @@ final class ToolJobTests: XCTestCase {
                                    "quarantine-threat", "unquarantine-threat", "remediate-threat", "rollback-threat", "resolve-threat",
                                    "update-threat-status", "block-hash", "unblock-hash", "check-access"],
                 detectionRequests: 4, containmentRequests: 2),
+        Service(name: "Vercel", operations: Vercel.operations, detection: Vercel.adapter, containment: Vercel.containmentAdapter,
+                detectionTools: ["deployments", "deployment-logs", "activity-log", "firewall-events", "security-events", "check-access", "members",
+                                 "access-tokens", "integrations", "project-protection", "env-vars", "domains", "firewall-config"],
+                containmentTools: ["project", "enable-attack-mode", "disable-attack-mode", "block-ip", "block-asn", "block-country", "unblock",
+                                   "enable-protection", "remove-member", "rollback", "check-access"],
+                detectionRequests: 4, containmentRequests: 2),
     ]
 
     private let connection = try! ToolConnection(name: "Any", endpoint: URL(string: "https://api.example.com")!, tokenHeader: "x-api-key", adapter: "any")
