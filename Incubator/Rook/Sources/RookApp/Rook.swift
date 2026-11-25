@@ -138,6 +138,7 @@ struct RookApp: App {
             do { try Rehearsal.begin(in: applicationSupport) } catch { fatalError("Could not start the rehearsal: \(error)") }
             rehearsing = true
             UserDefaults.standard.removeObject(forKey: RookModel.welcomeDismissedKey)
+            RiskAcknowledgement.rook.reset()
             for key in UserDefaults.standard.dictionaryRepresentation().keys where key.hasPrefix("NSWindow Frame ") {
                 UserDefaults.standard.removeObject(forKey: key)
             }

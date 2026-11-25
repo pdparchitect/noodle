@@ -29,8 +29,10 @@ struct MainWindow: View {
         } else if let computers {
             // Noodle Computer's alert: a computer that cannot be made, started or upgraded says why.
             content.computerErrorAlert(store: computers.store)
+                .riskAcknowledgement(.rook, ready: !model.isScripted)
         } else {
             content
+                .riskAcknowledgement(.rook, ready: !model.isScripted)
         }
     }
 
@@ -516,4 +518,18 @@ extension RookModel: AgentTaskHost {
     func taskAvatar(_ agent: AgentRecord) -> AnyView { AnyView(AgentMark(agent: agent, size: 22)) }
     func openConversation(for task: AgentTask, of agentID: UUID) { selection = conversationID(for: task, of: agentID) }
     func reportTaskError(_ message: String) { problem = message }
+}
+
+extension RiskAcknowledgement {
+    /// What everyone accepts once before using Rook, after its welcome; a new version asks everyone again.
+    static let rook = RiskAcknowledgement(
+        id: "rook", version: 1, appName: "Rook", title: "Before you use Rook",
+        message: """
+            Rook runs autonomous agents that attack computer systems. Use it only on systems you own or have written \
+            permission to test, and only within that permission. Its agents can run intrusive tools, change or damage \
+            what they reach, and make mistakes; a Mission's gateway limits where its computers go, but it is not a \
+            guarantee. You are responsible for everything Rook does on your behalf, and for following the law where \
+            you and your targets are. Rook is provided as is, without warranty.
+            """,
+        phrase: "I understand the risks")
 }
