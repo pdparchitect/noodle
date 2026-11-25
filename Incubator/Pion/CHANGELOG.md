@@ -10,6 +10,10 @@
 
 - Agents' harnesses run with their usage and error reports to Anthropic, OpenAI, xAI and Meta turned off, using each one's own setting and the standard DO_NOT_TRACK.
 
+### Fixed
+
+- Signing in to MCP services that accept only apps they approved, such as Vercel, no longer fails with HTTP 400: Pion receives the sign-in on this Mac, on a random port it listens on only until the sign-in ends.
+
 ## [0.14.0] - 2026-11-25
 
 ### Added
