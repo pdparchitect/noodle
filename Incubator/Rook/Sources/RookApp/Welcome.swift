@@ -1,4 +1,5 @@
 import AppKit
+import NoodleBrand
 import NoodleCore
 import NoodleRuntime
 import NoodleRuntimeSettings
@@ -14,14 +15,15 @@ struct WelcomeView: View {
     @State private var shown = false
 
     var body: some View {
-        VStack(spacing: 28) {
-            VStack(spacing: 12) {
-                RookSymbol()
-                    .frame(width: 72, height: 72)
-                Text("Welcome to \(rookAppName)")
-                    .font(.largeTitle.weight(.semibold))
-                    .accessibilityAddTraits(.isHeader)
+        VStack(spacing: 36) {
+            StampedWordmark(letters: RookWordmark.letters, capHeight: RookWordmark.capHeight,
+                            spacing: RookWordmark.spacing, height: 64) {
+                withAnimation(.smooth(duration: 0.5)) { shown = true }
             }
+            .foregroundStyle(Color("AccentColor"))
+            .accessibilityElement()
+            .accessibilityLabel("Welcome to \(rookAppName)")
+            .accessibilityAddTraits(.isHeader)
             if shown {
                 // Noodle's own steps, with Rook's accounts and its mission team.
                 FirstBotSetupSteps(
@@ -44,11 +46,30 @@ struct WelcomeView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(32)
-        .task {
-            try? await Task.sleep(for: .milliseconds(600))
-            withAnimation(.smooth(duration: 0.5)) { shown = true }
-        }
     }
+}
+
+/// Rook's name in the banner's letters: square-cut, with octagonal bowls and an R whose stem is slashed.
+enum RookWordmark {
+    static let capHeight: CGFloat = 140
+    static let spacing: CGFloat = 16
+    private static let stem: CGFloat = 26
+
+    static let letters: [StampedWordmark.Letter] = {
+        typealias Letter = StampedWordmark.Letter
+        let t = stem
+        let r = Letter(width: 110, parts: [Letter.polygon([(0, 0), (80, 0), (104, 24), (104, 62), (80, 86), (0, 86)]),
+                                           Path(CGRect(x: 0, y: 0, width: t, height: 140)),
+                                           Letter.polygon([(44, 60), (76, 60), (110, 140), (78, 140)])],
+                       holes: [Letter.polygon([(t, t), (68, t), (78, 36), (78, 50), (68, 60), (t, 60)]),
+                               Letter.polygon([(-2, 112), (t + 2, 98), (t + 2, 106), (-2, 120)])])
+        let o = Letter(width: 110, parts: [Letter.octagon(CGRect(x: 0, y: 0, width: 110, height: 140), cut: 32)],
+                       holes: [Letter.octagon(CGRect(x: t, y: t, width: 110 - 2 * t, height: 140 - 2 * t), cut: 14)])
+        let k = Letter(width: 110, parts: [Path(CGRect(x: 0, y: 0, width: t, height: 140)),
+                                           Letter.polygon([(t, 58), (74, 0), (110, 0), (t, 100)]),
+                                           Letter.polygon([(44, 74), (66, 50), (110, 140), (72, 140)])])
+        return [r, o, o, k]
+    }()
 }
 
 /// Rook's mark, drawn in the text colour, or in `ink` where it is set on a card of its own.

@@ -11,6 +11,10 @@
 - A Mission keeps its gateway's logs in its folder, and so in its export: `network.log` with every connection and probe its computers made, allowed or stopped, named after the lookup that found it, and `dns.log` with every lookup and its answers. Show Network Log and Show DNS Log, in a Mission's context menu, open each in a window that follows it as it grows.
 - The Scope and Exceptions editors say under the text what a line may be.
 
+### Changed
+
+- The welcome stamps ROOK on the screen letter by letter, in the red lettering of Rook's artwork, each letter landing with a jolt, before the steps to get started appear.
+
 ## [0.7.0] - 2026-11-25
 
 ### Changed
