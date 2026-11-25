@@ -651,5 +651,6 @@ public enum PionAdapters {
                                                                   "google-workspace-containment": GoogleWorkspace.containmentAdapter,
                                                                   "proofpoint": Proofpoint.adapter, "sumologic": SumoLogic.adapter,
                                                                   "tenable": Tenable.adapter, "censys": Censys.adapter, "grafana": Grafana.adapter, "sentry": Sentry.adapter,
-                                                                  "vercel": Vercel.adapter, "vercel-containment": Vercel.containmentAdapter]
+                                                                  "vercel": Vercel.adapter, "vercel-containment": Vercel.containmentAdapter,
+                                                                  "duo": Duo.adapter, "duo-containment": Duo.containmentAdapter]
 }

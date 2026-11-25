@@ -1201,6 +1201,96 @@ final class ToolConnectionServiceTests: XCTestCase {
         XCTAssertNil(AWSSignature.scope(of: "amazonaws.com.evil.example", defaultRegion: "us-east-1"))
     }
 
+    /// Duo's published v5 example, a POST to Admin API with a JSON body; and a GET with a query, signed as Duo's own
+    /// reference function signs it.
+    func testDuoSignatureMatchesDuosPublishedExample() throws {
+        let date = ISO8601DateFormatter().date(from: "2012-08-21T17:29:18Z")!
+        var post = URLRequest(url: URL(string: "https://api-xxxxxxxx.duosecurity.com/admin/v1/users")!)
+        post.httpMethod = "POST"
+        post.httpBody = Data(#"{"realname":"First Last","username":"root"}"#.utf8)
+        DuoSignature.sign(&post, integrationKey: "DIWJ8X6AEYOR5OMC6TQ1", secretKey: "Zh5eGmUq9zpfQnyUIu5OL9iWoMMv5ZNmk3zLJ4Ep", date: date)
+        XCTAssertEqual(post.value(forHTTPHeaderField: "Date"), "Tue, 21 Aug 2012 17:29:18 -0000")
+        XCTAssertEqual(post.value(forHTTPHeaderField: "Authorization"),
+            "Basic RElXSjhYNkFFWU9SNU9NQzZUUTE6MzIxM2RhNjdkM2NiOGNmY2ZlNWJiMTgyMWI3NjJmY2ZlYzI1OTg1NmE0Yjc1OWY4NDI4NzhmZjkzNDA0NjcyYjI4NGNiZGQxNDQwZDQxNzgyYzQxODllYWVmNmZjMzgzNzg2MzBhZjc1Y2VkNzlkMGM5NDExMGYwNGI2MzEyZjg=")
+
+        var get = URLRequest(url: URL(string: "https://api-xxxxxxxx.duosecurity.com/admin/v1/users?username=root")!)
+        DuoSignature.sign(&get, integrationKey: "DIWJ8X6AEYOR5OMC6TQ1", secretKey: "Zh5eGmUq9zpfQnyUIu5OL9iWoMMv5ZNmk3zLJ4Ep", date: date)
+        let basic = try XCTUnwrap(get.value(forHTTPHeaderField: "Authorization")?.dropFirst("Basic ".count))
+        XCTAssertEqual(String(data: try XCTUnwrap(Data(base64Encoded: String(basic))), encoding: .utf8),
+            "DIWJ8X6AEYOR5OMC6TQ1:c2f048c5ec058a0b27a2387820fefcf0c0a1059dab5f63d96e7add10cece874fe629f5b3c24aed25a1af1008a50e45096ea9823256930e398bc671856395b8af")
+        XCTAssertNil(get.httpBody)
+
+        // A change without parameters is sent, and signed, with the empty JSON object Duo asks for.
+        var change = URLRequest(url: URL(string: "https://api-xxxxxxxx.duosecurity.com/admin/v1/users/DU1/send")!)
+        change.httpMethod = "POST"
+        DuoSignature.sign(&change, integrationKey: "DIWJ8X6AEYOR5OMC6TQ1", secretKey: "Zh5eGmUq9zpfQnyUIu5OL9iWoMMv5ZNmk3zLJ4Ep", date: date)
+        XCTAssertEqual(change.httpBody, Data("{}".utf8))
+        XCTAssertEqual(change.value(forHTTPHeaderField: "Content-Type"), "application/json")
+    }
+
+    /// A Duo connection's key pair is kept as its token, but each request goes signed with it, the secret key never sent.
+    func testADuoKeyPairSignsEachRequestAndIsNeverSent() async throws {
+        let composed = ComposedToken(first: "Integration key", second: "Secret key", format: .duoSignature)
+        let duo = ToolDefinition(id: "duo", name: "Duo", summary: "Logs.", defaultInstructions: "Read.", iconName: "duo",
+            configuration: .connection(.init(endpointTemplate: "https://service.example/v3", fields: [], tokenHeader: "Authorization",
+                                             composedToken: composed, adapter: "lookup")))
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        ToolCatalog.use(ToolCatalog.noodle + [duo])
+        XCTAssertThrowsError(try composed.compose("DI:XYZ", "secret"), "a key with a colon could change which part is the secret")
+        let secret = "Zh5eGmUq9zpfQnyUIu5OL9iWoMMv5ZNmk3zLJ4Ep"
+        let record = try duo.makeConnection(name: "Duo")
+        let client = service(vault: TestVault())
+        let adapter = LookupAdapter()
+        await client.useAdapters(["lookup": adapter])
+        try await client.saveToken(try composed.compose(" DIWJ8X6AEYOR5OMC6TQ1 ", secret), for: record)
+        _ = try await client.perform(MCPBridgeRequest(session: "", connectionID: record.id, action: .call, tool: "file", arguments: Data("{}".utf8)),
+                                     connection: record)
+        let headers = try XCTUnwrap(FixtureProtocol.state.adapterHeaders.first)
+        XCTAssertNotNil(headers["Date"])
+        let basic = try XCTUnwrap(headers["Authorization"]?.components(separatedBy: "Basic ").last)
+        let pair = try XCTUnwrap(String(data: try XCTUnwrap(Data(base64Encoded: basic)), encoding: .utf8)).split(separator: ":")
+        XCTAssertEqual(pair.first, "DIWJ8X6AEYOR5OMC6TQ1")
+        XCTAssertEqual(pair.last?.count, 128, "not an HMAC-SHA512 signature")
+        XCTAssertFalse(headers.values.contains { $0.contains(secret) || $0.contains(Data(secret.utf8).base64EncodedString()) }, "the secret key was sent")
+        XCTAssertTrue(adapter.refusedElsewhere, "the signed connection could reach another host")
+    }
+
+    /// A Duo key pair is never sent as a token: when the connection's catalogue entry cannot be found, or the kept pair
+    /// is not one, the call fails as signed out and nothing reaches the service.
+    func testADuoKeyPairThatCannotSignIsNeverSent() async throws {
+        let composed = ComposedToken(first: "Integration key", second: "Secret key", format: .duoSignature)
+        let duo = ToolDefinition(id: "duo", name: "Duo", summary: "Logs.", defaultInstructions: "Read.", iconName: "duo",
+            configuration: .connection(.init(endpointTemplate: "https://service.example/v3", fields: [], tokenHeader: "Authorization",
+                                             composedToken: composed, adapter: "lookup")))
+        defer { ToolCatalog.use(ToolCatalog.noodle) }
+        let secret = "Zh5eGmUq9zpfQnyUIu5OL9iWoMMv5ZNmk3zLJ4Ep"
+        let record = try duo.makeConnection(name: "Duo")
+        let call = MCPBridgeRequest(session: "", connectionID: record.id, action: .call, tool: "file", arguments: Data("{}".utf8))
+        func refused(_ token: String, catalogue: [ToolDefinition]) async throws -> Bool {
+            FixtureProtocol.state = FixtureState()
+            ToolCatalog.use(catalogue)
+            let client = service(vault: TestVault())
+            let adapter = LookupAdapter()
+            await client.useAdapters(["lookup": adapter])
+            try await client.saveToken(token, for: record)
+            var signedOut = false
+            do { _ = try await client.perform(call, connection: record) } catch ToolConnectionServiceError.signInRequired { signedOut = true }
+            XCTAssertTrue(adapter.calls.isEmpty, "the adapter ran without a way to sign")
+            XCTAssertTrue(FixtureProtocol.state.adapterHeaders.isEmpty, "a request was sent")
+            XCTAssertEqual(FixtureProtocol.state.allRequests, 0, "a request was sent")
+            return signedOut
+        }
+        let pair = try composed.compose("DIWJ8X6AEYOR5OMC6TQ1", secret)
+        // The entry is gone, as when its host was edited or the catalogue no longer has it.
+        let lost = try await refused(pair, catalogue: ToolCatalog.noodle)
+        XCTAssertTrue(lost, "a Duo key pair without its entry was not refused")
+        // The entry says Duo, but what was kept is no key pair, or only half of one.
+        for malformed in ["DIWJ8X6AEYOR5OMC6TQ1:" + secret, ComposedToken.duoSignaturePrefix + "DIWJ8X6AEYOR5OMC6TQ1", ComposedToken.duoSignaturePrefix + ":" + secret] {
+            let refusedMalformed = try await refused(malformed, catalogue: ToolCatalog.noodle + [duo])
+            XCTAssertTrue(refusedMalformed, "\(malformed) was not refused")
+        }
+    }
+
     /// More of AWS's published Signature Version 4 examples: the test suite's sorted query and POST, and S3's own, which
     /// sign the payload's hash in x-amz-content-sha256 and encode each path segment only once.
     func testSigV4MatchesAWSsPublishedExamplesForS3AndQueries() throws {

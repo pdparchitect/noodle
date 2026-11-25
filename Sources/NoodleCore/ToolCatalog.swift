@@ -101,14 +101,20 @@ public struct ToolField: Equatable, Sendable {
 }
 
 /// A token made from two values the person enters, for services that take an ID and secret as Basic auth or two
-/// keys in one header. The result is kept and sent as the connection's token.
+/// keys in one header. The result is kept as the connection's token, and sent as it is unless its format signs each
+/// request with it instead.
 public struct ComposedToken: Equatable, Sendable {
     public enum Format: Equatable, Sendable {
         /// base64 of first:second, as HTTP Basic auth takes it.
         case basic
         /// The text with {first} and {second} replaced, such as accessKey={first};secretKey={second}.
         case template(String)
+        /// A Duo Admin API application's integration key and secret key, kept together after `duoSignaturePrefix` as
+        /// first:second and never sent: each request is signed with them, as Duo's API asks, instead.
+        case duoSignature
     }
+    /// What a kept Duo key pair starts with, so the pair itself says it signs and is never sent as a token.
+    public static let duoSignaturePrefix = "duo-signature:"
     /// What the form calls each value.
     public let first: String
     public let second: String
@@ -133,6 +139,12 @@ public struct ComposedToken: Equatable, Sendable {
                 throw ToolConnectionError.message("Enter the \(self.first) and \(self.second) as given, without ; = , or braces.")
             }
             return template.replacingOccurrences(of: "{first}", with: values[0]).replacingOccurrences(of: "{second}", with: values[1])
+        case .duoSignature:
+            let plain = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+            guard values.allSatisfy({ $0.count <= 128 && $0.unicodeScalars.allSatisfy(plain.contains) }) else {
+                throw ToolConnectionError.message("Enter the \(self.first) and \(self.second) as Duo shows them, letters and digits only.")
+            }
+            return Self.duoSignaturePrefix + "\(values[0]):\(values[1])"
         }
     }
 }

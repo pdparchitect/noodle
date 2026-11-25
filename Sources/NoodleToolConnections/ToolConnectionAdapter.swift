@@ -280,6 +280,8 @@ enum ConnectionAuthorization: Sendable {
     case awsOrganisation(AWSOrganisation)
     /// A Google access token, good for every googleapis.com service its scopes allow.
     case google(String)
+    /// A Duo Admin API application's integration key and secret key, which sign each request rather than going with it.
+    case duo(integrationKey: String, secretKey: String)
 
     /// Whether each request is signed for AWS with one account's keys, so AWS's own way of saying it throttled a request
     /// is read.
@@ -292,7 +294,7 @@ enum ConnectionAuthorization: Sendable {
     var coversSubdomains: Bool {
         switch self {
         case .aws, .awsOrganisation, .google: true
-        case .header, .parameter: false
+        case .header, .parameter, .duo: false
         }
     }
 
@@ -312,6 +314,8 @@ enum ConnectionAuthorization: Sendable {
         case .aws(let key, let defaultRegion):
             guard let host = request.url?.host, let scope = AWSSignature.scope(of: host, defaultRegion: defaultRegion) else { return }
             AWSSignature.sign(&request, key: key, region: scope.region, service: scope.service)
+        case .duo(let integrationKey, let secretKey):
+            DuoSignature.sign(&request, integrationKey: integrationKey, secretKey: secretKey)
         case .awsOrganisation:
             break
         }

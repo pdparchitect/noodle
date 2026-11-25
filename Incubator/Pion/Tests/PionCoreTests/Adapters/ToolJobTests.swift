@@ -89,6 +89,12 @@ final class ToolJobTests: XCTestCase {
                 containmentTools: ["project", "enable-attack-mode", "disable-attack-mode", "block-ip", "block-asn", "block-country", "unblock",
                                    "enable-protection", "remove-member", "rollback", "check-access"],
                 detectionRequests: 4, containmentRequests: 2),
+        Service(name: "Duo", operations: Duo.operations, detection: Duo.adapter, containment: Duo.containmentAdapter,
+                detectionTools: ["auth-logs", "admin-logs", "telephony-logs", "user", "security-events", "check-access", "users", "admins",
+                                 "integrations", "phones", "settings", "policies", "bypass-codes"],
+                containmentTools: ["user", "disable-user", "enable-user", "clear-bypass", "delete-bypass-codes", "remove-phone", "remove-token",
+                                   "remove-security-key", "send-enrollment", "send-activation", "check-access"],
+                detectionRequests: 2, containmentRequests: 2),
     ]
 
     private let connection = try! ToolConnection(name: "Any", endpoint: URL(string: "https://api.example.com")!, tokenHeader: "x-api-key", adapter: "any")

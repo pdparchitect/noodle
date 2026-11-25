@@ -623,6 +623,16 @@ public actor ToolConnectionService {
         if let header = connection.tokenHeader {
             guard let token = try tokens.load(connection.id), token.endpoint == connection.endpoint,
                   token.header == header else { throw ToolConnectionServiceError.signInRequired }
+            // A Duo key pair signs each request and is never sent itself. It signs only when both the pair, by its prefix,
+            // and the connection's catalogue entry say so; when only one does, or the pair cannot be read, nothing is sent.
+            let pairSaysDuo = token.value.hasPrefix(ComposedToken.duoSignaturePrefix), entrySaysDuo = Self.signsForDuo(connection)
+            if pairSaysDuo || entrySaysDuo {
+                let keys = token.value.dropFirst(ComposedToken.duoSignaturePrefix.count).split(separator: ":", maxSplits: 1).map(String.init)
+                guard pairSaysDuo, entrySaysDuo, keys.count == 2, keys.allSatisfy({ !$0.isEmpty }) else {
+                    throw ToolConnectionServiceError.signInRequired
+                }
+                return .duo(integrationKey: keys[0], secretKey: keys[1])
+            }
             // The connection's scheme goes first. Otherwise a bare token in Authorization is a bearer token, and
             // one that names its own scheme goes as it is.
             let value = if let scheme = connection.tokenScheme { scheme + " " + token.value }
@@ -664,6 +674,12 @@ public actor ToolConnectionService {
         // A Google sign-in is good for every googleapis.com service its scopes allow.
         if oauthConfiguration?.issuer.host == "accounts.google.com" { return .google(token) }
         return .header("Authorization", "Bearer " + token)
+    }
+
+    /// Whether the connection's catalogue entry makes its token from a Duo key pair, which signs requests instead.
+    private nonisolated static func signsForDuo(_ connection: ToolConnection) -> Bool {
+        guard case .connection(let configuration)? = ToolCatalog.definition(for: connection)?.configuration else { return false }
+        return configuration.composedToken?.format == .duoSignature
     }
 
     /// Reaches an adapted connection's service with its credentials for the app's own use, such as checking it for

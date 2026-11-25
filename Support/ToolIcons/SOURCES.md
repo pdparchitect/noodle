@@ -44,6 +44,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | datadog.icon (2026-10-06) | https://www.datadoghq.com/favicon.ico |
 | defender.icon (2026-11-18) | https://security.microsoft.com/favicon.ico |
 | dns.icon (2026-11-21) | https://dns.google/static/93dd5954/favicon.png (Google Public DNS) |
+| duo.icon (2026-11-25) | https://duo.com/images/favicon/favicon-192x192.png |
 | dropbox.icon (2026-10-06) | https://cfl.dropboxstatic.com/static/metaserver/static/images/favicon.ico |
 | elastic.icon (2026-11-18) | https://www.elastic.co/apple-touch-icon.png |
 | elevenlabs.icon (2026-10-06) | https://elevenlabs.io/apple-icon.png |
