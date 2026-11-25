@@ -11,6 +11,10 @@ All notable changes to Noodle are documented here, following
 - Markdown attachments open in a window of their own, laid out with headings, lists, tables and code; Preview and Source in its header switch between that and the text as written. Metal shaders open there too, playing or as their source. Both annotate as any other preview.
 - Noodle no longer adds a Quick Look preview or thumbnail for `.metal` files to Finder.
 
+### Fixed
+
+- Run on Hub, Run on This Mac and Sign In… in the header of a noodlet or live view window take clicks instead of dragging the window, and show in grey like the rest of the header.
+
 ## [0.96.0] - 2026-11-25
 
 ### Changed

@@ -232,8 +232,9 @@ struct HubNoodletSwitch: View {
 
     var body: some View {
         if let other = run.otherPlace {
+            // Grey, as everything in a preview's header is.
             Button(other == .hub ? "Run on Hub" : "Run on This Mac") { run.choose(other) }
-                .buttonStyle(.accentLink).font(.system(size: 11, weight: .medium))
+                .buttonStyle(.plain).foregroundStyle(.secondary).font(.system(size: 11, weight: .medium))
         }
     }
 }

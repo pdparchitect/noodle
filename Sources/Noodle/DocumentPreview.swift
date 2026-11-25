@@ -136,6 +136,8 @@ final class DocumentModeControl: NSSegmentedControl {
         setLabel("Source", forSegment: 1)
         trackingMode = .selectOne
         controlSize = .small
+        // Grey, as everything in a preview's header is, rather than the accent.
+        selectedSegmentBezelColor = NSColor.white.withAlphaComponent(0.2)
         selectedSegment = model.showsSource ? 1 : 0
         setAccessibilityLabel("Show")
         target = self; action = #selector(changed)

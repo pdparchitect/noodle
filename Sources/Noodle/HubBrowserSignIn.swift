@@ -48,8 +48,9 @@ struct HubBrowserSignInButton: View {
 
     var body: some View {
         if signIn.available {
+            // Grey, as everything in a preview's header is.
             Button("Sign In…", action: signIn.find).disabled(signIn.finding)
-                .buttonStyle(.accentLink).font(.system(size: 11, weight: .medium))
+                .buttonStyle(.plain).foregroundStyle(.secondary).font(.system(size: 11, weight: .medium))
         }
     }
 }

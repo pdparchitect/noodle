@@ -41,6 +41,7 @@ import XCTest
             let control = try XCTUnwrap(views(window.contentView).compactMap { $0 as? NSSegmentedControl }.first, name)
             XCTAssertEqual((0..<control.segmentCount).map { control.label(forSegment: $0) }, ["Preview", "Source"])
             XCTAssertEqual(control.selectedSegment, 0)
+            XCTAssertNotNil(control.selectedSegmentBezelColor, "Grey, not the accent")
             func shownSource() -> String? {
                 window.contentView?.layoutSubtreeIfNeeded()
                 return views(window.contentView).compactMap { ($0 as? NSTextView)?.string }.first { $0 == source }

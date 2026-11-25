@@ -398,6 +398,7 @@ final class ActivityEmptyLabel: NSTextField {
         layer?.borderWidth = 1; layer?.borderColor = NSColor.white.withAlphaComponent(0.22).cgColor
 
         let header = AnnotationPreviewHeader()
+        header.accessory = accessory
         let close = NSButton(image: NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: closeLabel)!,
                              target: header, action: #selector(AnnotationPreviewHeader.closePreview))
         close.isBordered = false; close.contentTintColor = .secondaryLabelColor
@@ -443,11 +444,16 @@ final class ActivityEmptyLabel: NSTextField {
 }
 
 @MainActor private final class AnnotationPreviewHeader: NSView {
+    weak var accessory: NSView?
+
     override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard let hit = super.hitTest(point) else { return nil }
-        // Buttons and switches take their own clicks; the rest of the header, labels included, drags the window.
-        return hit is NSButton || hit is NSSegmentedControl ? hit : self
+        // The close button and whatever sits in the header, AppKit or SwiftUI, take their own clicks; the rest of the
+        // header, labels included, drags the window.
+        if hit is NSButton { return hit }
+        if let accessory, hit === accessory || hit.isDescendant(of: accessory) { return hit }
+        return self
     }
     @objc func closePreview() { window?.performClose(nil) }
 }
