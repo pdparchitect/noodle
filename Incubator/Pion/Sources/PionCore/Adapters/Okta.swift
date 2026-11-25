@@ -2,9 +2,9 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// An Okta org's users, their groups, apps, sign-in factors and grants, its admins and API tokens, and its System Log,
-/// read as the admin who signs in. Each account is its own org, named by its domain. Okta Detection only reads; Okta
-/// Containment, a tool of its own with a sign-in of its own, acts.
+/// An Okta org's users, their groups, apps, sign-in factors and grants, its admins and API tokens, its policies and
+/// authenticators, and its System Log, read as the admin who signs in. Each account is its own org, named by its
+/// domain. Okta Detection only reads; Okta Containment, a tool of its own with a sign-in of its own, acts.
 ///
 /// Both sign in through OAuth at the org's own authorization server, with an authorization code and PKCE, through a
 /// native app the org made, which keeps no client secret. Okta allows a request only when both the sign-in's scopes and
@@ -16,24 +16,29 @@ public enum Okta {
     public static let preset = ToolDefinition(
         // The ID and adapter key stay as they were, so connections made before keep working.
         id: "bdc65def-9c77-4503-9d57-eac000822cce", name: "Okta Detection",
-        summary: "Users, groups, apps, sign-in factors, grants, admins, API tokens and the System Log of an Okta org, read-only.",
+        summary: "Users, groups, apps, sign-in factors, grants, admins, API tokens, sign-on, MFA and password policies and the System Log of an Okta org, read-only.",
         defaultInstructions: """
         Use Okta Detection to learn who an identity is and what happened to it: find-user, then user-groups, user-apps, \
         user-factors and user-grants (the apps a user let act for them, which keep working after a password change); \
-        sign-in-events searches the System Log by the user who acted, the user acted on (target), IP address, event type, \
-        failures and time; admin-roles says who holds which admin role, api-tokens every API token, who made it and where \
-        it works from. The alert watch checks every five minutes and wakes you with a note naming security-events, which \
-        reads what it reads for the note's window: admin roles granted, API tokens made, a user's sign-in factors changed \
-        or reset by someone else, policies or their rules turned off or changed, an admin impersonating a user, identity \
-        providers and apps added, network zones changed, threats Okta ThreatInsight detected, suspicious activity a user \
-        reported, and org rate limits hit. A note may name the System Log as unreadable: security-events says why, so \
-        tell the champion what to change and treat its silence as unknown. When a tool is refused or something you need \
-        seems missing, run check-access and tell the champion exactly what it says to change. Silence is not proof: every \
-        result says when it stopped before reading everything or matched more than it kept; report those gaps with what \
-        you found. Okta keeps the System Log for 90 days. An event's actor is the account used, not who held it. Record \
-        what you find as evidence, citing the org, the user and the time window you searched. These tools only read: \
-        recommend suspending a user, clearing their sessions or resetting their factors to the champion, or use Okta \
-        Containment, with the user's login, why, and how to undo it.
+        sign-in-events searches the System Log by the user who acted, the user acted on (target), IP address, event \
+        type, failures and time; admin-roles says who holds which admin role, api-tokens every API token, who made it \
+        and where it works from. To assess how the org is set up, sign-on-policies reads the global session and \
+        authentication policies with every rule, mfa-policies the authenticators and who must enroll which, and \
+        password-policies the password, lockout and recovery rules, each leading with the gaps an assessment asks about, \
+        such as a password alone letting people in, sessions that never end, SMS or a security question allowed, or no \
+        lockout; they say what the rules allow, not who signed in under them, which sign-in-events shows. The alert \
+        watch checks every five minutes and wakes you with a note naming security-events, which reads what it reads for \
+        the note's window: admin roles granted, API tokens made, a user's sign-in factors changed or reset by someone \
+        else, policies or their rules turned off or changed, an admin impersonating a user, identity providers and apps \
+        added, network zones changed, threats Okta ThreatInsight detected, suspicious activity a user reported, and org \
+        rate limits hit. A note may name the System Log as unreadable: security-events says why, so tell the champion \
+        what to change and treat its silence as unknown. When a tool is refused or something you need seems missing, run \
+        check-access and tell the champion exactly what it says to change. Silence is not proof: every result says when \
+        it stopped before reading everything or matched more than it kept; report those gaps with what you found. Okta \
+        keeps the System Log for 90 days. An event's actor is the account used, not who held it. Record what you find as \
+        evidence, citing the org, the user and the time window you searched. These tools only read: recommend suspending \
+        a user, clearing their sessions or resetting their factors to the champion, or use Okta Containment, with the \
+        user's login, why, and how to undo it.
         """,
         iconName: "okta",
         configuration: .connection(.init(endpointTemplate: "https://{domain}/api/v1", fields: fields,
@@ -56,9 +61,10 @@ public enum Okta {
     }
 
     /// Only reading scopes, one for each kind of thing Okta Detection reads: users, with their factors and grants, and the
-    /// signed-in admin; groups; apps; the System Log; admin roles and assignments; API tokens.
+    /// signed-in admin; groups; apps; the System Log; admin roles and assignments; API tokens; policies with their rules;
+    /// authenticators; and the network zones rules name.
     static let auditScopes = ["okta.users.read", "okta.users.read.self", "okta.groups.read", "okta.apps.read", "okta.logs.read",
-                              "okta.roles.read", "okta.apiTokens.read"]
+                              "okta.roles.read", "okta.apiTokens.read", "okta.policies.read", "okta.authenticators.read", "okta.networkZones.read"]
 
     /// Where Okta sends each sign-in back to: Pion's bundle ID as a URL scheme.
     static let redirects = "`com.pdparchitect.pion:/oauth2callback` (`com.pdparchitect.pion.local:/oauth2callback` for Pion Dev)"
@@ -72,7 +78,7 @@ public enum Okta {
     }
 
     static let setup = appSteps("Pion Detection", scopes: auditScopes) + [
-        "Okta allows a request only when both the app's scopes and the signed-in admin's role allow it. Keep an admin for Pion Detection alone, such as pion-detection@example.com, with the **Read-Only Administrator** role under **Security › Administrators**.",
+        "Okta allows a request only when both the app's scopes and the signed-in admin's role allow it. Keep an admin for Pion Detection alone, such as pion-detection@example.com, with the **Read-Only Administrator** role under **Security › Administrators**. It also views the org's policies, authenticators and network zones, which sign-on-policies, mfa-policies and password-policies read.",
         "To audit admins and API tokens too, under **Security › Administrators › Roles** create a role such as **Pion Detection** with only **View roles, resources, and admin assignments** (`okta.iam.read`) and **View API tokens** (`okta.users.apitokens.read`), and assign it to the same admin for all users and all Identity and Access Management resources. The Read-Only Administrator cannot see them.",
         "Give your org's domain, such as `acme.okta.com`, not its `-admin` address, and the app's **Client ID**. Choose **Add & Connect** and sign in as that admin. Then ask an agent to run check-access.",
     ]
@@ -80,6 +86,7 @@ public enum Okta {
     /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
     static let operations: [any ServiceOperation] = [
         FindUser(), UserGroups(), UserApps(), UserFactors(), SignInEvents(), UserGrants(), AdminRoles(), APITokens(), SecurityEvents(), CheckAccess(),
+        SignOnPolicies(), MFAPolicies(), PasswordPolicies(),
         ContainmentUser(), Suspend(), Unsuspend(), Deactivate(), ClearSessions(), ResetFactors(), DeleteFactor(), ExpirePassword(), RemoveFromGroup(),
         RevokeAdminRole(), RevokeAppGrants(), RevokeAPIToken(), ContainmentCheckAccess(),
     ]
@@ -320,6 +327,9 @@ public enum Okta {
         static let admins = Need(title: "Admin assignments", scope: "okta.roles.read", permission: "a custom role with View roles, resources, and admin assignments (okta.iam.read)")
         static let tokens = Need(title: "API tokens", scope: "okta.apiTokens.read", permission: "a custom role with View API tokens (okta.users.apitokens.read)")
         static let signedIn = Need(title: "The signed-in admin", scope: "okta.users.read.self", permission: "an admin role")
+        static let policies = Need(title: "Policies", scope: "okta.policies.read", permission: "the Read-Only Administrator role, which views the org's policies")
+        static let authenticators = Need(title: "Authenticators", scope: "okta.authenticators.read", permission: "the Read-Only Administrator role, which views the org's authenticators")
+        static let zones = Need(title: "Network zones", scope: "okta.networkZones.read", permission: "the Read-Only Administrator role, which views the org's network zones")
     }
 
     /// How a refusal for a scope the sign-in lacks begins, before the scope Okta named.
@@ -742,6 +752,9 @@ extension Okta {
             })
             lines.append(await check(.admins) { _ = try await Okta.exchange(service, ["iam", "assignees", "users"], query: ["limit": "1"]) })
             lines.append(await check(.tokens) { _ = try await Okta.exchange(service, ["api-tokens"], query: ["limit": "1"]) })
+            lines.append(await check(.policies) { _ = try await Okta.exchange(service, ["policies"], query: ["type": "OKTA_SIGN_ON", "limit": "1"]) })
+            lines.append(await check(.authenticators) { _ = try await Okta.exchange(service, ["authenticators"]) })
+            lines.append(await check(.zones) { _ = try await Okta.exchange(service, ["zones"], query: ["limit": "1"]) })
             do {
                 let (me, roles) = try await Okta.signedIn(service)
                 let named = roles.map { $0.label ?? $0.type ?? "?" }

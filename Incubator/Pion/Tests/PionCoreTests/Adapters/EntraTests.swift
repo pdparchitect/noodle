@@ -318,4 +318,120 @@ final class EntraTests: XCTestCase {
         XCTAssertTrue(text.contains("⚠ Consented besides what this tool asks for: User.ReadWrite.All") && text.contains("can change the tenant"), text)
         XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" }, "it changes nothing")
     }
+
+    // MARK: Assessment
+
+    /// Conditional Access policies read page after page, led by whether MFA is required of everyone and of admins,
+    /// whether legacy authentication is blocked, which policies only report, whom enforcing ones exclude and broad
+    /// trusted locations, with groups, roles, apps and locations named.
+    func testConditionalAccessLeadsWithWhatAnAssessmentAsks() async throws {
+        let path = "/v1.0/identity/conditionalAccess/policies"
+        let first = #"{"value":[{"id":"11111111-0000-4000-8000-000000000001","displayName":"CA01 Require MFA for everyone","state":"enabled","modifiedDateTime":"2026-10-01T00:00:00Z","conditions":{"clientAppTypes":["all"],"applications":{"includeApplications":["All"],"excludeApplications":[]},"users":{"includeUsers":["All"],"excludeUsers":[],"includeGroups":[],"excludeGroups":["22222222-0000-4000-8000-000000000002"],"includeRoles":[],"excludeRoles":[]},"locations":null},"grantControls":{"operator":"OR","builtInControls":["mfa"],"authenticationStrength":null},"sessionControls":null},{"id":"11111111-0000-4000-8000-000000000002","displayName":"CA02 Block legacy authentication","state":"enabledForReportingButNotEnforced","conditions":{"clientAppTypes":["exchangeActiveSync","other"],"applications":{"includeApplications":["All"]},"users":{"includeUsers":["All"]}},"grantControls":{"operator":"OR","builtInControls":["block"]}}],"@odata.nextLink":"https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies?$skiptoken=page2"}"#
+        let second = #"{"value":[{"id":"11111111-0000-4000-8000-000000000003","displayName":"CA03 Admins phishing-resistant","state":"enabled","conditions":{"clientAppTypes":["all"],"applications":{"includeApplications":["All"]},"users":{"includeRoles":["62e90394-69f5-4237-9190-012177145e10"]},"locations":{"includeLocations":["All"],"excludeLocations":["AllTrusted"]}},"grantControls":{"operator":"OR","builtInControls":[],"authenticationStrength":{"id":"00000000-0000-0000-0000-000000000004","displayName":"Phishing-resistant MFA"}},"sessionControls":{"signInFrequency":{"isEnabled":true,"value":4,"type":"hours"},"persistentBrowser":{"isEnabled":true,"mode":"never"}}},{"id":"11111111-0000-4000-8000-000000000004","displayName":"CA04 Old","state":"disabled","conditions":{"users":{"includeUsers":["None"]},"applications":{"includeApplications":["00000003-0000-0ff1-ce00-000000000000"]}},"grantControls":{"operator":"OR","builtInControls":["compliantDevice","mfa"]}}]}"#
+        let service = FakeService()
+        service.sequences[path] = [(200, first), (200, second)]
+        service.answers["/v1.0/identity/conditionalAccess/namedLocations"] = (200, ##"{"value":[{"@odata.type":"#microsoft.graph.ipNamedLocation","id":"33333333-0000-4000-8000-000000000003","displayName":"HQ","isTrusted":true,"ipRanges":[{"cidrAddress":"10.0.0.0/8"},{"cidrAddress":"203.0.113.0/24"}]}]}"##)
+        service.answers["/v1.0/roleManagement/directory/roleDefinitions"] = (200, #"{"value":[{"id":"62e90394-69f5-4237-9190-012177145e10","displayName":"Global Administrator","templateId":"62e90394-69f5-4237-9190-012177145e10"}]}"#)
+        service.answers["/v1.0/directoryObjects/22222222-0000-4000-8000-000000000002"] = (200, ##"{"@odata.type":"#microsoft.graph.group","id":"22222222-0000-4000-8000-000000000002","displayName":"Break glass"}"##)
+        service.answers["/v1.0/policies/identitySecurityDefaultsEnforcementPolicy"] = (200, #"{"id":"00000000-0000-0000-0000-000000000005","isEnabled":false}"#)
+        let read = try await callTool(Entra.adapter, "conditional-access", "{}", on: service, in: contoso)
+        XCTAssertFalse(read.isError, read.text)
+        let lines = read.text.split(separator: "\n").map(String.init)
+        XCTAssertEqual(Array(lines.prefix(8)), [
+            "4 Conditional Access policies: 2 enabled, 1 report-only, 1 disabled. Security defaults are off.",
+            #"MFA for all users: required by "CA01 Require MFA for everyone" (excluding group Break glass)."#,
+            "MFA for admins: every privileged role, Global Administrator among them, must use MFA in every app under an enabled policy.",
+            "Legacy authentication: not blocked for all users by any enabled policy.",
+            #"Report-only, so not enforced: "CA02 Block legacy authentication" (would block access)."#,
+            #"Exclusions to review, from policies that require MFA or block: "CA01 Require MFA for everyone" excludes group Break glass."#,
+            #"Broad trusted locations: "HQ" (10.0.0.0/8)."#,
+            "Policies:",
+        ], read.text)
+        let admins = try XCTUnwrap(lines.firstIndex(of: #""CA03 Admins phishing-resistant" (enabled):"#))
+        XCTAssertEqual(Array(lines[(admins + 1)...(admins + 5)]), [
+            "  Users: role Global Administrator", "  Apps: all apps", #"  Conditions: not from trusted locations"#,
+            #"  Grant: require the authentication strength "Phishing-resistant MFA""#, "  Session: sign in again every 4 hours, browser sessions never persist",
+        ], read.text)
+        XCTAssertTrue(lines.contains("  Users: nobody") && lines.contains("  Apps: Office 365 SharePoint Online") && lines.contains("  Grant: require a compliant device or MFA"), read.text)
+        XCTAssertEqual((read.structured?["gaps"] as? [String])?.count, 4)
+        XCTAssertEqual(read.structured?["mfaForAllUsers"] as? [String], [#""CA01 Require MFA for everyone""#])
+        XCTAssertEqual(read.structured?["privilegedRolesWithoutMFA"] as? [String], [])
+        XCTAssertEqual(read.structured?["securityDefaults"] as? Bool, false)
+        XCTAssertEqual(read.structured?["complete"] as? Bool, true)
+        XCTAssertEqual(queryItems(service.requests.last { $0.url?.path == path })["$skiptoken"], "page2")
+        XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" && $0.url?.host == "graph.microsoft.com" })
+
+        // Listing one state keeps the facts for every policy.
+        service.sequences[path] = [(200, first), (200, second)]
+        let disabled = try await callTool(Entra.adapter, "conditional-access", #"{"state":"disabled"}"#, on: service, in: contoso)
+        XCTAssertTrue(disabled.text.contains("Policies in the state disabled:") && disabled.text.contains(#""CA04 Old" (disabled):"#)
+                      && !disabled.text.contains(#""CA03 Admins phishing-resistant" (enabled):"#) && disabled.text.contains("MFA for all users: required by"), disabled.text)
+    }
+
+    /// A role an MFA policy excludes is named as without MFA, and a policy that blocks legacy clients for everyone counts.
+    func testConditionalAccessNamesAdminsLeftWithoutMFAAndLegacyBlocked() async throws {
+        let service = FakeService()
+        service.answers["/v1.0/identity/conditionalAccess/policies"] = (200, #"{"value":[{"id":"11111111-0000-4000-8000-000000000001","displayName":"MFA","state":"enabled","conditions":{"applications":{"includeApplications":["All"]},"users":{"includeUsers":["All"],"excludeRoles":["62e90394-69f5-4237-9190-012177145e10"]}},"grantControls":{"operator":"OR","builtInControls":["mfa"]}},{"id":"11111111-0000-4000-8000-000000000002","displayName":"Legacy","state":"enabled","conditions":{"clientAppTypes":["exchangeActiveSync","other"],"applications":{"includeApplications":["All"]},"users":{"includeUsers":["All"]}},"grantControls":{"operator":"OR","builtInControls":["block"]}}]}"#)
+        let read = try await callTool(Entra.adapter, "conditional-access", "{}", on: service, in: contoso)
+        XCTAssertFalse(read.isError, read.text)
+        XCTAssertTrue(read.text.contains(#"MFA for all users: required by "MFA" (excluding role Global Administrator)."#), read.text)
+        XCTAssertTrue(read.text.contains("MFA for admins: no enabled policy requires MFA in every app without conditions of Global Administrator."), read.text)
+        XCTAssertTrue(read.text.contains(#"Legacy authentication: blocked for all users by "Legacy"."#), read.text)
+        XCTAssertTrue(read.text.contains("Named locations were not read") && read.text.contains("Whether security defaults are on was not read"), read.text)
+        XCTAssertEqual(read.structured?["privilegedRolesWithoutMFA"] as? [String], ["Global Administrator"])
+    }
+
+    /// A policy that accepts MFA or a compliant device lets people on such a device in without MFA, so it counts for
+    /// neither all users nor admins; a policy scoped to a group that requires MFA is named for checking instead.
+    func testMFAOrAnotherControlIsNotRequiredMFA() async throws {
+        let service = FakeService()
+        service.answers["/v1.0/identity/conditionalAccess/policies"] = (200, #"{"value":[{"id":"11111111-0000-4000-8000-000000000001","displayName":"MFA or device","state":"enabled","conditions":{"clientAppTypes":["all"],"applications":{"includeApplications":["All"]},"users":{"includeUsers":["All"]}},"grantControls":{"operator":"OR","builtInControls":["mfa","compliantDevice"]}},{"id":"11111111-0000-4000-8000-000000000002","displayName":"Staff MFA","state":"enabled","conditions":{"applications":{"includeApplications":["All"]},"users":{"includeGroups":["22222222-0000-4000-8000-000000000002"]}},"grantControls":{"operator":"AND","builtInControls":["mfa","compliantDevice"]}}]}"#)
+        service.answers["/v1.0/directoryObjects/22222222-0000-4000-8000-000000000002"] = (200, #"{"id":"22222222-0000-4000-8000-000000000002","displayName":"Staff"}"#)
+        let read = try await callTool(Entra.adapter, "conditional-access", "{}", on: service, in: contoso)
+        XCTAssertFalse(read.isError, read.text)
+        XCTAssertTrue(read.text.contains(#"MFA for all users: no enabled policy targets All users and requires MFA in every app without conditions; "MFA or device" targets All users but lets them use MFA or a compliant device; check group-scoped policies such as "Staff MFA", which may reach everyone between them."#), read.text)
+        XCTAssertTrue(read.text.contains("MFA for admins: no enabled policy requires MFA in every app without conditions of ") && read.text.contains("Global Administrator"), read.text)
+        XCTAssertTrue(read.text.contains("  Grant: require MFA or a compliant device") && read.text.contains("  Grant: require MFA and a compliant device"), read.text)
+        XCTAssertEqual(read.structured?["mfaForAllUsers"] as? [String], [])
+        XCTAssertEqual((read.structured?["privilegedRolesWithoutMFA"] as? [String])?.count, Entra.privilegedRoles.count)
+        XCTAssertFalse(read.text.contains("Exclusions to review"), read.text)
+    }
+
+    /// A refused read names the permission and roles it needs; nothing is taken for "no policies".
+    func testARefusedPolicyReadNamesPolicyReadAll() async throws {
+        let service = FakeService()
+        service.answers["/v1.0/identity/conditionalAccess/policies"] = (403, #"{"error":{"code":"Authorization_RequestDenied","message":"Insufficient privileges to complete the operation."}}"#)
+        let refused = try await callTool(Entra.adapter, "conditional-access", "{}", on: service, in: contoso)
+        XCTAssertTrue(refused.isError && refused.text.contains("Policy.Read.All") && refused.text.contains("Global Reader or Security Reader"), refused.text)
+        service.answers["/v1.0/policies/authenticationMethodsPolicy"] = (403, #"{"error":{"code":"Authorization_RequestDenied","message":"Insufficient privileges to complete the operation."}}"#)
+        service.answers["/v1.0/policies/identitySecurityDefaultsEnforcementPolicy"] = (403, #"{"error":{"code":"Authorization_RequestDenied","message":"Insufficient privileges to complete the operation."}}"#)
+        let methods = try await callTool(Entra.adapter, "auth-methods-policy", "{}", on: service, in: contoso)
+        XCTAssertTrue(methods.isError && methods.text.contains("Policy.Read.All") && methods.text.contains("Authentication Policy Administrator"), methods.text)
+    }
+
+    /// The authentication methods policy says which methods are on for whom, led by weak ones and whether a
+    /// phishing-resistant one is, with the registration campaign, the migration from legacy settings and security defaults.
+    func testAuthMethodsPolicySaysWhichMethodsAreOnForWhom() async throws {
+        let service = FakeService()
+        service.answers["/v1.0/policies/authenticationMethodsPolicy"] = (200, ##"{"id":"authenticationMethodsPolicy","policyMigrationState":"preMigration","lastModifiedDateTime":"2026-04-26T12:44:42Z","registrationEnforcement":{"authenticationMethodsRegistrationCampaign":{"snoozeDurationInDays":1,"state":"enabled","excludeTargets":[],"includeTargets":[{"id":"all_users","targetType":"group","targetedAuthenticationMethod":"microsoftAuthenticator"}]}},"systemCredentialPreferences":{"state":"enabled"},"authenticationMethodConfigurations":[{"@odata.type":"#microsoft.graph.fido2AuthenticationMethodConfiguration","id":"Fido2","state":"enabled","isAttestationEnforced":true,"isSelfServiceRegistrationAllowed":true,"keyRestrictions":{"isEnforced":false},"excludeTargets":[],"includeTargets":[{"targetType":"group","id":"all_users","isRegistrationRequired":false}]},{"id":"MicrosoftAuthenticator","state":"enabled","featureSettings":{"numberMatchingRequiredState":{"state":"enabled"}},"excludeTargets":[],"includeTargets":[{"targetType":"group","id":"all_users","authenticationMode":"any"}]},{"id":"Sms","state":"enabled","excludeTargets":[],"includeTargets":[{"targetType":"group","id":"44444444-0000-4000-8000-000000000004","isUsableForSignIn":true}]},{"id":"Voice","state":"disabled","includeTargets":[{"targetType":"group","id":"all_users"}]},{"id":"Email","state":"enabled","allowExternalIdToUseEmailOtp":"default","excludeTargets":[{"targetType":"group","id":"55555555-0000-4000-8000-000000000005"}],"includeTargets":[{"targetType":"group","id":"all_users"}]},{"id":"TemporaryAccessPass","state":"enabled","isUsableOnce":false,"maximumLifetimeInMinutes":480,"includeTargets":[{"targetType":"group","id":"all_users"}]}]}"##)
+        service.answers["/v1.0/directoryObjects/44444444-0000-4000-8000-000000000004"] = (200, #"{"id":"44444444-0000-4000-8000-000000000004","displayName":"Contractors"}"#)
+        service.answers["/v1.0/directoryObjects/55555555-0000-4000-8000-000000000005"] = (200, #"{"id":"55555555-0000-4000-8000-000000000005","displayName":"Executives"}"#)
+        service.answers["/v1.0/policies/identitySecurityDefaultsEnforcementPolicy"] = (200, #"{"isEnabled":false}"#)
+        let read = try await callTool(Entra.adapter, "auth-methods-policy", "{}", on: service, in: contoso)
+        XCTAssertFalse(read.isError, read.text)
+        let lines = read.text.split(separator: "\n").map(String.init)
+        XCTAssertEqual(lines.first, "Security defaults are off, so Conditional Access policies alone decide when MFA is required: conditional-access says whether they do.")
+        XCTAssertTrue(lines.contains("Weak methods on: SMS for group Contractors (usable to sign in, not only for MFA); Email one-time passcode for all users (guests' email one-time passcode default)."), read.text)
+        XCTAssertTrue(lines.contains("Phishing-resistant methods on: Passkeys (FIDO2) for all users."), read.text)
+        XCTAssertTrue(lines.contains("Registration campaign: enabled, asking all users (microsoftAuthenticator) to register, snoozed up to 1 day at a time."), read.text)
+        XCTAssertTrue(lines.contains { $0.hasPrefix("Migration: not started; the legacy MFA and self-service password reset settings") }, read.text)
+        XCTAssertTrue(lines.contains("Passkeys (FIDO2): on for all users; attestation enforced") && lines.contains("Voice call: disabled")
+                      && lines.contains("Email one-time passcode: on for all users, excluding group Executives; guests' email one-time passcode default")
+                      && lines.contains("Microsoft Authenticator: on for all users; number matching enabled, mode any")
+                      && lines.contains("Temporary Access Pass: on for all users; usable more than once, valid up to 8 hours"), read.text)
+        XCTAssertEqual((read.structured?["gaps"] as? [String])?.count, 2)
+        XCTAssertEqual(read.structured?["securityDefaults"] as? Bool, false)
+        XCTAssertEqual((read.structured?["methods"] as? [[String: Any]])?.count, 6)
+        XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" })
+    }
 }

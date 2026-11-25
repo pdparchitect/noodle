@@ -4,8 +4,9 @@ Pion has two Okta tools, each added per org with a sign-in of its own:
 
 - **Okta Detection** reads an org the way a defender does: who a user is, their
   groups, apps, sign-in factors and the apps they let act for them, who holds
-  which admin role, every API token, and the
-  [System Log](https://developer.okta.com/docs/reference/api/system-log/). It
+  which admin role, every API token, the
+  [System Log](https://developer.okta.com/docs/reference/api/system-log/), and,
+  to assess how the org is set up, its sign-on, MFA and password policies. It
   wakes the agents it is assigned to when the System Log shows the org being
   handed over or its defences weakened. It only reads.
 - **Okta Containment** acts on the same org to contain an account: it suspends
@@ -41,11 +42,15 @@ Okta allows a request only when **both** of these allow it:
 
 | Tool | Scopes | Admin's role |
 | --- | --- | --- |
-| Okta Detection | `okta.users.read`, `okta.users.read.self`, `okta.groups.read`, `okta.apps.read`, `okta.logs.read`, `okta.roles.read`, `okta.apiTokens.read` | Read-Only Administrator, and a custom role that views admins and API tokens |
+| Okta Detection | `okta.users.read`, `okta.users.read.self`, `okta.groups.read`, `okta.apps.read`, `okta.logs.read`, `okta.roles.read`, `okta.apiTokens.read`, `okta.policies.read`, `okta.authenticators.read`, `okta.networkZones.read` | Read-Only Administrator, and a custom role that views admins and API tokens |
 | Okta Containment | `okta.users.manage`, `okta.users.read.self`, `okta.groups.manage`, `okta.roles.manage`, `okta.apiTokens.manage` | a custom role with only the permissions its actions take |
 
 Both also ask for `offline_access`, so the sign-in renews itself without asking
-again. Okta Detection's scopes only read, so it cannot change anything, whatever its
+again. `okta.policies.read`, `okta.authenticators.read` and
+`okta.networkZones.read` let Okta Detection read the org's policies, its
+authenticators and the network zones policy rules name. A connection made
+before Okta Detection asked for them stops until you grant them on the app's
+**Okta API Scopes** tab and sign in again. Okta Detection's scopes only read, so it cannot change anything, whatever its
 admin's role allows. Okta Containment's scopes are broad, as Okta has none
 narrower, so its admin's custom role is what limits it: never make that admin a
 super or organization administrator.
@@ -76,7 +81,8 @@ a listing never leads anywhere else.
    grant them.
 4. **Choose its admin.** Keep an admin for Okta Detection alone, such as
    `pion-detection@example.com`, with the **Read-Only Administrator** role under
-   **Security › Administrators**.
+   **Security › Administrators**. It also views the org's policies,
+   authenticators and network zones.
 5. **To audit admins and API tokens too**, create a custom role under
    **Security › Administrators › Roles**, such as **Pion Detection**, with only
    **View roles, resources, and admin assignments** (`okta.iam.read`) and
@@ -108,6 +114,26 @@ Then ask an agent to run **check-access**.
   endpoint resets (from `X-Rate-Limit-Reset`). The System Log has a lower limit
   than most endpoints.
 - **An event's actor is the account used**, not the person who held it.
+- **Policies are read as they are now.** `sign-on-policies`, `mfa-policies`
+  and `password-policies` say what the policies allow, not who signed in under
+  them; `sign-in-events` shows that. They list inactive policies and rules but
+  count only active ones among the gaps. They read the rules of the first 100
+  policies of a kind and name up to 50 groups and users, showing the rest by
+  ID. They do not say which apps an authentication policy covers: check that on
+  the app's **Sign On** tab.
+- **What counts as a gap.** A session that lasts longer than 12 hours, or never
+  ends by time, an idle session longer than two hours, a session that survives
+  closing the browser, a rule that lets one factor in when that factor may be a
+  password, and re-authentication further apart than 12 hours; agents can give
+  another length of time. SMS, voice call or a security question allowed, and
+  an enrollment policy that requires nothing beyond a password and email. A
+  password shorter than 12 characters, which agents can change, common
+  passwords allowed, no lockout or one after more than 10 failed attempts,
+  recovery by SMS, voice call or security question, and a reset with an email,
+  SMS or voice code alone. A policy for people whose passwords Active Directory
+  or LDAP keeps is not held to Okta's password rules, as the directory's apply.
+- **Classic Engine orgs** have no authentication policies or authenticators;
+  `sign-on-policies` and `mfa-policies` say so and read what there is.
 
 ## What agents can do
 
@@ -122,6 +148,16 @@ Then ask an agent to run **check-access**.
   super administrators first.
 - `api-tokens`: every API token, who made it, where it works from and when it
   expires.
+- `sign-on-policies`: the global session and authentication policies, in the
+  order Okta applies them, with every rule: whom it reaches, from which network
+  zones, whether MFA or a phishing-resistant factor is required, and how long
+  sessions last. Gaps come first.
+- `mfa-policies`: the org's authenticators, which are active and what for, and
+  the authenticator enrollment policies: which authenticators each requires,
+  offers or refuses, and when people are asked to enroll.
+- `password-policies`: the password policies: length and complexity, age and
+  history, lockout, breached-password protection, recovery, and who may change,
+  reset or unlock their password and how.
 - `security-events`: what the alert watch wakes for, for a window. When no
   window is given, the last 24 hours.
 - **check-access**: see [When something does not work](#when-something-does-not-work).
@@ -196,7 +232,8 @@ General**.
 
 Ask an agent to run **check-access**. It changes nothing, and tries once each:
 
-- users, groups, apps, the System Log, admin assignments and API tokens;
+- users, groups, apps, the System Log, admin assignments, API tokens,
+  policies, authenticators and network zones;
 - who is signed in and which admin roles they hold, saying when those roles
   could change the org;
 - the scopes the sign-in holds, and the app they are granted to.

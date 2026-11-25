@@ -3,9 +3,10 @@ import NoodleCore
 import NoodleToolConnections
 
 /// A Microsoft tenant's users, their groups, roles and sign-in methods, its sign-in and audit logs, Identity
-/// Protection's risk, who holds which role and which apps hold which permissions and credentials, read through
-/// Microsoft Graph as the admin who signs in. Each account is one tenant. Microsoft Entra ID Detection only reads; Microsoft
-/// Entra ID Containment, a tool of its own with a sign-in of its own, acts.
+/// Protection's risk, who holds which role, which apps hold which permissions and credentials, and its Conditional
+/// Access and authentication methods policies, read through Microsoft Graph as the admin who signs in. Each account
+/// is one tenant. Microsoft Entra ID Detection only reads; Microsoft Entra ID Containment, a tool of its own with a
+/// sign-in of its own, acts.
 ///
 /// Both sign in through OAuth at the tenant's own address on Microsoft's sign-in service, with an authorization code
 /// and PKCE, through a public client app registration the organisation made for each tool, which keeps no client
@@ -17,7 +18,7 @@ import NoodleToolConnections
 public enum Entra {
     public static let preset = ToolDefinition(
         id: "7b419894-4d22-4624-a699-5df62b3ab680", name: "Microsoft Entra ID Detection",
-        summary: "Users, groups, roles, sign-in methods, sign-in and audit logs, risky users and apps' permissions and credentials of a Microsoft tenant, read-only.",
+        summary: "Users, groups, roles, sign-in methods, sign-in and audit logs, risky users, apps' permissions and credentials, and Conditional Access and authentication methods policies of a Microsoft tenant, read-only.",
         defaultInstructions: """
         Use Microsoft Entra ID Detection to learn who an identity is and what happened to it: find-user, then user-groups \
         (groups and roles, nested ones marked), user-sign-in-methods, sign-ins (the sign-in log with location, IP \
@@ -25,6 +26,11 @@ public enum Entra {
         role's active and eligible holders, Global Administrator first; app-permissions which apps hold which Microsoft \
         Graph permissions; app-credentials the secrets and certificates apps sign in with, newest first, with each one's \
         keyId, as one added lately may be an attacker's way back in; directory-audit who changed what, and from where. \
+        To assess how the tenant is set up, conditional-access reads every Conditional Access policy, leading with whether \
+        MFA is required of all users and of each privileged role, whether legacy authentication is blocked, which \
+        policies only report and whom enforcing ones exclude; auth-methods-policy reads which sign-in methods are on for \
+        whom, such as SMS or passkeys, the registration campaign and whether security defaults are on. They say what the \
+        policies require, not what happened at a sign-in, which sign-ins shows. \
         The alert watch checks every five minutes and wakes you with a note naming security-events, which reads what it \
         reads for the note's window: privileged roles granted, made eligible or activated, secrets or certificates added \
         to apps, consent to apps (admin consent, or high-privilege permissions), federation and domains changed, \
@@ -60,9 +66,10 @@ public enum Entra {
 
     /// Only reading permissions, one for each kind of thing Detection reads: the directory, its users, groups, apps and
     /// grants (sign-in logs need it too); the audit and sign-in logs; users' sign-in methods; risky users; risk
-    /// detections; and role assignments with eligibility in Privileged Identity Management.
+    /// detections; role assignments with eligibility in Privileged Identity Management; and the tenant's policies,
+    /// Conditional Access, authentication methods and security defaults, which Policy.Read.All alone reads all of.
     static let auditScopes = ["Directory.Read.All", "AuditLog.Read.All", "UserAuthenticationMethod.Read.All", "IdentityRiskyUser.Read.All",
-                              "IdentityRiskEvent.Read.All", "RoleManagement.Read.Directory"]
+                              "IdentityRiskEvent.Read.All", "RoleManagement.Read.Directory", "Policy.Read.All"]
 
     /// Where Microsoft sends each sign-in back to: Pion's bundle ID as a URL scheme.
     static let redirects = "`com.pdparchitect.pion:/oauth2callback` (`com.pdparchitect.pion.local:/oauth2callback` for Pion Dev)"
@@ -84,7 +91,7 @@ public enum Entra {
     /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
     static let operations: [any ServiceOperation] = [
         FindUser(), UserGroups(), SignInMethods(), SignIns(), RiskyUsers(), RoleHolders(), AppPermissions(), DirectoryAudit(), AppCredentials(),
-        SecurityEvents(), CheckAccess(),
+        SecurityEvents(), CheckAccess(), ConditionalAccess(), AuthMethodsPolicy(),
         ContainmentUser(), DisableSignIn(), EnableSignIn(), RevokeSessions(), DeleteSignInMethods(), RemoveDirectoryRole(), RemoveAppCredential(),
         ConfirmCompromised(), DismissUserRisk(), ContainmentCheckAccess(),
     ]
@@ -311,6 +318,10 @@ public enum Entra {
         static let eligible = Need(title: "Roles eligible in Privileged Identity Management", scope: "RoleManagement.Read.Directory",
                                    role: "Global Reader", licence: "Microsoft Entra ID P2")
         static let signedIn = Need(title: "The signed-in admin", scope: "Directory.Read.All", role: "any role")
+        static let accessPolicies = Need(title: "Conditional Access policies", scope: "Policy.Read.All", role: "Global Reader or Security Reader",
+                                         licence: "Microsoft Entra ID P1")
+        static let methodsPolicy = Need(title: "Authentication methods policy", scope: "Policy.Read.All", role: "Global Reader or Authentication Policy Administrator")
+        static let securityDefaults = Need(title: "Security defaults", scope: "Policy.Read.All", role: "Global Reader or Security Reader")
     }
 
     /// Whether Graph refused for want of a licence, such as Entra ID P1 for sign-in logs or P2 for Identity Protection,
@@ -955,6 +966,9 @@ extension Entra {
             lines.append(await check(.detections) { try await one(["identityProtection", "riskDetections"]) })
             lines.append(await check(.roles) { try await one(["roleManagement", "directory", "roleAssignments"]) })
             lines.append(await check(.eligible) { try await one(["roleManagement", "directory", "roleEligibilitySchedules"]) })
+            lines.append(await check(.accessPolicies) { try await one(["identity", "conditionalAccess", "policies"]) })
+            lines.append(await check(.methodsPolicy) { _ = try await Entra.get(service, ["policies", "authenticationMethodsPolicy"], as: IgnoredItem.self) })
+            lines.append(await check(.securityDefaults) { _ = try await Entra.get(service, ["policies", "identitySecurityDefaultsEnforcementPolicy"], as: IgnoredItem.self) })
             do {
                 let me = try await Entra.me(service)
                 lines.append(await check(.methods) { _ = try await Entra.get(service, ["users", me.id, "authentication", "methods"], as: Page<IgnoredItem>.self) })

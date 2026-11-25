@@ -6,8 +6,9 @@ its own:
 - **Microsoft Entra ID Detection** reads a tenant the way a defender does: who a
   user is, their groups, roles and sign-in methods, the sign-in log, Identity
   Protection's risky users, who holds which directory role, which apps hold
-  which Microsoft Graph permissions and credentials, and the directory audit
-  log. It wakes the agents it is assigned to when the audit log shows the
+  which Microsoft Graph permissions and credentials, the directory audit log,
+  and, to assess how the tenant is set up, its Conditional Access policies,
+  which sign-in methods are allowed, and security defaults. It wakes the agents it is assigned to when the audit log shows the
   tenant being handed over, a way back in being opened or its defences
   weakened, and when Identity Protection rates a user or a sign-in at high
   risk. It only reads.
@@ -50,7 +51,7 @@ Microsoft allows a request only when **both** of these allow it:
 
 | Tool | Delegated Microsoft Graph permissions | Admin's roles |
 | --- | --- | --- |
-| Microsoft Entra ID Detection | `Directory.Read.All`, `AuditLog.Read.All`, `UserAuthenticationMethod.Read.All`, `IdentityRiskyUser.Read.All`, `IdentityRiskEvent.Read.All`, `RoleManagement.Read.Directory` | Global Reader |
+| Microsoft Entra ID Detection | `Directory.Read.All`, `AuditLog.Read.All`, `UserAuthenticationMethod.Read.All`, `IdentityRiskyUser.Read.All`, `IdentityRiskEvent.Read.All`, `RoleManagement.Read.Directory`, `Policy.Read.All` | Global Reader |
 | Microsoft Entra ID Containment | `User.Read.All`, `User.EnableDisableAccount.All`, `User.RevokeSessions.All`, `UserAuthenticationMethod.ReadWrite.All`, `RoleManagement.ReadWrite.Directory`, `Application.ReadWrite.All`, `IdentityRiskyUser.ReadWrite.All`, `GroupMember.Read.All` | only the roles its actions take, below |
 
 Both also ask for `offline_access`, so the sign-in renews itself without asking
@@ -69,6 +70,11 @@ Why Detection asks for each:
   Protection's risky users and risk detections.
 - `RoleManagement.Read.Directory` reads role assignments and, in Privileged
   Identity Management, eligibility.
+- `Policy.Read.All` reads Conditional Access policies and named locations, the
+  authentication methods policy and security defaults. Microsoft offers no
+  narrower permission that reads Conditional Access or security defaults. It
+  reads the tenant's policies and changes nothing. A connection made before Detection
+  asked for it stops until you add it, grant admin consent and sign in again.
 
 Detection's permissions only read, so it cannot change anything, whatever its
 admin's roles allow. Containment's permissions can change users, roles and
@@ -130,6 +136,10 @@ Then ask an agent to run **check-access**.
   once that those feeds are off.
 - **Eligible roles need Privileged Identity Management**, part of P2. Without
   it, `role-holders` says it could not read them, and nobody can be eligible.
+- **Conditional Access needs P1.** A tenant without it has no policies, or
+  Microsoft refuses the read and `conditional-access` says the licence is
+  missing. `auth-methods-policy` says whether security defaults are on
+  instead.
 
 ## Coverage you should know
 
@@ -150,6 +160,29 @@ Then ask an agent to run **check-access**.
   `Retry-After` asks and tries again. If Graph still refuses, the answer says
   how long it asked to wait.
 - **An event's actor is the account used**, not the person who held it.
+- **Policies are read as they are now.** `conditional-access` and
+  `auth-methods-policy` say what the policies require, not what happened at a
+  sign-in; `sign-ins` shows that, with each sign-in's Conditional Access
+  result.
+- **How conditional-access judges MFA and legacy authentication.** MFA counts
+  for all users only when an enabled policy targets All users in all apps with
+  no location, platform, client app, risk or device condition; otherwise it
+  names the enabled policies scoped to groups, roles or users that require MFA,
+  for you to check whether they reach everyone between them. It counts for an
+  admin role when such a policy, or one naming that role, does not exclude it.
+  A policy requires MFA when it names the MFA control or an authentication
+  strength alone, or beside other controls that must all be met. One that
+  accepts MFA or another control, such as a compliant device, does not count,
+  as that control lets people in without MFA. Legacy
+  authentication counts as blocked when an enabled policy blocks Exchange
+  ActiveSync and other clients for all users in all apps. Report-only policies
+  never count, and are listed. Groups, users and apps are named up to 50 and
+  20; the rest show their ID.
+- **What auth-methods-policy cannot see.** Until a tenant's migration to the
+  authentication methods policy is complete, its legacy MFA and self-service
+  password reset settings also decide which methods people may use, and
+  Microsoft Graph does not read them: check them in the admin center. Windows
+  Hello for Business is set up outside this policy.
 
 ## What agents can do
 
@@ -168,6 +201,16 @@ Then ask an agent to run **check-access**.
   first, flagging those added in the last 30 days, long-lived or expired.
 - `directory-audit`: who changed what, by who made it, activity, category and
   time, and from which IP address.
+- `conditional-access`: every Conditional Access policy, enabled, report-only
+  or disabled, with whom it includes and excludes, its apps, conditions, and
+  grant and session controls. It leads with whether MFA is required of all
+  users and of each privileged role, whether legacy authentication is blocked,
+  which policies only report, whom enforcing policies exclude, broad trusted
+  locations, and whether security defaults are on.
+- `auth-methods-policy`: which sign-in methods are on and for whom, such as
+  SMS, email codes, passkeys, Microsoft Authenticator and Temporary Access
+  Pass, with their key settings; the registration campaign; how far the move
+  from the legacy MFA settings has gone; and whether security defaults are on.
 - `security-events`: what the alert watch wakes for, for a window. When no
   window is given, the last 24 hours.
 - **check-access**: see [When something does not work](#when-something-does-not-work).
@@ -251,7 +294,8 @@ Ask an agent to run **check-access**. It changes nothing, and tries once each:
 
 - which tenant the sign-in reads, and whether it is the one the account names;
 - users, apps, the audit log, the sign-in log, risky users, risk detections,
-  role assignments, eligible roles and sign-in methods;
+  role assignments, eligible roles, sign-in methods, Conditional Access
+  policies, the authentication methods policy and security defaults;
 - who is signed in and which roles they hold, saying when those roles could
   change the tenant;
 - which permissions the app is consented, warning of any beyond what the tool
