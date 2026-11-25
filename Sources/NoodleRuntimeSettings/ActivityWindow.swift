@@ -446,7 +446,8 @@ final class ActivityEmptyLabel: NSTextField {
     override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard let hit = super.hitTest(point) else { return nil }
-        return hit is NSButton ? hit : self
+        // Buttons and switches take their own clicks; the rest of the header, labels included, drags the window.
+        return hit is NSButton || hit is NSSegmentedControl ? hit : self
     }
     @objc func closePreview() { window?.performClose(nil) }
 }

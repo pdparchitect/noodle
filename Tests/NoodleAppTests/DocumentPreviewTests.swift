@@ -47,6 +47,12 @@ import XCTest
             }
             XCTAssertNil(shownSource())
 
+            // A click on the switch reaches it, rather than dragging the window by its header.
+            let center = NSPoint(x: control.bounds.midX, y: control.bounds.midY)
+            let frame = try XCTUnwrap(window.contentView)
+            let hit = frame.hitTest(frame.superview.map { control.convert(center, to: $0) } ?? control.convert(center, to: nil))
+            XCTAssertTrue(hit === control || hit?.isDescendant(of: control) == true, "\(name): \(String(describing: hit))")
+
             control.selectedSegment = 1
             XCTAssertTrue(control.sendAction(control.action, to: control.target))
             let end = Date().addingTimeInterval(3)
