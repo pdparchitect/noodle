@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Agents' harnesses run with their usage and error reports to Anthropic, OpenAI, xAI and Meta turned off, using each one's own setting and the standard DO_NOT_TRACK.
+
 ## [0.8.0] - 2026-11-25
 
 ### Added

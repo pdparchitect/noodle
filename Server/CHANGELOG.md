@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Claude Code and Codex run with their usage and error reports turned off.
+
 ## [0.4.0] - 2026-11-25
 
 ### Changed

@@ -69,9 +69,22 @@ final class HarnessSandboxTests: XCTestCase {
                                                resumeSession: false, model: nil, effort: nil)
         XCTAssertEqual(codex.environment["HOME"], home)
         XCTAssertEqual(codex.environment["CODEX_HOME"], home + "/.codex")
-        XCTAssertEqual(codex.arguments, ["app-server", "--disable", "apps"])
+        XCTAssertEqual(codex.arguments, ["app-server", "-c", "analytics.enabled=false", "--disable", "apps"])
 
         XCTAssertThrowsError(try HarnessSandbox.command(provider: .grokBuild, workspace: workspace, sessionID: nil,
                                                         resumeSession: false, model: nil, effort: nil))
+    }
+
+    /// Both harnesses are told not to report usage or errors back to their makers.
+    func testEachHarnessRunsWithItsReportingOff() throws {
+        let claude = try HarnessSandbox.command(provider: .claudeCode, workspace: workspace, sessionID: UUID(),
+                                                resumeSession: false, model: nil, effort: nil)
+        XCTAssertEqual(claude.environment["DO_NOT_TRACK"], "1")
+        XCTAssertEqual(claude.environment["DISABLE_TELEMETRY"], "1")
+        XCTAssertEqual(claude.environment["DISABLE_ERROR_REPORTING"], "1")
+        let codex = try HarnessSandbox.command(provider: .codex, workspace: workspace, sessionID: nil,
+                                               resumeSession: false, model: nil, effort: nil)
+        XCTAssertEqual(codex.environment["DO_NOT_TRACK"], "1")
+        XCTAssertTrue(codex.arguments.joined(separator: " ").contains("-c analytics.enabled=false"))
     }
 }

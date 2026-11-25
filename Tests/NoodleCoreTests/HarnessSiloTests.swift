@@ -20,6 +20,21 @@ final class HarnessSiloTests: XCTestCase {
         return (process.terminationStatus, text)
     }
 
+    /// Outside the silo nothing stops a harness reporting home, so each is told not to, in the words it reads.
+    func testEveryHarnessIsToldNotToReportUsage() {
+        for provider in HarnessProvider.allCases where provider != .apple {
+            XCTAssertEqual(provider.reportingOffEnvironment["DO_NOT_TRACK"], "1", provider.rawValue)
+        }
+        XCTAssertEqual(HarnessProvider.apple.reportingOffEnvironment, [:])
+        XCTAssertEqual(HarnessProvider.claudeCode.reportingOffEnvironment["DISABLE_TELEMETRY"], "1")
+        XCTAssertEqual(HarnessProvider.claudeCode.reportingOffEnvironment["DISABLE_ERROR_REPORTING"], "1")
+        XCTAssertEqual(HarnessProvider.grokBuild.reportingOffEnvironment["DISABLE_TELEMETRY"], "1")
+        XCTAssertEqual(HarnessProvider.grokBuild.reportingOffEnvironment["DISABLE_ERROR_REPORTING"], "1")
+        XCTAssertEqual(HarnessProvider.muse.reportingOffEnvironment["TBH_DISABLE_TELEMETRY"], "1")
+        let codex = CodexLaunch.appServerArguments()
+        XCTAssertEqual(Array(codex.prefix(3)), ["app-server", "-c", "analytics.enabled=false"])
+    }
+
     /// Two loopback servers run outside Seatbelt. A siloed process may reach only the one
     /// standing in for the Agent Host's proxy, and cannot look names up itself.
     func testSiloedHarnessesReachOnlyTheProxyPort() throws {

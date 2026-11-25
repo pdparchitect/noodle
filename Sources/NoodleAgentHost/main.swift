@@ -280,6 +280,7 @@ if CommandLine.arguments.count == 13, CommandLine.arguments[1] == "--harness-chi
         } else if let harnessProfile {
             for (key, value) in profiles.environment(harnessProfile) { setenv(key, value, 1) }
         }
+        for (key, value) in provider.reportingOffEnvironment { setenv(key, value, 1) }
         var arguments: [UnsafeMutablePointer<CChar>?] = strings.map { value in value.withCString { strdup($0) } }
         arguments.append(nil)
         execv(strings[0], arguments)

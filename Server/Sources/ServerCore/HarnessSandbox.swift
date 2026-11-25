@@ -89,7 +89,7 @@ public struct HarnessSandbox: Sendable {
             "HOME": home.path, "PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C.UTF-8", "TMPDIR": temporary.path,
             "NOODLE_AGENT_ID": AgentStorageLayout(workspace: workspace).package.lastPathComponent,
             "NOODLE_WORKSPACE": workspace.path,
-        ]
+        ].merging(provider.reportingOffEnvironment) { own, _ in own }
         switch provider {
         case .claudeCode:
             environment["CLAUDE_CONFIG_DIR"] = home.appendingPathComponent(".claude").path

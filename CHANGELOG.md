@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Bots' harnesses run with their usage and error reports to Anthropic, OpenAI, xAI and Meta turned off, using each one's own setting and the standard DO_NOT_TRACK, including bots with extended access, which the network silo does not cover.
 - The Help menu sets Noodle Help apart from License with a separator.
 
 ## [0.97.0] - 2026-11-25

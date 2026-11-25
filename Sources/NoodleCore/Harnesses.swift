@@ -27,6 +27,21 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
         }
     }
 
+    /// Tells the harness not to report usage or errors to its maker, for bots outside the silo, which nothing else
+    /// stops. DO_NOT_TRACK is the common signal, read by Claude Code and by the Bun runtime OpenCode is built on;
+    /// the rest are the switches each executable reads itself. Codex reads only its configuration, so it is turned
+    /// off in its arguments. Antigravity keeps its setting with the account and FX was found to report nothing,
+    /// so neither has more to set.
+    public var reportingOffEnvironment: [String: String] {
+        switch self {
+        case .apple: [:]
+        case .claudeCode: ["DO_NOT_TRACK": "1", "DISABLE_TELEMETRY": "1", "DISABLE_ERROR_REPORTING": "1"]
+        case .grokBuild: ["DO_NOT_TRACK": "1", "DISABLE_TELEMETRY": "1", "DISABLE_ERROR_REPORTING": "1"]
+        case .muse: ["DO_NOT_TRACK": "1", "TBH_DISABLE_TELEMETRY": "1"]
+        case .codex, .fx, .openCode, .antigravity: ["DO_NOT_TRACK": "1"]
+        }
+    }
+
     /// The only addresses a siloed harness may open, through the Agent Host's proxy: its model services and the
     /// sign-in renewal it does itself. Telemetry, updaters, search and anything a tool asks for are refused. Claude
     /// Code, Codex, Muse Code and Antigravity were measured running a turn; Grok Build, FX and OpenCode are the
