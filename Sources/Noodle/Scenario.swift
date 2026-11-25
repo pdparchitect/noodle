@@ -177,6 +177,20 @@ struct Scenario: Codable {
     struct Attachment: Codable {
         var file: String?
         var link: String?
+        /// A browser tab or computer a bot shared, drawn from its picture as it was then.
+        var card: Card?
+
+        struct Card: Codable {
+            enum Kind: String, Codable { case browser, computer }
+            var kind: Kind
+            var title: String
+            /// A browser tab's address; named "url" so the runner leaves it to show, not to fetch.
+            var url: String?
+            /// A computer terminal's last output.
+            var detail: String?
+            /// A JPEG of what it showed, under `LinkCard.maximumImageBytes`.
+            var picture: String?
+        }
     }
 
     struct Reaction: Codable {
@@ -448,8 +462,13 @@ extension Scenario {
         }
         func check(_ attachments: [Attachment]?) throws {
             for attachment in attachments ?? [] {
-                try require((attachment.file == nil) != (attachment.link == nil), "An attachment is either a file or a link.")
+                try require([attachment.file != nil, attachment.link != nil, attachment.card != nil].filter { $0 }.count == 1,
+                            "An attachment is a file, a link or a card.")
                 if let file = attachment.file { _ = try media(file) }
+                if let picture = attachment.card?.picture {
+                    let size = (try? media(picture).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? .max
+                    try require(size <= LinkCard.maximumImageBytes, "\(picture) is over \(LinkCard.maximumImageBytes) bytes.")
+                }
                 if let link = attachment.link {
                     try require(URL(string: link).flatMap { MessageLink.publicWebURL(from: $0, preservingFragment: true) } != nil,
                                 "\"\(link)\" is not a public web link.")
@@ -680,6 +699,12 @@ extension Scenario {
         try (attachments ?? []).map { attachment in
             if let link = attachment.link, let url = URL(string: link) {
                 return try repository.importLinkAttachment(url, into: conversationID, now: now).id
+            }
+            if let card = attachment.card {
+                let link: CompanionLink = card.kind == .browser ? .browser(UUID(), tab: UUID()) : .computer(UUID(), terminal: nil, view: nil)
+                let picture = try card.picture.map { try Data(contentsOf: media($0)) }
+                return try repository.importLinkAttachment(link.url, into: conversationID, now: now,
+                    card: LinkCard(title: card.title, detail: card.url ?? card.detail, image: picture, capturedAt: now)).id
             }
             let url = try media(attachment.file ?? "")
             let mediaType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"

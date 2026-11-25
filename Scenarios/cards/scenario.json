@@ -1,0 +1,296 @@
+{
+  "version": 1,
+  "title": "One of each attachment card, and the document windows",
+  "clock": "11:45",
+  "appearance": "dark",
+  "settings": {
+    "Noodle.firstBotSetup.dismissed": true,
+    "Noodle.composer.showBotDescriptions": true
+  },
+  "harnesses": {
+    "codex": {
+      "models": [
+        {
+          "id": "gpt-5.2-codex",
+          "name": "GPT-5.2 Codex",
+          "description": "Tuned for long coding tasks.",
+          "efforts": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "defaultEffort": "medium",
+          "default": true
+        }
+      ]
+    }
+  },
+  "agents": [
+    {
+      "key": "wren",
+      "name": "Wren",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "effort": "high",
+      "description": "Builds features, reviews code and chases bugs",
+      "backstory": "You are a careful engineer. You measure before you change anything and you leave a test behind every fix.",
+      "avatar": {
+        "image": "face:any-03"
+      }
+    },
+    {
+      "key": "mila",
+      "name": "Mila",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Runs the shop's posts and pictures",
+      "avatar": {
+        "image": "face:feminine-06"
+      }
+    },
+    {
+      "key": "victor",
+      "name": "Victor",
+      "harness": "codex",
+      "model": "gpt-5.2-codex",
+      "description": "Looks after the build machines",
+      "avatar": {
+        "image": "face:masculine-06"
+      }
+    }
+  ],
+  "conversations": [
+    {
+      "key": "mila",
+      "direct": "mila",
+      "messages": [
+        {
+          "at": "10:40",
+          "from": "user",
+          "text": "Can you send me this morning's pictures?"
+        },
+        {
+          "key": "picture",
+          "at": "10:41",
+          "from": "mila",
+          "text": "The renewals chart.",
+          "attachments": [
+            {
+              "file": "assets/renewals.png"
+            }
+          ]
+        },
+        {
+          "key": "video",
+          "at": "10:42",
+          "from": "mila",
+          "text": "The bake, filmed for Saturday's post.",
+          "attachments": [
+            {
+              "file": "assets/morning-bake.mp4"
+            }
+          ]
+        },
+        {
+          "key": "browser",
+          "at": "10:44",
+          "from": "mila",
+          "text": "The landing page as it stands.",
+          "attachments": [
+            {
+              "card": {
+                "kind": "browser",
+                "title": "Launch week",
+                "url": "https://example.com/launch",
+                "picture": "assets/browser-tab.jpg"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "victor",
+      "direct": "victor",
+      "messages": [
+        {
+          "at": "10:45",
+          "from": "user",
+          "text": "What did the build machine do?"
+        },
+        {
+          "key": "computer",
+          "at": "10:46",
+          "from": "victor",
+          "text": "The rendering run on the build machine.",
+          "attachments": [
+            {
+              "card": {
+                "kind": "computer",
+                "title": "build-01",
+                "detail": "All 3 recordings within 1/30 s spacing.",
+                "picture": "assets/computer-screen.jpg"
+              }
+            }
+          ]
+        },
+        {
+          "key": "patch",
+          "at": "11:20",
+          "from": "victor",
+          "text": "The patch, for review.",
+          "attachments": [
+            {
+              "file": "assets/smooth-recordings.patch"
+            }
+          ]
+        },
+        {
+          "key": "text",
+          "at": "11:25",
+          "from": "victor",
+          "text": "And your list for Saturday.",
+          "attachments": [
+            {
+              "file": "assets/saturday-list.txt"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "wren",
+      "direct": "wren",
+      "messages": [
+        {
+          "at": "11:20",
+          "from": "user",
+          "text": "Can you write up how the recordings measure now?"
+        },
+        {
+          "key": "report",
+          "at": "11:32",
+          "from": "wren",
+          "text": "Here is the report: hidden recordings now hold 30 fps on all three noodlets, with the follow-ups at the end.",
+          "attachments": [
+            {
+              "file": "assets/recording-report.md"
+            }
+          ]
+        },
+        {
+          "key": "shader",
+          "at": "11:41",
+          "from": "wren",
+          "text": "An aurora: three slow bands of light over a night sky.",
+          "attachments": [
+            {
+              "file": "assets/aurora.metal"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "present": {
+    "window": {
+      "size": [
+        1240,
+        860
+      ],
+      "origin": [
+        100,
+        70
+      ]
+    },
+    "select": "mila",
+    "scroll": {
+      "mila": "bottom",
+      "victor": "bottom",
+      "wren": "bottom"
+    }
+  },
+  "timeline": [
+    {
+      "capture": "01-picture-video-browser"
+    },
+    {
+      "present": {
+        "select": "victor"
+      }
+    },
+    {
+      "capture": "02-computer-patch-text"
+    },
+    {
+      "present": {
+        "select": "wren"
+      }
+    },
+    {
+      "capture": "03-markdown-shader"
+    },
+    {
+      "present": {
+        "windows": [
+          {
+            "attachment": "report",
+            "frame": [
+              500,
+              50,
+              820,
+              900
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "capture": "04-markdown"
+    },
+    {
+      "present": {
+        "windows": [
+          {
+            "attachment": "report",
+            "source": true
+          }
+        ]
+      }
+    },
+    {
+      "capture": "05-markdown-source"
+    },
+    {
+      "present": {
+        "windows": [
+          {
+            "attachment": "shader",
+            "frame": [
+              440,
+              160,
+              880,
+              560
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "capture": "06-shader"
+    },
+    {
+      "present": {
+        "windows": [
+          {
+            "attachment": "shader",
+            "source": true
+          }
+        ]
+      }
+    },
+    {
+      "capture": "07-shader-source"
+    }
+  ]
+}

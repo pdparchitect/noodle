@@ -1,0 +1,1194 @@
+From 7b51c60177b7155939e1d58d896598a563623ce8 Mon Sep 17 00:00:00 2001
+From: Wren <wren@noodle.example>
+Date: Sun, 18 Oct 2026 10:05:00 +0000
+Subject: [PATCH 1/3] Film hidden noodlets frame by frame
+
+A hidden page gets no animation frames from WebKit, so filming it in
+real time froze the movie. Recording now drives its own clock and asks
+the page for one frame at a time instead.
+---
+ .../Sources/NoodletRuntime/NoodletPage.swift  | 31 ++++++-
+ .../NoodletRuntime/NoodletSnapshot.swift      | 51 +++++++++++
+ .../{Capture.swift => FrameCapture.swift}     | 11 ++-
+ Applet/Sources/NoodleApplet/FrameTimer.swift  | 44 ---------
+ Applet/Sources/NoodleApplet/Recording.swift   | 91 +++++++++++--------
+ .../NoodleApplet/Resources/Animation.js       | 54 +++++++++++
+ Applet/Sources/NoodleApplet/Runtime.swift     | 10 +-
+ Applet/Sources/NoodleApplet/WebRunner.swift   | 17 ++++
+ Sources/Noodle/ScenarioFilm.swift             |  7 +-
+ Sources/NoodleCore/AppletAccess.swift         |  2 +
+ Sources/NoodleRuntime/AppletController.swift  | 10 +-
+ 11 files changed, 222 insertions(+), 106 deletions(-)
+ create mode 100644 Applet/Protocol/Sources/NoodletRuntime/NoodletSnapshot.swift
+ rename Applet/Sources/NoodleApplet/{Capture.swift => FrameCapture.swift} (83%)
+ delete mode 100644 Applet/Sources/NoodleApplet/FrameTimer.swift
+
+diff --git a/Applet/Protocol/Sources/NoodletRuntime/NoodletPage.swift b/Applet/Protocol/Sources/NoodletRuntime/NoodletPage.swift
+index b546642..ccbcf1a 100644
+--- a/Applet/Protocol/Sources/NoodletRuntime/NoodletPage.swift
++++ b/Applet/Protocol/Sources/NoodletRuntime/NoodletPage.swift
+@@ -2,7 +2,8 @@ import Foundation
+ import WebKit
+ 
+ /// The page side of a running noodlet: evaluates scripts in the web view
+-/// and receives messages posted by the runtime scripts.
++/// and receives messages posted by the runtime scripts. While a recording
++/// runs, it also drives the page's virtual clock.
+ @MainActor
+ public final class NoodletPage: NSObject {
+     public let webView: WKWebView
+@@ -51,6 +52,34 @@ public final class NoodletPage: NSObject {
+         let value = try? await evaluate("document.visibilityState")
+         return (value as? String) == "visible"
+     }
++
++    // MARK: - Virtual time
++
++    /// Puts the page on a virtual clock. Timers, animation frames and CSS
++    /// animations then only move when `advanceVirtualTime(by:)` is called.
++    public func enterVirtualTime(framesPerSecond: Int) async throws {
++        _ = try await call("NoodleAnimation.enterVirtualTime", [framesPerSecond])
++    }
++
++    /// Moves the virtual clock forward and runs everything that was due.
++    public func advanceVirtualTime(by seconds: Double) async throws {
++        _ = try await call("NoodleAnimation.advance", [seconds * 1000])
++    }
++
++    /// Waits until the page has drawn the current frame of the virtual clock.
++    public func waitForRender() async throws -> RenderedFrame {
++        let value = try await webView.callAsyncJavaScript(
++            "return await NoodleAnimation.rendered()",
++            contentWorld: .page
++        )
++        let data = try JSONSerialization.data(withJSONObject: value ?? [:])
++        return try JSONDecoder().decode(RenderedFrame.self, from: data)
++    }
++
++    /// Returns the page to real time.
++    public func leaveVirtualTime() async {
++        _ = try? await call("NoodleAnimation.leaveVirtualTime")
++    }
+ }
+ 
+ extension NoodletPage: WKScriptMessageHandler {
+diff --git a/Applet/Protocol/Sources/NoodletRuntime/NoodletSnapshot.swift b/Applet/Protocol/Sources/NoodletRuntime/NoodletSnapshot.swift
+new file mode 100644
+index 0000000..b20a01d
+--- /dev/null
++++ b/Applet/Protocol/Sources/NoodletRuntime/NoodletSnapshot.swift
+@@ -0,0 +1,51 @@
++import CoreGraphics
++import Foundation
++
++/// One rendered frame of a noodlet, taken while the page runs on a
++/// virtual clock.
++///
++/// The page reports the frame number and the virtual time it rendered at,
++/// so the recorder can check that it is filming the frame it asked for and
++/// not a stale one left over from before the clock moved.
++public struct NoodletSnapshot: @unchecked Sendable {
++    public let image: CGImage
++    public let frame: RenderedFrame
++
++    public init(image: CGImage, frame: RenderedFrame) {
++        self.image = image
++        self.frame = frame
++    }
++
++    public var pixelWidth: Int { image.width }
++    public var pixelHeight: Int { image.height }
++}
++
++/// What the page reports after it has drawn a frame on the virtual clock.
++public struct RenderedFrame: Codable, Equatable, Sendable {
++    /// Number of the frame, counted from zero when virtual time started.
++    public var index: Int
++    /// Virtual time of the frame in milliseconds since virtual time started.
++    public var time: Double
++    /// Timers and animation frame callbacks that ran for this frame.
++    public var callbacks: Int
++    /// CSS and Web Animations that were held at this frame.
++    public var pausedAnimations: Int
++
++    public init(index: Int, time: Double, callbacks: Int = 0, pausedAnimations: Int = 0) {
++        self.index = index
++        self.time = time
++        self.callbacks = callbacks
++        self.pausedAnimations = pausedAnimations
++    }
++
++    /// Seconds of virtual time, as used for movie presentation times.
++    public var seconds: Double {
++        time / 1000
++    }
++
++    /// Whether this frame follows `previous` by one step of `interval`
++    /// seconds, within `tolerance` seconds.
++    public func follows(_ previous: RenderedFrame, interval: Double, tolerance: Double = 0.001) -> Bool {
++        index == previous.index + 1 && abs((seconds - previous.seconds) - interval) <= tolerance
++    }
++}
+diff --git a/Applet/Sources/NoodleApplet/Capture.swift b/Applet/Sources/NoodleApplet/FrameCapture.swift
+similarity index 83%
+rename from Applet/Sources/NoodleApplet/Capture.swift
+rename to Applet/Sources/NoodleApplet/FrameCapture.swift
+index 45f90f1..6905702 100644
+--- a/Applet/Sources/NoodleApplet/Capture.swift
++++ b/Applet/Sources/NoodleApplet/FrameCapture.swift
+@@ -1,11 +1,12 @@
+ import AppKit
+ import CoreVideo
++import NoodletRuntime
+ import WebKit
+ 
+ /// Takes snapshots of a noodlet's web view and converts them to pixel
+ /// buffers for the movie writer.
+ @MainActor
+-final class Capture {
++final class FrameCapture {
+     let webView: WKWebView
+     let scale: CGFloat
+ 
+@@ -39,6 +40,14 @@ final class Capture {
+         }
+     }
+ 
++    /// Waits until the page reports that the current frame of its virtual
++    /// clock has rendered, then takes the snapshot.
++    func snapshot(waitingFor page: NoodletPage) async -> NoodletSnapshot? {
++        guard let frame = try? await page.waitForRender() else { return nil }
++        guard let image = await snapshot() else { return nil }
++        return NoodletSnapshot(image: image, frame: frame)
++    }
++
+     func pixelBuffer(from image: CGImage, pool: CVPixelBufferPool) -> CVPixelBuffer? {
+         var buffer: CVPixelBuffer?
+         guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer) == kCVReturnSuccess,
+diff --git a/Applet/Sources/NoodleApplet/FrameTimer.swift b/Applet/Sources/NoodleApplet/FrameTimer.swift
+deleted file mode 100644
+index 13920cb..0000000
+--- a/Applet/Sources/NoodleApplet/FrameTimer.swift
++++ /dev/null
+@@ -1,44 +0,0 @@
+-import Foundation
+-
+-/// Calls a closure at a fixed rate on the main run loop.
+-///
+-/// Used by Recording to sample the web view in real time. The timer keeps
+-/// firing while the window is hidden, but WebKit stops rendering, so the
+-/// frames it captures repeat until the window is shown again.
+-final class FrameTimer {
+-    let framesPerSecond: Int
+-    private let action: () -> Void
+-    private var timer: Timer?
+-
+-    init(framesPerSecond: Int, action: @escaping () -> Void) {
+-        self.framesPerSecond = max(1, framesPerSecond)
+-        self.action = action
+-    }
+-
+-    var interval: TimeInterval {
+-        1.0 / Double(framesPerSecond)
+-    }
+-
+-    var isRunning: Bool {
+-        timer != nil
+-    }
+-
+-    func start() {
+-        guard timer == nil else { return }
+-        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+-            self?.action()
+-        }
+-        timer.tolerance = interval / 10
+-        RunLoop.main.add(timer, forMode: .common)
+-        self.timer = timer
+-    }
+-
+-    func stop() {
+-        timer?.invalidate()
+-        timer = nil
+-    }
+-
+-    deinit {
+-        timer?.invalidate()
+-    }
+-}
+diff --git a/Applet/Sources/NoodleApplet/Recording.swift b/Applet/Sources/NoodleApplet/Recording.swift
+index 5219d44..3d0201c 100644
+--- a/Applet/Sources/NoodleApplet/Recording.swift
++++ b/Applet/Sources/NoodleApplet/Recording.swift
+@@ -5,9 +5,10 @@ import WebKit
+ 
+ /// Films a running noodlet into a movie file.
+ ///
+-/// A recording samples the web view on a timer and appends each image to
+-/// an AVAssetWriter. The timer runs in real time, so the movie plays back
+-/// at the speed the noodlet ran.
++/// A recording does not film in real time. Hidden windows get no animation
++/// frames from WebKit, so instead the recording puts the page on a virtual
++/// clock, advances it by one frame, waits for the page to draw that frame
++/// and appends the image to an AVAssetWriter at frame number / fps.
+ @MainActor
+ final class Recording {
+     enum State: Equatable {
+@@ -30,8 +31,8 @@ final class Recording {
+     let outputURL: URL
+ 
+     private let runner: WebRunner
+-    private let capture: Capture
+-    private var timer: FrameTimer?
++    private let capture: FrameCapture
++    private var filming: Task<Void, Never>?
+     private var writer: AVAssetWriter?
+     private var input: AVAssetWriterInput?
+     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
+@@ -41,7 +42,7 @@ final class Recording {
+         self.runner = runner
+         self.outputURL = outputURL
+         self.options = options
+-        self.capture = Capture(webView: runner.webView, scale: options.scale)
++        self.capture = FrameCapture(webView: runner.webView, scale: options.scale)
+     }
+ 
+     // MARK: - Lifecycle
+@@ -53,20 +54,18 @@ final class Recording {
+         try prepareWriter()
+         state = .recording(started: Date())
+         frameCount = 0
+-        let timer = FrameTimer(framesPerSecond: options.framesPerSecond) { [weak self] in
+-            Task { @MainActor in
+-                await self?.captureFrame()
+-            }
++        try await runner.page.enterVirtualTime(framesPerSecond: options.framesPerSecond)
++        filming = Task { [weak self] in
++            await self?.film()
+         }
+-        timer.start()
+-        self.timer = timer
+-        runner.log("recording started at \(options.framesPerSecond) fps")
++        runner.log("recording started at \(options.framesPerSecond) fps, frame by frame")
+     }
+ 
+     func stop() async -> URL? {
+         guard case .recording = state else { return nil }
+-        timer?.stop()
+-        timer = nil
++        filming?.cancel()
++        filming = nil
++        await runner.page.leaveVirtualTime()
+         state = .finishing
+         input?.markAsFinished()
+         await writer?.finishWriting()
+@@ -81,24 +80,43 @@ final class Recording {
+ 
+     // MARK: - Frames
+ 
+-    private func captureFrame() async {
+-        guard case .recording(let started) = state else { return }
+-        if Date().timeIntervalSince(started) > options.maximumDuration {
++    /// Steps the virtual clock one frame at a time until the recording is
++    /// stopped or reaches its maximum duration. Each frame waits for the
++    /// page to render, however long that takes, so a slow or hidden page
++    /// makes the recording slower but never makes the movie stutter.
++    private func film() async {
++        let rate = options.framesPerSecond
++        let step = 1.0 / Double(rate)
++        let limit = Int64(options.maximumDuration * Double(rate))
++        var index: Int64 = 0
++        while !Task.isCancelled, index < limit {
++            guard case .recording = state else { return }
++            let time = CMTime(value: index, timescale: CMTimeScale(rate))
++            do {
++                try await runner.page.advanceVirtualTime(by: step)
++                try await captureFrame(at: time)
++            } catch is CancellationError {
++                return
++            } catch {
++                runner.log("recording stopped at frame \(index): \(error.localizedDescription)")
++                break
++            }
++            index += 1
++        }
++        if !Task.isCancelled {
+             _ = await stop()
+-            return
+         }
+-        guard let input, input.isReadyForMoreMediaData else {
+-            runner.log("dropped frame \(frameCount): writer busy")
+-            return
++    }
++
++    private func captureFrame(at time: CMTime) async throws {
++        guard let input else { return }
++        while !input.isReadyForMoreMediaData {
++            try await Task.sleep(for: .milliseconds(2))
+         }
+-        guard let image = await capture.snapshot() else {
+-            runner.log("dropped frame \(frameCount): snapshot failed")
+-            return
++        guard let snapshot = await capture.snapshot(waitingFor: runner.page) else {
++            throw RecordingError.pageDidNotRender(Int(time.value))
+         }
+-        let elapsed = Date().timeIntervalSince(started)
+-        let time = CMTime(seconds: elapsed, preferredTimescale: 600)
+-        checkDrift(started: started)
+-        append(image, at: time)
++        append(snapshot.image, at: time)
+     }
+ 
+     private func append(_ image: CGImage, at time: CMTime) {
+@@ -112,16 +130,6 @@ final class Recording {
+         }
+     }
+ 
+-    /// Logs a warning when frames arrive late, which happens when the window
+-    /// is hidden or covered and WebKit throttles the page.
+-    private func checkDrift(started: Date) {
+-        let expected = Double(frameCount) / Double(options.framesPerSecond)
+-        let actual = Date().timeIntervalSince(started)
+-        if actual - expected > 0.5 {
+-            runner.log("recording is \(Int((actual - expected) * 1000)) ms behind; is the window hidden?")
+-        }
+-    }
+-
+     // MARK: - Writer
+ 
+     private func prepareWriter() throws {
+@@ -134,7 +142,7 @@ final class Recording {
+             AVVideoHeightKey: Int(size.height),
+         ]
+         let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
+-        input.expectsMediaDataInRealTime = true
++        input.expectsMediaDataInRealTime = false
+         let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+             assetWriterInput: input,
+             sourcePixelBufferAttributes: [
+@@ -161,6 +169,7 @@ enum RecordingError: Error, LocalizedError {
+     case alreadyStarted
+     case cannotAddInput
+     case writerFailed(String)
++    case pageDidNotRender(Int)
+ 
+     var errorDescription: String? {
+         switch self {
+@@ -170,6 +179,8 @@ enum RecordingError: Error, LocalizedError {
+             return "The movie writer rejected the video input."
+         case .writerFailed(let reason):
+             return "The movie writer failed: \(reason)"
++        case .pageDidNotRender(let frame):
++            return "The noodlet did not render frame \(frame) in time."
+         }
+     }
+ }
+diff --git a/Applet/Sources/NoodleApplet/Resources/Animation.js b/Applet/Sources/NoodleApplet/Resources/Animation.js
+index 962549e..d0607cd 100644
+--- a/Applet/Sources/NoodleApplet/Resources/Animation.js
++++ b/Applet/Sources/NoodleApplet/Resources/Animation.js
+@@ -14,6 +14,7 @@
+     frames: 0,
+     lastFrameAt: 0,
+     paused: false,
++    virtual: null,
+   };
+ 
+   function tick(timestamp) {
+@@ -49,6 +50,54 @@
+     }
+   }
+ 
++  // Virtual clock. While it is on, page time only moves when the applet
++  // calls advance(), one frame at a time.
++  const realNow = performance.now.bind(performance);
++  const realDateNow = Date.now;
++
++  function now() {
++    return state.virtual ? state.virtual.time : realNow();
++  }
++
++  function enterVirtualTime(framesPerSecond) {
++    const start = realNow();
++    state.virtual = {
++      start,
++      time: start,
++      dateOffset: realDateNow() - start,
++      interval: 1000 / framesPerSecond,
++      frame: -1,
++    };
++    performance.now = () => now();
++    Date.now = () => Math.round(now() + state.virtual.dateOffset);
++  }
++
++  function advance(milliseconds) {
++    if (!state.virtual) {
++      throw new Error("NoodleAnimation: virtual time is off");
++    }
++    state.virtual.time += milliseconds;
++    state.virtual.frame += 1;
++  }
++
++  function rendered() {
++    const clock = state.virtual;
++    return new Promise((resolve) => {
++      setTimeout(() => {
++        resolve({
++          index: clock ? clock.frame : -1,
++          time: clock ? clock.time - clock.start : 0,
++        });
++      }, 0);
++    });
++  }
++
++  function leaveVirtualTime() {
++    state.virtual = null;
++    performance.now = realNow;
++    Date.now = realDateNow;
++  }
++
+   function report() {
+     return {
+       frames: state.frames,
+@@ -56,6 +105,7 @@
+       animating: isAnimating(),
+       paused: state.paused,
+       visibility: document.visibilityState,
++      virtualTime: state.virtual ? state.virtual.time - state.virtual.start : null,
+     };
+   }
+ 
+@@ -64,6 +114,10 @@
+     pauseAll,
+     resumeAll,
+     report,
++    enterVirtualTime,
++    advance,
++    rendered,
++    leaveVirtualTime,
+   };
+ 
+   window.requestAnimationFrame(tick);
+diff --git a/Applet/Sources/NoodleApplet/Runtime.swift b/Applet/Sources/NoodleApplet/Runtime.swift
+index 5e1cfd2..41d8896 100644
+--- a/Applet/Sources/NoodleApplet/Runtime.swift
++++ b/Applet/Sources/NoodleApplet/Runtime.swift
+@@ -42,14 +42,9 @@ final class Runtime {
+         guard recordings[id] == nil else {
+             throw RecordingError.alreadyStarted
+         }
+-        guard runner.isWindowVisible else {
+-            throw RuntimeError.windowHidden(id)
+-        }
+         var options = Recording.Options()
+         options.framesPerSecond = framesPerSecond
+-        let recording = Recording(runner: runner, outputURL: url, options: options)
+-        try await recording.start()
+-        recordings[id] = recording
++        recordings[id] = try await runner.record(to: url, options: options)
+     }
+ 
+     func stopRecording(_ id: String) async throws -> URL {
+@@ -65,7 +60,6 @@ final class Runtime {
+ 
+ enum RuntimeError: Error, LocalizedError {
+     case unknownNoodlet(String)
+-    case windowHidden(String)
+     case notRecording(String)
+     case recordingFailed(String)
+ 
+@@ -73,8 +67,6 @@ enum RuntimeError: Error, LocalizedError {
+         switch self {
+         case .unknownNoodlet(let id):
+             return "No noodlet is running with id \(id)."
+-        case .windowHidden(let id):
+-            return "Noodlet \(id) is hidden. Show it before recording."
+         case .notRecording(let id):
+             return "Noodlet \(id) is not being recorded."
+         case .recordingFailed(let id):
+diff --git a/Applet/Sources/NoodleApplet/WebRunner.swift b/Applet/Sources/NoodleApplet/WebRunner.swift
+index 7a5d9f4..6e7b2fe 100644
+--- a/Applet/Sources/NoodleApplet/WebRunner.swift
++++ b/Applet/Sources/NoodleApplet/WebRunner.swift
+@@ -18,6 +18,9 @@ final class WebRunner: NSObject {
+         let configuration = WKWebViewConfiguration()
+         configuration.websiteDataStore = .nonPersistent()
+         configuration.mediaTypesRequiringUserActionForPlayback = []
++        // Keep timers and rendering going when the window is hidden, so a
++        // recording can ask the page for a frame at any time.
++        configuration.preferences.inactiveSchedulingPolicy = .none
+         for name in WebRunner.runtimeScripts {
+             configuration.userContentController.addUserScript(WebRunner.script(named: name))
+         }
+@@ -57,12 +60,26 @@ final class WebRunner: NSObject {
+ 
+     func hide() {
+         window?.orderOut(nil)
++        log("window hidden")
+     }
+ 
+     var isWindowVisible: Bool {
+         window?.isVisible == true && window?.occlusionState.contains(.visible) == true
+     }
+ 
++    // MARK: - Recording
++
++    /// Starts filming this noodlet. The recording drives the page's virtual
++    /// clock, so it stays smooth when the window is hidden or covered.
++    func record(to url: URL, options: Recording.Options = .init()) async throws -> Recording {
++        if !isWindowVisible {
++            log("window not visible; filming frame by frame")
++        }
++        let recording = Recording(runner: self, outputURL: url, options: options)
++        try await recording.start()
++        return recording
++    }
++
+     // MARK: - Log
+ 
+     func log(_ line: String) {
+diff --git a/Sources/Noodle/ScenarioFilm.swift b/Sources/Noodle/ScenarioFilm.swift
+index 22ecb68..78c8922 100644
+--- a/Sources/Noodle/ScenarioFilm.swift
++++ b/Sources/Noodle/ScenarioFilm.swift
+@@ -19,10 +19,9 @@ struct ScenarioFilm {
+ 
+     func run() async throws -> URL {
+         try await controller.open(scenario.noodlet, for: bot)
+-        // Recording needs the window on screen, so bring Noodle Applet
+-        // to the front and wait for the first frame to be drawn.
+-        NSWorkspace.shared.launchApplication("Noodle Applet")
+-        try await Task.sleep(for: .milliseconds(500))
++        // The applet films frame by frame on a virtual clock, so its window
++        // can stay hidden behind Noodle while the scenario runs.
++        try await controller.hide(scenario.noodlet, for: bot)
+         try await controller.startRecording(scenario.noodlet, for: bot)
+         for step in scenario.steps {
+             try await perform(step)
+diff --git a/Sources/NoodleCore/AppletAccess.swift b/Sources/NoodleCore/AppletAccess.swift
+index 8bed13c..530cafe 100644
+--- a/Sources/NoodleCore/AppletAccess.swift
++++ b/Sources/NoodleCore/AppletAccess.swift
+@@ -6,8 +6,10 @@ public struct AppletAccess: Codable, Equatable, Sendable {
+     public enum Operation: String, Codable, CaseIterable, Sendable {
+         case open
+         case close
++        /// Hide a noodlet's window. Hidden noodlets keep running.
+         case hide
+         case interact
++        /// Film a noodlet, whether or not its window is visible.
+         case record
+         case present
+     }
+diff --git a/Sources/NoodleRuntime/AppletController.swift b/Sources/NoodleRuntime/AppletController.swift
+index 122d1d0..ac377e7 100644
+--- a/Sources/NoodleRuntime/AppletController.swift
++++ b/Sources/NoodleRuntime/AppletController.swift
+@@ -30,10 +30,9 @@ public final class AppletController {
+ 
+     public func startRecording(_ noodlet: String, for bot: BotID, framesPerSecond: Int = 30) async throws {
+         try access.check(.record, noodlet: noodlet, bot: bot)
+-        if try await connection.request(.isHidden(noodlet)) == .yes {
+-            throw AppletControllerError.hiddenWhileRecording(noodlet)
+-        }
+-        try await connection.send(.recordStart(noodlet, framesPerSecond: framesPerSecond))
++        // Hidden noodlets record fine: the applet films them frame by frame.
++        let rate = min(max(framesPerSecond, 1), 60)
++        try await connection.send(.recordStart(noodlet, framesPerSecond: rate))
+     }
+ 
+     public func stopRecording(_ noodlet: String, for bot: BotID) async throws -> URL {
+@@ -43,13 +42,10 @@ public final class AppletController {
+ }
+ 
+ public enum AppletControllerError: Error, LocalizedError {
+-    case hiddenWhileRecording(String)
+     case helperUnavailable
+ 
+     public var errorDescription: String? {
+         switch self {
+-        case .hiddenWhileRecording(let noodlet):
+-            return "Show \(noodlet) before recording it."
+         case .helperUnavailable:
+             return "Noodle Applet is not running."
+         }
+-- 
+2.54.0 (Apple Git-157)
+
+
+From 66a29d92b3ea85c783f631b92b089500be8eefa4 Mon Sep 17 00:00:00 2001
+From: Wren <wren@noodle.example>
+Date: Sun, 18 Oct 2026 10:40:00 +0000
+Subject: [PATCH 2/3] Hold timers and animations between frames
+
+Animation.js takes over setTimeout, requestAnimationFrame and CSS
+animations while a recording runs, so nothing on the page moves while
+a frame is being captured.
+---
+ .../Sources/AppletBridge/AppletGuidance.swift |   3 +-
+ .../NoodleApplet/Resources/Animation.js       | 184 +++++++++++++++++-
+ .../Sources/NoodleApplet/Resources/Sound.js   |  27 ++-
+ docs/recording.md                             |  30 +++
+ scripts/record-noodlet.sh                     |  12 +-
+ 5 files changed, 243 insertions(+), 13 deletions(-)
+ create mode 100644 docs/recording.md
+ mode change 100644 => 100755 scripts/record-noodlet.sh
+
+diff --git a/Applet/Protocol/Sources/AppletBridge/AppletGuidance.swift b/Applet/Protocol/Sources/AppletBridge/AppletGuidance.swift
+index 756330d..6170259 100644
+--- a/Applet/Protocol/Sources/AppletBridge/AppletGuidance.swift
++++ b/Applet/Protocol/Sources/AppletBridge/AppletGuidance.swift
+@@ -18,7 +18,8 @@ public enum AppletGuidance {
+ 
+     public static let recording: [String] = [
+         "Use record-start and record-stop to film a short demo of the noodlet.",
+-        "Keep the noodlet window visible while recording; hidden windows stop animating.",
++        "Recordings are filmed frame by frame, so the window may be hidden or covered.",
++        "A slow noodlet takes longer to record, but the movie still plays at full speed.",
+         "Recordings longer than 60 seconds are cut at 60 seconds.",
+         "Present the recording in the conversation once it has finished.",
+     ]
+diff --git a/Applet/Sources/NoodleApplet/Resources/Animation.js b/Applet/Sources/NoodleApplet/Resources/Animation.js
+index d0607cd..4ea928e 100644
+--- a/Applet/Sources/NoodleApplet/Resources/Animation.js
++++ b/Applet/Sources/NoodleApplet/Resources/Animation.js
+@@ -2,7 +2,10 @@
+ //
+ // Keeps track of animation frames so the applet can tell whether the page
+ // is animating, and lets the applet pause and resume CSS animations when a
+-// noodlet is hidden.
++// noodlet is hidden. While a recording runs it also owns the page clock:
++// setTimeout, setInterval, requestAnimationFrame and CSS animations only
++// move when the applet advances virtual time, so nothing changes while a
++// frame is being captured.
+ (function () {
+   "use strict";
+ 
+@@ -15,12 +18,27 @@
+     lastFrameAt: 0,
+     paused: false,
+     virtual: null,
++    held: null,
++    timers: new Map(),
++    nextTimer: 1,
++    frameCallbacks: new Map(),
++    nextFrameCallback: 1,
++    callbacks: 0,
++  };
++
++  const real = {
++    setTimeout: window.setTimeout,
++    clearTimeout: window.clearTimeout,
++    setInterval: window.setInterval,
++    clearInterval: window.clearInterval,
++    requestAnimationFrame: window.requestAnimationFrame,
++    cancelAnimationFrame: window.cancelAnimationFrame,
+   };
+ 
+   function tick(timestamp) {
+     state.frames += 1;
+     state.lastFrameAt = timestamp;
+-    window.requestAnimationFrame(tick);
++    real.requestAnimationFrame.call(window, tick);
+   }
+ 
+   function isAnimating() {
+@@ -70,23 +88,41 @@
+     };
+     performance.now = () => now();
+     Date.now = () => Math.round(now() + state.virtual.dateOffset);
++    holdAnimations();
++    if (window.NoodleSound) {
++      window.NoodleSound.hold();
++    }
++    window.setTimeout = virtualSetTimeout;
++    window.clearTimeout = clearVirtualTimer;
++    window.setInterval = virtualSetInterval;
++    window.clearInterval = clearVirtualTimer;
++    window.requestAnimationFrame = virtualRequestAnimationFrame;
++    window.cancelAnimationFrame = cancelVirtualAnimationFrame;
+   }
+ 
+   function advance(milliseconds) {
+     if (!state.virtual) {
+       throw new Error("NoodleAnimation: virtual time is off");
+     }
+-    state.virtual.time += milliseconds;
+-    state.virtual.frame += 1;
++    const clock = state.virtual;
++    const target = clock.time + milliseconds;
++    state.callbacks = 0;
++    runTimersUntil(target);
++    clock.time = target;
++    clock.frame += 1;
++    seekAnimations(clock.time);
++    runFrameCallbacks(clock.time);
+   }
+ 
+   function rendered() {
+     const clock = state.virtual;
+     return new Promise((resolve) => {
+-      setTimeout(() => {
++      real.setTimeout.call(window, () => {
+         resolve({
+           index: clock ? clock.frame : -1,
+           time: clock ? clock.time - clock.start : 0,
++          callbacks: state.callbacks,
++          pausedAnimations: document.getAnimations().length,
+         });
+       }, 0);
+     });
+@@ -96,6 +132,142 @@
+     state.virtual = null;
+     performance.now = realNow;
+     Date.now = realDateNow;
++    window.setTimeout = real.setTimeout;
++    window.clearTimeout = real.clearTimeout;
++    window.setInterval = real.setInterval;
++    window.clearInterval = real.clearInterval;
++    window.requestAnimationFrame = real.requestAnimationFrame;
++    window.cancelAnimationFrame = real.cancelAnimationFrame;
++    releaseTimers();
++    releaseFrameCallbacks();
++    releaseAnimations();
++    if (window.NoodleSound) {
++      window.NoodleSound.release();
++    }
++  }
++
++  // Timers. While virtual time is on, setTimeout and setInterval go into a
++  // queue that advance() drains in order of due time.
++  function virtualSetTimeout(callback, delay, ...args) {
++    return addTimer(callback, delay, args, false);
++  }
++
++  function virtualSetInterval(callback, delay, ...args) {
++    return addTimer(callback, delay, args, true);
++  }
++
++  function addTimer(callback, delay, args, repeats) {
++    const id = state.nextTimer++;
++    const interval = Math.max(0, Number(delay) || 0);
++    state.timers.set(id, { callback, args, interval, repeats, due: now() + interval });
++    return id;
++  }
++
++  function clearVirtualTimer(id) {
++    state.timers.delete(id);
++  }
++
++  function runTimersUntil(target) {
++    for (;;) {
++      let next = null;
++      for (const [id, timer] of state.timers) {
++        if (timer.due <= target && (!next || timer.due < next.timer.due)) {
++          next = { id, timer };
++        }
++      }
++      if (!next) {
++        return;
++      }
++      const { id, timer } = next;
++      state.virtual.time = Math.max(state.virtual.time, timer.due);
++      if (timer.repeats) {
++        timer.due += Math.max(1, timer.interval);
++      } else {
++        state.timers.delete(id);
++      }
++      invoke(timer.callback, timer.args);
++    }
++  }
++
++  function releaseTimers() {
++    const pending = Array.from(state.timers.values());
++    state.timers.clear();
++    for (const timer of pending) {
++      const schedule = timer.repeats ? real.setInterval : real.setTimeout;
++      schedule.call(window, timer.callback, timer.interval, ...timer.args);
++    }
++  }
++
++  // Animation frames. Callbacks wait for the next advance() and then all
++  // run with the same timestamp, as they would in a real frame.
++  function virtualRequestAnimationFrame(callback) {
++    const id = state.nextFrameCallback++;
++    state.frameCallbacks.set(id, callback);
++    return id;
++  }
++
++  function cancelVirtualAnimationFrame(id) {
++    state.frameCallbacks.delete(id);
++  }
++
++  function runFrameCallbacks(time) {
++    const due = Array.from(state.frameCallbacks.values());
++    state.frameCallbacks.clear();
++    for (const callback of due) {
++      invoke(callback, [time]);
++    }
++  }
++
++  function releaseFrameCallbacks() {
++    const pending = Array.from(state.frameCallbacks.values());
++    state.frameCallbacks.clear();
++    for (const callback of pending) {
++      real.requestAnimationFrame.call(window, callback);
++    }
++  }
++
++  // CSS animations and Web Animations. They are paused while virtual time
++  // is on and moved by hand to the virtual time of each frame.
++  function holdAnimations() {
++    state.held = new WeakMap();
++    for (const animation of document.getAnimations()) {
++      animation.pause();
++      state.held.set(animation, animation.currentTime ?? 0);
++    }
++  }
++
++  function seekAnimations(time) {
++    const elapsed = time - state.virtual.start;
++    for (const animation of document.getAnimations()) {
++      if (!state.held.has(animation)) {
++        animation.pause();
++        state.held.set(animation, (animation.currentTime ?? 0) - elapsed);
++      }
++      animation.currentTime = state.held.get(animation) + elapsed;
++    }
++  }
++
++  function releaseAnimations() {
++    state.held = null;
++    if (state.paused) {
++      return;
++    }
++    for (const animation of document.getAnimations()) {
++      animation.play();
++    }
++  }
++
++  function invoke(callback, args) {
++    state.callbacks += 1;
++    try {
++      if (typeof callback === "function") {
++        callback.apply(window, args);
++      } else {
++        (0, eval)(String(callback));
++      }
++    } catch (error) {
++      console.error("NoodleAnimation: callback failed", error);
++    }
+   }
+ 
+   function report() {
+@@ -120,5 +292,5 @@
+     leaveVirtualTime,
+   };
+ 
+-  window.requestAnimationFrame(tick);
++  real.requestAnimationFrame.call(window, tick);
+ })();
+diff --git a/Applet/Sources/NoodleApplet/Resources/Sound.js b/Applet/Sources/NoodleApplet/Resources/Sound.js
+index dcc2a54..42c662b 100644
+--- a/Applet/Sources/NoodleApplet/Resources/Sound.js
++++ b/Applet/Sources/NoodleApplet/Resources/Sound.js
+@@ -1,7 +1,8 @@
+ // Sound.js - injected into every noodlet page by Noodle Applet.
+ //
+ // Routes Web Audio output through a single gain node so the applet can mute
+-// a noodlet, and reports whether the page is playing sound.
++// a noodlet, reports whether the page is playing sound and holds audio
++// while a recording films the page frame by frame.
+ (function () {
+   "use strict";
+ 
+@@ -11,6 +12,7 @@
+ 
+   const contexts = new Set();
+   let muted = false;
++  let held = false;
+ 
+   const RealAudioContext = window.AudioContext || window.webkitAudioContext;
+   if (!RealAudioContext) {
+@@ -21,6 +23,9 @@
+     constructor(options) {
+       super(options);
+       contexts.add(this);
++      if (held) {
++        this.suspend();
++      }
+       this.noodleGain = super.createGain();
+       this.noodleGain.connect(super.destination);
+       this.noodleGain.gain.value = muted ? 0 : 1;
+@@ -43,15 +48,33 @@
+ 
+   function isPlaying() {
+     for (const context of contexts) {
+-      if (context.state === "running" && !muted) {
++      if (context.state === "running" && !muted && !held) {
+         return true;
+       }
+     }
+     return false;
+   }
+ 
++  // While a recording films frame by frame, audio would run ahead of the
++  // picture, so every context is suspended until virtual time ends.
++  function hold() {
++    held = true;
++    for (const context of contexts) {
++      context.suspend();
++    }
++  }
++
++  function release() {
++    held = false;
++    for (const context of contexts) {
++      context.resume();
++    }
++  }
++
+   window.NoodleSound = {
+     setMuted,
+     isPlaying,
++    hold,
++    release,
+   };
+ })();
+diff --git a/docs/recording.md b/docs/recording.md
+new file mode 100644
+index 0000000..0738a54
+--- /dev/null
++++ b/docs/recording.md
+@@ -0,0 +1,30 @@
++# Recording noodlets
++
++Noodle Applet films a noodlet frame by frame. It does not sample the web
++view in real time, so a recording stays smooth when the window is hidden,
++covered or on another space.
++
++## How it works
++
++1. `record-start` puts the page on a virtual clock (`Animation.js`).
++2. For each frame, Recording advances the clock by 1/fps seconds.
++3. Due timers run in order, then animation frame callbacks run with the
++   frame's timestamp, and CSS animations are moved to the same time.
++4. The page reports that the frame has rendered; FrameCapture takes the
++   snapshot and the movie writer appends it at frame number / fps.
++5. `record-stop` returns the page to real time and finishes the movie.
++
++Nothing on the page moves between steps, so a slow snapshot never shows
++up as a stutter. A slow noodlet takes longer to record, but the movie
++still plays at full speed.
++
++## Limits
++
++- Audio is suspended while filming and is not part of the movie.
++- Video elements and workers keep running in real time.
++- Recordings stop after 60 seconds of virtual time.
++
++## Debugging
++
++`noodle-applet logs NOODLET` shows one line for every frame that the page
++did not render in time, with the virtual time it was waiting for.
+diff --git a/scripts/record-noodlet.sh b/scripts/record-noodlet.sh
+old mode 100644
+new mode 100755
+index 2170ba4..d1c4cec
+--- a/scripts/record-noodlet.sh
++++ b/scripts/record-noodlet.sh
+@@ -1,7 +1,7 @@
+ #!/bin/zsh
+ # Records a noodlet with Noodle Applet and copies the movie to a folder.
+ #
+-# Usage: scripts/record-noodlet.sh NOODLET SECONDS [OUTPUT_DIR]
++# Usage: [HIDDEN=1] scripts/record-noodlet.sh NOODLET SECONDS [OUTPUT_DIR]
+ 
+ set -euo pipefail
+ 
+@@ -23,9 +23,13 @@ fi
+ mkdir -p "$output_dir"
+ 
+ "$applet" open "$noodlet"
+-# The window must stay in front while recording, otherwise WebKit stops
+-# drawing frames and the movie freezes.
+-"$applet" show "$noodlet"
++# Recordings are filmed frame by frame on a virtual clock, so the window
++# does not need to be in front. Set HIDDEN=1 to keep it out of the way.
++if [[ ${HIDDEN:-0} == 1 ]]; then
++  "$applet" hide "$noodlet"
++else
++  "$applet" show "$noodlet"
++fi
+ "$applet" record-start "$noodlet" --fps 30
+ sleep "$seconds"
+ movie=$("$applet" record-stop "$noodlet")
+-- 
+2.54.0 (Apple Git-157)
+
+
+From 714befc75083efdab3cdeee0c070d565d56a4a90 Mon Sep 17 00:00:00 2001
+From: Wren <wren@noodle.example>
+Date: Sun, 18 Oct 2026 11:35:00 +0000
+Subject: [PATCH 3/3] Test the spacing of frames
+
+RecordingSmoothnessTests films a moving square for two seconds and
+checks that every frame is 1/30 s after the last, within a millisecond.
+---
+ Applet/Sources/NoodleApplet/Recording.swift   |  4 +
+ .../RecordingSmoothnessTests.swift            | 81 +++++++++++++++++++
+ .../NoodleAppletTests/RecordingTests.swift    | 15 ++--
+ 3 files changed, 93 insertions(+), 7 deletions(-)
+ create mode 100644 Applet/Tests/NoodleAppletTests/RecordingSmoothnessTests.swift
+
+diff --git a/Applet/Sources/NoodleApplet/Recording.swift b/Applet/Sources/NoodleApplet/Recording.swift
+index 3d0201c..80476dc 100644
+--- a/Applet/Sources/NoodleApplet/Recording.swift
++++ b/Applet/Sources/NoodleApplet/Recording.swift
+@@ -37,6 +37,8 @@ final class Recording {
+     private var input: AVAssetWriterInput?
+     private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
+     private var frameCount: Int64 = 0
++    /// Presentation times of the frames written so far, for tests.
++    private(set) var frameTimes: [CMTime] = []
+ 
+     init(runner: WebRunner, outputURL: URL, options: Options = Options()) {
+         self.runner = runner
+@@ -54,6 +56,7 @@ final class Recording {
+         try prepareWriter()
+         state = .recording(started: Date())
+         frameCount = 0
++        frameTimes = []
+         try await runner.page.enterVirtualTime(framesPerSecond: options.framesPerSecond)
+         filming = Task { [weak self] in
+             await self?.film()
+@@ -127,6 +130,7 @@ final class Recording {
+         }
+         if adaptor.append(buffer, withPresentationTime: time) {
+             frameCount += 1
++            frameTimes.append(time)
+         }
+     }
+ 
+diff --git a/Applet/Tests/NoodleAppletTests/RecordingSmoothnessTests.swift b/Applet/Tests/NoodleAppletTests/RecordingSmoothnessTests.swift
+new file mode 100644
+index 0000000..c08d84e
+--- /dev/null
++++ b/Applet/Tests/NoodleAppletTests/RecordingSmoothnessTests.swift
+@@ -0,0 +1,81 @@
++import AVFoundation
++import NoodletRuntime
++import XCTest
++@testable import NoodleApplet
++
++/// Films a square that moves at a constant speed and checks that the frames
++/// are evenly spaced, whether or not the window is visible.
++@MainActor
++final class RecordingSmoothnessTests: XCTestCase {
++    private let framesPerSecond = 30
++    private let duration: TimeInterval = 2
++    private let tolerance = 0.001
++
++    private var runner: WebRunner!
++    private var outputURL: URL!
++
++    override func setUp() async throws {
++        runner = WebRunner(noodlet: try Fixtures.noodlet("moving-square"))
++        runner.load()
++        try await Fixtures.waitUntilLoaded(runner)
++        outputURL = FileManager.default.temporaryDirectory
++            .appendingPathComponent("smoothness-\(UUID().uuidString)")
++            .appendingPathExtension("mov")
++    }
++
++    override func tearDown() async throws {
++        try? FileManager.default.removeItem(at: outputURL)
++        runner = nil
++    }
++
++    func testFramesAreEvenlySpacedWhenVisible() async throws {
++        try await assertEvenlySpaced(hidden: false)
++    }
++
++    func testFramesAreEvenlySpacedWhenHidden() async throws {
++        runner.hide()
++        try await assertEvenlySpaced(hidden: true)
++    }
++
++    func testRenderedFramesFollowEachOther() {
++        let interval = 1.0 / Double(framesPerSecond)
++        let first = RenderedFrame(index: 0, time: 0)
++        let second = RenderedFrame(index: 1, time: 1000 * interval)
++        let late = RenderedFrame(index: 2, time: 2000 * interval + 5)
++        XCTAssertTrue(second.follows(first, interval: interval, tolerance: tolerance))
++        XCTAssertFalse(late.follows(second, interval: interval, tolerance: tolerance))
++    }
++
++    private func assertEvenlySpaced(
++        hidden: Bool,
++        file: StaticString = #filePath,
++        line: UInt = #line
++    ) async throws {
++        var options = Recording.Options()
++        options.framesPerSecond = framesPerSecond
++        options.maximumDuration = duration
++        let recording = Recording(runner: runner, outputURL: outputURL, options: options)
++        try await recording.start()
++        while case .recording = recording.state {
++            try await Task.sleep(for: .milliseconds(50))
++        }
++        guard case .finished = recording.state else {
++            return XCTFail("recording did not finish: \(recording.state)", file: file, line: line)
++        }
++
++        let times = recording.frameTimes.map(\.seconds)
++        let expected = Int(duration * Double(framesPerSecond))
++        XCTAssertEqual(times.count, expected, "hidden: \(hidden)", file: file, line: line)
++
++        let interval = 1.0 / Double(framesPerSecond)
++        for (index, pair) in zip(times, times.dropFirst()).enumerated() {
++            let gap = pair.1 - pair.0
++            XCTAssertEqual(gap, interval, accuracy: tolerance,
++                           "frame \(index + 1) is \(gap) s after frame \(index)", file: file, line: line)
++        }
++
++        let asset = AVURLAsset(url: outputURL)
++        let movieDuration = try await asset.load(.duration).seconds
++        XCTAssertEqual(movieDuration, duration, accuracy: interval, file: file, line: line)
++    }
++}
+diff --git a/Applet/Tests/NoodleAppletTests/RecordingTests.swift b/Applet/Tests/NoodleAppletTests/RecordingTests.swift
+index aa51c47..19435a6 100644
+--- a/Applet/Tests/NoodleAppletTests/RecordingTests.swift
++++ b/Applet/Tests/NoodleAppletTests/RecordingTests.swift
+@@ -30,6 +30,7 @@ final class RecordingTests: XCTestCase {
+         let asset = AVURLAsset(url: outputURL)
+         let tracks = try await asset.loadTracks(withMediaType: .video)
+         XCTAssertEqual(tracks.count, 1)
++        XCTAssertEqual(recording.frameTimes.first, .zero)
+     }
+ 
+     func testStartTwiceThrows() async throws {
+@@ -50,13 +51,13 @@ final class RecordingTests: XCTestCase {
+         XCTAssertNil(url)
+     }
+ 
+-    func testHiddenWindowIsRejected() async throws {
++    func testHiddenWindowRecords() async throws {
+         runner.hide()
+-        do {
+-            try await Runtime.shared.startRecording("bouncing-ball", to: outputURL, framesPerSecond: 30)
+-            XCTFail("expected windowHidden")
+-        } catch RuntimeError.windowHidden {
+-            // expected
+-        }
++        let recording = Recording(runner: runner, outputURL: outputURL)
++        try await recording.start()
++        try await Task.sleep(for: .seconds(1))
++        let url = await recording.stop()
++        XCTAssertEqual(url, outputURL)
++        XCTAssertGreaterThan(recording.frameTimes.count, 0)
+     }
+ }
+-- 
+2.54.0 (Apple Git-157)
+

@@ -230,7 +230,7 @@ struct AttachmentInlinePreview: View {
             ZStack {
                 Color.black.opacity(0.16)
                 if let thumbnail {
-                    Image(nsImage: thumbnail).resizable().scaledToFit().padding(6).transition(.opacity)
+                    cardPicture(thumbnail, fills: true)
                 } else if let detail = card.detail, attachment.isComputerLink {
                     Text(detail).font(.system(size: 9, design: .monospaced)).foregroundStyle(.primary.opacity(0.8))
                         .lineLimit(10).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading).padding(10)
@@ -334,28 +334,35 @@ struct AttachmentInlinePreview: View {
         .accessibilityHidden(true)
     }
 
-    private var isShader: Bool { ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.originalFilename)) }
+    /// A shader's still and a video's frame are pictures, not pages: they fill the card, as a browser tab's or computer's
+    /// screenshot does.
+    private var picturesFillCard: Bool {
+        if ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.originalFilename)) { return true }
+        let type = UTType(mimeType: attachment.mediaType).flatMap { $0 == .data ? nil : $0 }
+            ?? UTType(filenameExtension: (attachment.originalFilename as NSString).pathExtension)
+        return type?.conforms(to: .movie) == true
+    }
+
+    /// A picture that fills the card to its rounded corners, or a page with a margin around it on the card's shade.
+    private func cardPicture(_ image: NSImage, fills: Bool) -> some View {
+        Group {
+            if fills {
+                // Laid over the card's space rather than sized by the picture, which would widen the card.
+                Color.clear.overlay { Image(nsImage: image).resizable().scaledToFill() }.clipped()
+            } else {
+                Image(nsImage: image).resizable().scaledToFit().padding(6)
+            }
+        }
+        .transition(.opacity)
+    }
 
     private var documentPreview: some View {
         VStack(alignment: .leading, spacing: 7) {
             ZStack {
                 Color.black.opacity(0.16)
 
-                if let thumbnail, isShader {
-                    // A shader's still is a picture of the card's own shape: it fills the card to its rounded corners,
-                    // with no page margin around it.
-                    Image(nsImage: thumbnail)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
-                        .transition(.opacity)
-                } else if let thumbnail {
-                    Image(nsImage: thumbnail)
-                        .resizable()
-                        .scaledToFit()
-                        .padding(6)
-                        .transition(.opacity)
+                if let thumbnail {
+                    cardPicture(thumbnail, fills: picturesFillCard)
                 } else {
                     Image(systemName: attachment.previewSymbolName)
                         .font(.system(size: 38, weight: .light))
