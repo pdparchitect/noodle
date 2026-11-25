@@ -3,7 +3,8 @@ import NoodleCore
 import NoodleToolConnections
 
 /// CrowdStrike Falcon: its hosts, the alerts its sensors raised, who used Real Time Response on which host, its host
-/// groups and the container images it assessed, read through an API client's ID and secret. Each account is one Falcon
+/// groups, the container images it assessed, and its prevention policies and exclusions, read through an API client's
+/// ID and secret. Each account is one Falcon
 /// cloud and customer (CID). CrowdStrike Falcon Detection only reads; CrowdStrike Falcon Containment, a tool of its own with
 /// an API client of its own, contains hosts, blocks indicators, runs two fixed Real Time Response commands and closes
 /// alerts. Falcon's incidents API was retired in 2026, so incidents are read as the alerts they gathered.
@@ -17,7 +18,7 @@ import NoodleToolConnections
 public enum CrowdStrike {
     public static let preset = ToolDefinition(
         id: "fc56ba9d-c4aa-4ff9-80cf-507f21273249", name: "CrowdStrike Falcon Detection",
-        summary: "Hosts, alerts, Real Time Response sessions, host groups and container image assessments in CrowdStrike Falcon, read-only.",
+        summary: "Hosts, alerts, Real Time Response sessions, host groups, container image assessments, prevention policies and exclusions in CrowdStrike Falcon, read-only.",
         defaultInstructions: """
         Use CrowdStrike Falcon Detection to see endpoints as Falcon's sensors do. hosts finds hosts by name, IP address, \
         platform, containment status or host group, and host reads one in full: its sensor, when it was last seen, \
@@ -27,8 +28,11 @@ public enum CrowdStrike {
         command lines, hashes, user and MITRE technique. rtr-sessions \
         lists who opened Real Time Response sessions on which host and every command they ran. host-groups lists host \
         groups and their members, container-images the container images Falcon assessed with their vulnerabilities, \
-        and users who can use the Falcon console with their roles. Each host's 32-character device ID, and each alert's \
-        composite ID, are what CrowdStrike Falcon Containment acts on. The alert watch checks every five minutes and \
+        and users who can use the Falcon console with their roles. To assess how Falcon is set up, prevention-policies \
+        lists each platform's prevention policies with their protections and the hosts they reach, led by disabled \
+        policies, hosts on a default policy and protections turned off; exclusions lists machine learning, IOA and \
+        sensor visibility exclusions, led by those for every host or with broad patterns. Each host's 32-character \
+        device ID, and each alert's composite ID, are what CrowdStrike Falcon Containment acts on. The alert watch checks every five minutes and \
         wakes you with a note naming security-events, which reads what it found for the note's window: new high and \
         critical alerts not closed, Real Time Response sessions opened, and hosts newly contained. A note may name a \
         feed the watch could not read: security-events says why, so tell the champion and treat that feed's silence as \
@@ -69,7 +73,8 @@ public enum CrowdStrike {
     static let hostGroupsRead = Scope(name: "Host groups", access: "Read")
     static let imagesRead = Scope(name: "Falcon Container Image", access: "Read")
     static let usersRead = Scope(name: "User management", access: "Read")
-    static let auditScopes = [hostsRead, alertsRead, rtrAuditRead, hostGroupsRead, imagesRead, usersRead]
+    static let auditScopes = [hostsRead, alertsRead, rtrAuditRead, hostGroupsRead, imagesRead, usersRead, preventionRead, mlExclusionsRead, ioaExclusionsRead,
+                              svExclusionsRead]
 
     static let setup = [
         "In the Falcon console, open **Support and resources › API clients and keys** and choose **Create API client**. Name it Pion Falcon Detection, kept for this tool alone.",
@@ -80,7 +85,8 @@ public enum CrowdStrike {
 
     /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
     static let operations: [any ServiceOperation] = [
-        Hosts(), HostDetails(), Alerts(), AlertDetails(), RTRSessions(), HostGroups(), ContainerImages(), Users(), SecurityEvents(), CheckAccess(),
+        Hosts(), HostDetails(), Alerts(), AlertDetails(), RTRSessions(), HostGroups(), ContainerImages(), Users(), PreventionPolicies(), Exclusions(),
+        SecurityEvents(), CheckAccess(),
         ContainmentHost(), ActionStatus(), ContainHost(), LiftContainment(), BlockIOC(), UnblockIOC(), RTRKillProcess(), CloseAlert(),
         UpdateAlertStatus(), ContainmentCheckAccess(),
     ]
@@ -1183,6 +1189,10 @@ extension CrowdStrike {
                 (CrowdStrike.hostGroupsNeed, ["devices", "queries", "host-groups", "v1"], ["limit": "1"]),
                 (CrowdStrike.imagesNeed, ["container-security", "combined", "image-assessment", "images", "v1"], ["limit": "1"]),
                 (CrowdStrike.usersNeed, ["user-management", "queries", "users", "v1"], ["limit": "1"]),
+                (CrowdStrike.preventionNeed, ["policy", "queries", "prevention", "v1"], ["limit": "1"]),
+                (CrowdStrike.mlExclusionsNeed, ["policy", "queries", "ml-exclusions", "v1"], ["limit": "1"]),
+                (CrowdStrike.ioaExclusionsNeed, ["policy", "queries", "ioa-exclusions", "v1"], ["limit": "1"]),
+                (CrowdStrike.svExclusionsNeed, ["policy", "queries", "sv-exclusions", "v1"], ["limit": "1"]),
             ]
             var working: [String] = []
             for (need, path, query) in reads {

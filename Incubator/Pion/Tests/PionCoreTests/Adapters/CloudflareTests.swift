@@ -87,6 +87,197 @@ final class CloudflareTests: XCTestCase {
         XCTAssertTrue(service.requests.allSatisfy { $0.url?.host == "api.cloudflare.com" && $0.httpMethod == "GET" })
     }
 
+    /// Every zone's security settings, weak zones first: one zone's settings come from the listing of them all, and
+    /// another's, where that listing is gone, one by one; DNSSEC and the WAF's managed rules each from their own read.
+    func testZoneSettingsLeadWithWeakSettingsAndReadEachSettingWhenTheListingIsGone() async throws {
+        let other = "6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a"
+        let service = FakeService()
+        service.answers["/client/v4/zones"] = Self.page(#"{"id":"\#(other)","name":"shop.example","status":"active","plan":{"name":"Pro Website"},"type":"full"},{"id":"\#(Self.zoneID)","name":"kestrel.example","status":"active","plan":{"name":"Free Website"},"type":"full"}"#, total: 2, totalPages: 1)
+        let weak = "/client/v4/zones/\(Self.zoneID)"
+        service.answers["\(weak)/settings"] = (200, #"{"success":true,"errors":[],"result":[{"id":"ssl","value":"flexible"},{"id":"min_tls_version","value":"1.0"},{"id":"always_use_https","value":"off"},{"id":"automatic_https_rewrites","value":"on"},{"id":"security_header","value":{"strict_transport_security":{"enabled":false}}},{"id":"tls_1_3","value":"on"},{"id":"opportunistic_encryption","value":"on"},{"id":"security_level","value":"medium"},{"id":"browser_check","value":"off"},{"id":"ssl_automatic_mode","value":"custom"},{"id":"rocket_loader","value":"on"}]}"#)
+        service.answers["\(weak)/dnssec"] = (200, #"{"success":true,"errors":[],"result":{"status":"disabled"}}"#)
+        let strong = "/client/v4/zones/\(other)"
+        for (id, value) in [("ssl", #""strict""#), ("min_tls_version", #""1.2""#), ("always_use_https", #""on""#), ("tls_1_3", #""zrt""#),
+                            ("security_header", #"{"strict_transport_security":{"enabled":true,"max_age":31536000,"include_subdomains":true,"preload":false}}"#)] {
+            service.answers["\(strong)/settings/\(id)"] = (200, #"{"success":true,"errors":[],"result":{"id":"\#(id)","value":\#(value),"editable":true}}"#)
+        }
+        service.answers["\(strong)/dnssec"] = (200, #"{"success":true,"errors":[],"result":{"status":"active","algorithm":"13"}}"#)
+        service.answers["\(strong)/rulesets/phases/http_request_firewall_managed/entrypoint"] = (200, #"{"success":true,"errors":[],"result":{"id":"e1","phase":"http_request_firewall_managed","rules":[{"id":"r1","action":"execute","action_parameters":{"id":"efb7b8c949ac4650a09736fc376e9aee"},"enabled":true},{"id":"r2","action":"execute","action_parameters":{"id":"4814384a9e5d4991b9815dcfc25d2f1f"},"enabled":false}]}}"#)
+        let result = try await call("zone-settings", "{}", service)
+        XCTAssertFalse(result.isError, result.text)
+        let lines = result.text.split(separator: "\n").map(String.init)
+        XCTAssertEqual(lines.first, "The security settings of 2 zones:")
+        XCTAssertEqual(lines.dropFirst().first, "Weak settings in 1 of 2 zones:")
+        let flagged = try XCTUnwrap(lines.first { $0.hasPrefix("⚠ kestrel.example: ") })
+        for words in ["SSL/TLS Flexible", "minimum TLS 1.0", "HTTPS not enforced", "DNSSEC off"] { XCTAssertTrue(flagged.contains(words), "\(words): \(flagged)") }
+        XCTAssertFalse(lines.contains { $0.hasPrefix("⚠ shop.example") }, result.text)
+        let noted = try XCTUnwrap(lines.first { $0.hasPrefix("· kestrel.example: ") })
+        XCTAssertTrue(noted.contains("HSTS off") && noted.contains("Browser Integrity Check off") && noted.contains("no WAF managed ruleset deployed at the zone"), noted)
+        let shop = try XCTUnwrap(lines.first { $0.hasPrefix("shop.example [\(other)]") })
+        for words in ["(active, plan Pro Website, full setup)", "SSL/TLS Full (strict)", "minimum TLS 1.2", "HSTS on (max-age 365 days, includeSubDomains)",
+                      "TLS 1.3 on with 0-RTT", "DNSSEC active", "Opportunistic Encryption not given",
+                      "WAF managed rules Cloudflare Managed Ruleset, Cloudflare OWASP Core Ruleset (off)"] {
+            XCTAssertTrue(shop.contains(words), "\(words): \(shop)")
+        }
+        let order = lines.compactMap { line in ["kestrel.example [", "shop.example ["].first { line.hasPrefix($0) } }
+        XCTAssertEqual(order, ["kestrel.example [", "shop.example ["], "weak zones first")
+        let asked = Set(service.requests.compactMap { $0.url?.path })
+        XCTAssertTrue(asked.contains("\(strong)/settings/ssl") && asked.contains("\(strong)/settings/browser_check"), "each setting read once the listing is gone")
+        XCTAssertFalse(asked.contains("\(weak)/settings/ssl"), "a setting the listing gave is not read again")
+        XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" && $0.url?.host == "api.cloudflare.com" })
+        XCTAssertEqual(result.structured?["weakZones"] as? Int, 1)
+        XCTAssertEqual(queryItems(service.requests.first)["account.id"], Self.accountID)
+
+        // One zone by name; a token without Zone WAF Read still reads the rest, and says what it could not.
+        let partial = FakeService()
+        Self.zone(partial)
+        partial.answers["\(weak)/settings"] = service.answers["\(weak)/settings"]
+        partial.answers["\(weak)/dnssec"] = (200, #"{"success":true,"errors":[],"result":{"status":"pending"}}"#)
+        partial.answers["\(weak)/rulesets/phases/http_request_firewall_managed/entrypoint"] = (403, #"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#)
+        let one = try await call("zone-settings", #"{"zone":"kestrel.example"}"#, partial)
+        XCTAssertFalse(one.isError, one.text)
+        XCTAssertTrue(one.text.hasPrefix("The security settings of kestrel.example:") && one.text.contains("DNSSEC pending"), one.text)
+        XCTAssertTrue(one.text.contains("Not read for kestrel.example: WAF managed rules: the token lacks **Zone › Zone WAF › Read**"), one.text)
+        XCTAssertEqual(one.structured?["complete"] as? Bool, false)
+
+        // A token without Zone Settings Read reads no zone's settings, and is told the permission to add.
+        let refused = FakeService()
+        Self.zone(refused)
+        refused.answers["\(weak)/settings"] = (403, #"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#)
+        let denied = try await call("zone-settings", #"{"zone":"kestrel.example"}"#, refused)
+        XCTAssertTrue(denied.isError && denied.text.contains("**Zone › Zone Settings › Read**"), denied.text)
+        let unknown = try await call("zone-settings", #"{"zone":"nowhere.example"}"#, refused)
+        XCTAssertTrue(unknown.isError && unknown.text.contains("no zone nowhere.example"), unknown.text)
+    }
+
+    /// A zone's records that point outside it, by provider, led by CNAMEs whose target doesn't resolve: possible
+    /// takeover only at providers where others have claimed such names. Targets are looked up at Cloudflare's own
+    /// DNS-over-HTTPS resolver, without the token, at most as many as asked, those at such providers first; only
+    /// NXDOMAIN, or NOERROR with no address, is taken for not resolving, never SERVFAIL or no answer in time.
+    func testDNSExposureGroupsOutsideTargetsByProviderAndLeadsWithThoseThatDoNotResolve() async throws {
+        let service = FakeService()
+        Self.zone(service)
+        let records = [
+            #"{"id":"r1","type":"CNAME","name":"old.kestrel.example","content":"kestrel-old.herokuapp.com","proxied":false}"#,
+            #"{"id":"r2","type":"CNAME","name":"files.kestrel.example","content":"files-kestrel.s3.amazonaws.com","proxied":false}"#,
+            #"{"id":"r3","type":"CNAME","name":"app.kestrel.example","content":"kestrel-app.azurewebsites.net","proxied":true}"#,
+            #"{"id":"r4","type":"CNAME","name":"help.kestrel.example","content":"kestrel.zendesk.com","proxied":false}"#,
+            #"{"id":"r5","type":"CNAME","name":"docs.kestrel.example","content":"kestrel.github.io","proxied":false}"#,
+            #"{"id":"r6","type":"CNAME","name":"www.kestrel.example","content":"kestrel.example","proxied":true}"#,
+            #"{"id":"r7","type":"CNAME","name":"legacy.kestrel.example","content":"gone.kestrel.example","proxied":false}"#,
+            #"{"id":"r8","type":"CNAME","name":"blog.kestrel.example","content":"blog.partner.example","proxied":false}"#,
+            #"{"id":"r9","type":"A","name":"intranet.kestrel.example","content":"10.1.2.3","proxied":false}"#,
+            #"{"id":"r10","type":"A","name":"kestrel.example","content":"185.199.108.153","proxied":false}"#,
+            #"{"id":"r11","type":"A","name":"api.kestrel.example","content":"203.0.113.7","proxied":true}"#,
+            #"{"id":"r12","type":"NS","name":"dev.kestrel.example","content":"ns-123.awsdns-45.com","proxied":false}"#,
+            #"{"id":"r13","type":"MX","name":"kestrel.example","content":"mx.kestrel.example","proxied":false}"#,
+        ]
+        let path = "/client/v4/zones/\(Self.zoneID)/dns_records"
+        service.answers[path] = Self.page(records.joined(separator: ","), perPage: 500, total: records.count, totalPages: 1)
+
+        /// Cloudflare's resolver as a stand-in: its JSON answers by name and type, and no answer in time for some names.
+        final class Resolver: ServiceAccess, @unchecked Sendable {
+            let answers = FakeService()
+            var slow: Set<String> = []
+            func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+                let name = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "name" }?.value ?? ""
+                if slow.contains(name) {
+                    answers.lock.withLock { answers.requests.append(request) }
+                    throw URLError(.timedOut)
+                }
+                return try await answers.data(for: request)
+            }
+            func asked() -> [String] { answers.lock.withLock { answers.requests.compactMap { $0.url?.query } } }
+        }
+        let resolver = Resolver()
+        func doh(_ name: String, _ type: String, _ body: String) { resolver.answers.answers["/dns-query?name=\(name)&type=\(type)"] = (200, body) }
+        doh("kestrel-old.herokuapp.com", "A", #"{"Status":3,"TC":false,"Question":[{"name":"kestrel-old.herokuapp.com","type":1}]}"#)
+        doh("files-kestrel.s3.amazonaws.com", "A", #"{"Status":0,"Answer":[{"name":"files-kestrel.s3.amazonaws.com","type":5,"TTL":300,"data":"s3-w.amazonaws.com."},{"name":"s3-w.amazonaws.com","type":1,"TTL":5,"data":"52.0.0.1"}]}"#)
+        doh("kestrel-app.azurewebsites.net", "A", #"{"Status":3,"Answer":[{"name":"kestrel-app.azurewebsites.net","type":5,"TTL":300,"data":"waws-prod-xyz.cloudapp.net."}]}"#)
+        doh("kestrel.zendesk.com", "A", #"{"Status":0}"#)
+        doh("kestrel.zendesk.com", "AAAA", #"{"Status":0,"Answer":[]}"#)
+        doh("blog.partner.example", "A", #"{"Status":2}"#)
+        resolver.slow = ["kestrel.github.io"]
+        func exposure(_ arguments: String) async throws -> AdapterResult {
+            resolver.answers.lock.withLock { resolver.answers.requests = [] }
+            return try await Cloudflare.$resolver.withValue(resolver) { try await call("dns-exposure", arguments, service) }
+        }
+        let result = try await exposure(#"{"zone":"kestrel.example"}"#)
+        XCTAssertFalse(result.isError, result.text)
+        let text = result.text
+        let lines = text.split(separator: "\n").map(String.init)
+        XCTAssertTrue(lines[0].hasPrefix("kestrel.example: 13 DNS records read; 7 records point outside the zone"), lines[0])
+        XCTAssertEqual(lines[1], "Target doesn't resolve — possible takeover (2):")
+        XCTAssertTrue(lines[2].contains("app.kestrel.example → kestrel-app.azurewebsites.net (proxied) [doesn't resolve: NXDOMAIN at waws-prod-xyz.cloudapp.net] — target doesn't resolve — possible takeover"), lines[2])
+        XCTAssertTrue(lines[3].contains("old.kestrel.example → kestrel-old.herokuapp.com [doesn't resolve: NXDOMAIN]") && lines[3].contains("at Heroku"), lines[3])
+        XCTAssertTrue(text.contains("Target doesn't resolve — check whether still in use (1):\n  CNAME help.kestrel.example → kestrel.zendesk.com [doesn't resolve: no address (NOERROR, no answer)]"), text)
+        XCTAssertTrue(text.contains("Points at a name in this zone that no record answers (1):\n  CNAME legacy.kestrel.example → gone.kestrel.example"), text)
+        XCTAssertTrue(text.contains("Private or reserved addresses published in public DNS (1):\n  A intranet.kestrel.example → 10.1.2.3"), text)
+        XCTAssertFalse(text.contains("www.kestrel.example"), "a name in the zone that a record answers is the zone's own")
+        XCTAssertTrue(text.contains("AWS S3 (names left pointing at its deleted resources have been claimed by others):"), text)
+        XCTAssertTrue(text.contains("files.kestrel.example → files-kestrel.s3.amazonaws.com [resolves via s3-w.amazonaws.com] — check whether still in use; at AWS S3 a target still resolves after its resource is deleted"), text)
+        XCTAssertTrue(text.contains("GitHub Pages (names left pointing at its deleted resources have been claimed by others in some cases):"), text)
+        XCTAssertTrue(text.contains("A kestrel.example → 185.199.108.153") && text.contains("docs.kestrel.example → kestrel.github.io [couldn't tell: "), text)
+        XCTAssertTrue(text.contains("Other hosts outside the zone:\n  CNAME blog.kestrel.example → blog.partner.example [couldn't tell: the resolver answered SERVFAIL]"), text)
+        XCTAssertTrue(text.contains("Subdomains delegated to other name servers (1):\n  NS dev.kestrel.example → ns-123.awsdns-45.com — delegated: check the zone still exists at Amazon Route 53"), text)
+        XCTAssertTrue(text.contains("1 address Pion does not recognise, in 1 record") && text.contains("A api.kestrel.example → 203.0.113.7 (proxied)"), text)
+        XCTAssertTrue(text.contains("Looked up 6 of 6 distinct targets through Cloudflare's DNS-over-HTTPS resolver."), text)
+        XCTAssertFalse(text.lowercased().contains("can be taken over") || text.lowercased().contains("exploitable"), text)
+        XCTAssertEqual((result.structured?["possibleTakeover"] as? [[String: Any]])?.count, 2)
+        XCTAssertEqual((result.structured?["notResolving"] as? [[String: Any]])?.count, 1, "SERVFAIL and no answer in time are never taken for not resolving")
+        XCTAssertEqual(result.structured?["complete"] as? Bool, true)
+        XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" && $0.url?.host == "api.cloudflare.com" })
+        // Each target asked for its addresses, AAAA only where A gave none, as JSON, of Cloudflare's resolver, without the token.
+        let sent = resolver.answers.lock.withLock { resolver.answers.requests }
+        XCTAssertTrue(sent.allSatisfy { $0.url?.host == "cloudflare-dns.com" && $0.url?.path == "/dns-query" && $0.httpMethod == "GET"
+                && $0.value(forHTTPHeaderField: "Accept") == "application/dns-json" && $0.value(forHTTPHeaderField: "Authorization") == nil }, "\(sent)")
+        XCTAssertEqual(Set(resolver.asked()), ["name=kestrel-old.herokuapp.com&type=A", "name=files-kestrel.s3.amazonaws.com&type=A", "name=kestrel-app.azurewebsites.net&type=A",
+                                               "name=kestrel.zendesk.com&type=A", "name=kestrel.zendesk.com&type=AAAA", "name=kestrel.github.io&type=A",
+                                               "name=blog.partner.example&type=A"])
+
+        // At most as many lookups as asked, those at providers where others have claimed such names first.
+        let capped = try await exposure(#"{"zone":"kestrel.example","lookups":2}"#)
+        XCTAssertTrue(capped.text.contains("Looked up 2 of 6 distinct targets through Cloudflare's DNS-over-HTTPS resolver; 4 were not, as at most 2 are"), capped.text)
+        XCTAssertEqual(Set(resolver.asked()), ["name=files-kestrel.s3.amazonaws.com&type=A", "name=kestrel-app.azurewebsites.net&type=A"])
+        XCTAssertTrue(capped.text.contains("kestrel-old.herokuapp.com [not looked up]"), capped.text)
+
+        // A listing cut short says so, and does not say which names in the zone no record answers; 0 looks none up.
+        let cut = FakeService()
+        Self.zone(cut)
+        cut.sequences[path] = [Self.page(records.prefix(7).joined(separator: ","), perPage: 500, total: 600, totalPages: 2), (500, #"{"success":false,"errors":[{"code":10000,"message":"internal error"}]}"#)]
+        resolver.answers.lock.withLock { resolver.answers.requests = [] }
+        let incomplete = try await Cloudflare.$resolver.withValue(resolver) { try await call("dns-exposure", #"{"zone":"kestrel.example","lookups":0}"#, cut) }
+        XCTAssertTrue(incomplete.text.contains("Incomplete: stopped at page 2") && !incomplete.text.contains("legacy.kestrel.example"), incomplete.text)
+        XCTAssertTrue(incomplete.text.contains("No target was looked up, as lookups is 0"), incomplete.text)
+        XCTAssertTrue(resolver.asked().isEmpty)
+    }
+
+    /// The resolver's access carries no credentials and reaches only Cloudflare's resolver, refusing any other host
+    /// before anything is sent.
+    func testTheResolverIsReachedWithoutCredentialsAndNothingElse() async throws {
+        let access = ToolConnectionAccess.anonymous(URL(string: "https://cloudflare-dns.com")!, timeout: 1)
+        for address in ["https://api.cloudflare.com/client/v4/zones", "http://cloudflare-dns.com/dns-query", "https://cloudflare-dns.com.evil.example/dns-query"] {
+            do { _ = try await access.data(for: URLRequest(url: URL(string: address)!)); XCTFail(address) }
+            catch { XCTAssertTrue(error.localizedDescription.contains("may only reach its own service"), "\(address): \(error.localizedDescription)") }
+        }
+    }
+
+    /// The provider a target belongs to, by the longest end of its name, S3 by the bucket's region in the middle; and
+    /// which addresses are not the Internet's.
+    func testProvidersAreKnownByTheirNamesAndInternalAddressesByTheirRanges() {
+        XCTAssertEqual(Cloudflare.provider(of: "a.s3-website-eu-west-1.amazonaws.com")?.name, "AWS S3")
+        XCTAssertEqual(Cloudflare.provider(of: "bucket.s3.eu-west-2.amazonaws.com")?.name, "AWS S3")
+        XCTAssertEqual(Cloudflare.provider(of: "x.eu-west-1.elb.amazonaws.com")?.name, "AWS load balancer")
+        XCTAssertEqual(Cloudflare.provider(of: "d111.cloudfront.net")?.takeover, Cloudflare.Provider.Takeover.none)
+        XCTAssertEqual(Cloudflare.provider(of: "kestrel.trafficmanager.net")?.name, "Microsoft Azure")
+        XCTAssertEqual(Cloudflare.provider(of: "landing.ck.page")?.name, "Kit (ConvertKit)")
+        XCTAssertNil(Cloudflare.provider(of: "notgithub.io"))
+        for address in ["10.0.0.1", "172.20.1.1", "192.168.1.1", "127.0.0.1", "169.254.1.1", "100.64.0.1", "fd00::1", "fe80::1", "::1"] {
+            XCTAssertTrue(Cloudflare.isInternal(address), address)
+        }
+        for address in ["203.0.113.7", "172.32.0.1", "100.128.0.1", "2606:4700::1"] { XCTAssertFalse(Cloudflare.isInternal(address), address) }
+    }
+
     /// Cloudflare's envelope is read strictly: no success, success false, or any error, with a message or without, is
     /// an error and never an empty result; a result left out is unreadable.
     func testErrorsAndMissingResultsAreNeverEmpty() async throws {
@@ -352,6 +543,8 @@ final class CloudflareTests: XCTestCase {
         service.answers["\(account)/tokens/\(token)"] = (200, #"{"success":true,"errors":[],"result":{"id":"\#(token)","policies":[{"effect":"allow","permission_groups":[{"name":"Zone Read"},{"name":"DNS Write"}]}]}}"#)
         Self.zone(service)
         service.answers["/client/v4/zones/\(Self.zoneID)/dns_records"] = Self.page("", total: 0)
+        service.answers["/client/v4/zones/\(Self.zoneID)/settings/ssl"] = (200, #"{"success":true,"errors":[],"result":{"id":"ssl","value":"strict"}}"#)
+        service.answers["/client/v4/zones/\(Self.zoneID)/dnssec"] = (200, #"{"success":true,"errors":[],"result":{"status":"active"}}"#)
         service.sequences["/client/v4/graphql"] = [(200, #"{"data":{"viewer":{}},"errors":null}"#), (200, #"{"data":null,"errors":[{"message":"Zero Trust is not enabled for this account"}]}"#)]
         service.answers["\(account)/audit_logs"] = (200, #"{"success":true,"errors":[],"result":[]}"#)
         service.answers["\(account)/members"] = Self.page("", total: 0)
@@ -364,6 +557,8 @@ final class CloudflareTests: XCTestCase {
         XCTAssertTrue(checked.text.contains("✓ Cloudflare verified the token: an account's own token, ID \(token), status active"), checked.text)
         XCTAssertTrue(checked.text.contains("⚠ It holds DNS Write, which change things"), checked.text)
         XCTAssertTrue(checked.text.contains("✓ Zones (Zone › Zone › Read)") && checked.text.contains("✓ DNS records"), checked.text)
+        XCTAssertTrue(checked.text.contains("✓ Zone settings (Zone › Zone Settings › Read)") && checked.text.contains("✓ DNSSEC (Zone › DNS › Read)"), checked.text)
+        XCTAssertTrue(checked.text.contains("✓ WAF managed rules (Zone › Zone WAF › Read)"), "a zone without managed rules answers 404, which the token may ask: \(checked.text)")
         XCTAssertTrue(checked.text.contains("· The edge: every read works.") && checked.text.contains("· Zero Trust: the account does not use it"), checked.text)
         XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" || $0.url?.path == "/client/v4/graphql" }, "only reads")
         XCTAssertFalse(service.requests.contains { $0.url?.path == "/client/v4/user/tokens/verify" }, "an account's token is verified as one")

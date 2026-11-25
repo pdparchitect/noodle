@@ -53,6 +53,18 @@ public struct ToolConnectionAccess: Sendable {
     }
     private func url(_ request: URLRequest) -> URL? { request.url }
 
+    /// Access with no credentials at all to one public service an adapter consults beside its own, such as a
+    /// DNS-over-HTTPS resolver: only that endpoint's host and scheme, no redirects followed, as for any connection, and
+    /// each try given up after `timeout` seconds.
+    public static func anonymous(_ endpoint: URL, timeout: TimeInterval) -> ToolConnectionAccess {
+        ToolConnectionAccess(endpoint: endpoint, authorization: nil, configuration: {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.timeoutIntervalForRequest = timeout
+            configuration.timeoutIntervalForResource = timeout
+            return configuration
+        })
+    }
+
     /// For an AWS connection signed in through IAM Identity Center: every account its sign-in covers.
     public func awsAccounts() async throws -> [AWSAccount] {
         guard case .awsOrganisation(let organisation)? = authorization else { throw Self.notIdentityCenter }

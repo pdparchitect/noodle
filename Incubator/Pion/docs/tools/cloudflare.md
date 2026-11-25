@@ -4,8 +4,9 @@ Pion has two Cloudflare tools, each added per Cloudflare account with an API
 token of its own:
 
 - **Cloudflare Detection** reads the account from Cloudflare's side. At the edge:
-  zones and DNS records, firewall events, the account audit log, members and
-  the account's own API tokens. In Zero Trust: Access logins, applications and
+  zones and DNS records, each zone's security settings, the records that point
+  outside a zone, firewall events, the account audit log, members and the
+  account's own API tokens. In Zero Trust: Access logins, applications and
   policies, users and their sessions, Gateway activity, rules and lists, WARP
   devices and Cloudflare Tunnels. It wakes the agents it is assigned to for
   high-risk changes in the audit log and bursts of blocked Access logins. It
@@ -41,7 +42,7 @@ it outlasts the person who made it.
 
 | Tool | Permissions | Must not have |
 | --- | --- | --- |
-| Cloudflare Detection | Account › Account Settings › Read, Account › Account API Tokens › Read, Account › Zero Trust › Read, Account › Account Analytics › Read, Account › Cloudflare Tunnel › Read; Zone › Zone › Read, Zone › DNS › Read, Zone › Analytics › Read | any Edit permission |
+| Cloudflare Detection | Account › Account Settings › Read, Account › Account API Tokens › Read, Account › Zero Trust › Read, Account › Account Analytics › Read, Account › Cloudflare Tunnel › Read; Zone › Zone › Read, Zone › DNS › Read, Zone › Analytics › Read, Zone › Zone Settings › Read, Zone › Zone WAF › Read | any Edit permission |
 | Cloudflare Containment | Account › Account Firewall Access Rules › Edit, Account › Zero Trust › Edit; to act in one zone, also Zone › Firewall Services › Edit and Zone › Zone › Read | anything else, above all Account Settings, API Tokens, DNS and Access: Apps and Policies Edit |
 
 Why each is needed:
@@ -56,8 +57,12 @@ Why each is needed:
 - **Account Analytics › Read** reads Gateway activity from the GraphQL
   Analytics API.
 - **Cloudflare Tunnel › Read** reads tunnels and their connections.
-- **Zone › Zone, DNS and Analytics › Read** find a zone, read its DNS records
-  and its firewall events.
+- **Zone › Zone, DNS and Analytics › Read** find a zone, read its DNS records,
+  its DNSSEC status and its firewall events.
+- **Zone › Zone Settings › Read** reads a zone's SSL/TLS, HTTPS, HSTS and
+  security settings for `zone-settings`; Zone › Zone › Read does not.
+- **Zone › Zone WAF › Read** reads which WAF managed rulesets a zone runs.
+  Without it, `zone-settings` reads everything else and says so.
 - **Account Firewall Access Rules › Edit** for `block-ip`, `block-asn`,
   `block-country` and `unblock` across the account.
 - **Zero Trust › Edit** for `gateway-block`, `gateway-unblock`,
@@ -87,6 +92,15 @@ gives as a page number or a cursor rather than an address, to
 `https://api.cloudflare.com/client/v4` and nowhere else. A connection that
 names any other address, scheme or port is refused before anything is sent,
 and so is an Account ID that is not 32 hexadecimal characters.
+
+**One exception: `dns-exposure` looks names up.** Cloudflare's API resolves no
+name, so to tell whether the target of a CNAME still resolves, `dns-exposure`
+asks Cloudflare's own public DNS-over-HTTPS resolver,
+`https://cloudflare-dns.com/dns-query`, which already holds the zone's records.
+The lookups carry no token and nothing of the connection, follow no redirect,
+and go nowhere else: not to this Mac's resolver, your network, VPN or ISP. It
+looks up at most 40 targets in a run unless asked for more (up to 100), and
+none when asked for 0.
 
 - **Removing a tool** in **Settings → Tools** forgets its token. To end it at
   Cloudflare, delete or roll the token.
@@ -131,11 +145,52 @@ Then ask an agent to run **check-access**.
   long it asked.
 - **Scope.** A token sees only the account and zones it names. A zone it does
   not cover is said not to be one the token can see, never not to exist.
+- **Zone settings.** They reach only the hostnames Cloudflare proxies; a
+  DNS-only record reaches its origin directly, whatever they say. Pion asks for
+  all of a zone's settings at once, which Cloudflare marks as deprecated, and
+  asks for each it needs on its own when that answer is gone or leaves one out;
+  one a zone's plan lacks is shown as not given. Security Level is shown but not
+  judged, as Cloudflare now uses it mainly for I'm Under Attack mode. Managed
+  rulesets deployed for the whole account, on Enterprise plans, are not read,
+  so "none deployed at the zone" may not mean none run there. A zone in a
+  partial (CNAME) setup has its DNSSEC set where its DNS is hosted.
+- **DNS exposure is a list of leads, not findings.** Pion never visits a
+  target. Many providers, such as S3, Heroku and GitHub Pages, keep answering
+  for a name after the resource behind it is deleted, so a target that
+  resolves may still be unclaimed: confirm each in the provider's console.
+  A target that doesn't resolve is worth removing if unused, and a possible
+  takeover only at the providers marked so; whether one is open to takeover is
+  never said. Which providers are marked follows the community's list of
+  takeover reports (can-i-take-over-xyz) and, for Azure, Microsoft's guidance
+  on dangling DNS. A target is said not to resolve only when the resolver
+  answers that it does not exist (NXDOMAIN) or that it has no address, IPv4
+  or IPv6 (NOERROR with no answer), with the CNAMEs it led through. A server
+  failure (SERVFAIL), any other answer, or none within 5 seconds is said as
+  couldn't tell, never as not resolving; targets past the limit are said as
+  not looked up. The answer is public DNS's: a name that resolves only inside
+  your network is not seen.
 
 ## What agents can do
 
 - `zones`, `zone-dns`: the account's zones, and a zone's DNS records read whole,
   its apex, MX and NS records first.
+- `zone-settings`: for one zone or every zone the token sees (25 unless asked
+  for more, up to 100), the SSL/TLS mode and whether Automatic SSL/TLS chose
+  it, minimum TLS version, Always Use HTTPS, Automatic HTTPS Rewrites, HSTS,
+  TLS 1.3, DNSSEC, Opportunistic Encryption, Security Level, Browser Integrity
+  Check and the WAF managed rulesets deployed at the zone. It leads with weak
+  settings: SSL/TLS Off or Flexible, a minimum TLS below 1.2, HTTPS not
+  enforced, DNSSEC off or not yet in force, and paused zones; then what is
+  worth a look, such as Full rather than Full (strict), HSTS off and no managed
+  rules.
+- `dns-exposure`: a zone's records that point outside it, grouped by the
+  provider the target shows (Heroku, GitHub Pages, S3, Azure, Netlify, Vercel,
+  Shopify, Zendesk, Kit and others), so you can confirm each is still in use.
+  It leads with CNAMEs whose target doesn't resolve, marked "possible
+  takeover" where the provider is one where names left pointing at deleted
+  resources have been claimed by others; then CNAMEs to a name in the zone no
+  record answers, private addresses published in public DNS, subdomains
+  delegated to other name servers, and addresses Pion does not recognise.
 - `firewall-events`: what the WAF and firewall did at a zone's edge, by client
   IP address, action and time, with country, network, path, rule and Ray ID.
 - `audit-log`: who changed what in the account, from where, through the
@@ -240,7 +295,8 @@ nothing, and says:
 - the token's own permissions, when it may read them, with a warning for any
   that changes things;
 - for each read, at the edge and in Zero Trust, whether it works, and if not,
-  which permission to add, or that the account does not use it;
+  which permission to add, or that the account does not use it, including zone
+  settings, DNSSEC and WAF managed rules on the first zone the token sees;
 - which parts, edge and Zero Trust, the token covers.
 
 Any refused call says the same: the permission to add, a zone or account the
@@ -402,4 +458,17 @@ stand-ins:
 - that `revoke_user` takes **Zero Trust › Edit**, as the API reference says;
 - that an account without Zero Trust is refused in words Pion recognises as
   such (such as "not enabled"), rather than as a missing permission;
-- the exact wording of the dashboard's permissions.
+- the exact wording of the dashboard's permissions, above all **Zone › Zone
+  Settings › Read** and **Zone › Zone WAF › Read**;
+- that `GET /zones/{zone}/settings`, which Cloudflare marks as deprecated, still
+  lists `security_header` and `ssl_automatic_mode`, and the values of
+  `always_use_https`, `automatic_https_rewrites`, `opportunistic_encryption`
+  and `browser_check` (`on` or `off`), which the reference does not list;
+- that Zone WAF › Read reads a zone's managed-rules entry point
+  (`/rulesets/phases/http_request_firewall_managed/entrypoint`), which the
+  reference lists only account permissions for, and that a zone without one
+  answers 404 for a token allowed to ask;
+- the addresses Pion takes for GitHub Pages, Netlify, Vercel, Shopify and
+  Squarespace, as each provider publishes them;
+- that `cloudflare-dns.com` answers `dns-exposure`'s JSON questions, with
+  `Accept: application/dns-json`, as its reference describes;

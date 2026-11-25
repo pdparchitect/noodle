@@ -53,7 +53,8 @@ final class CrowdStrikeTests: XCTestCase {
         let listed = try JSONSerialization.jsonObject(with: try await CrowdStrike.adapter.tools(for: falconEU)) as! [String: Any]
         let tools = try XCTUnwrap(listed["tools"] as? [[String: Any]])
         XCTAssertEqual(Set(tools.compactMap { $0["name"] as? String }),
-                       ["hosts", "host", "alerts", "alert", "rtr-sessions", "host-groups", "container-images", "users", "security-events", "check-access"])
+                       ["hosts", "host", "alerts", "alert", "rtr-sessions", "host-groups", "container-images", "users", "prevention-policies", "exclusions",
+                        "security-events", "check-access"])
         for tool in tools { XCTAssertEqual((tool["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool, true, "\(tool["name"] ?? "")") }
         XCTAssertEqual(CrowdStrike.adapter.watchedTool, "security-events")
     }
@@ -193,6 +194,106 @@ final class CrowdStrikeTests: XCTestCase {
         XCTAssertTrue(rejected.isError && rejected.text.contains("did not accept the API client's ID and secret"), rejected.text)
     }
 
+    /// Prevention policies by platform in Falcon's order, the default last, each with the hosts it reaches, led by
+    /// disabled policies, hosts on the default policy or whose policy is not applied, and protections turned off.
+    func testPreventionPoliciesLeadWithDisabledPoliciesDefaultHostsAndProtectionsOff() async throws {
+        let service = FakeService()
+        let path = "/policy/combined/prevention/v1"
+        let policies = #"{"meta":{"pagination":{"offset":0,"limit":100,"total":3}},"resources":[{"id":"p1","name":"Workstations","platform_name":"Windows","enabled":true,"groups":[{"id":"g1","name":"Finance"}],"prevention_settings":[{"name":"Sensor Capabilities","settings":[{"id":"SensorTamperingProtection","name":"Sensor Tampering Protection","type":"toggle","value":{"enabled":false}}]},{"name":"Cloud Machine Learning","settings":[{"id":"CloudAntiMalware","name":"Cloud Anti-malware","type":"mlslider","value":{"detection":"MODERATE","prevention":"DISABLED"}}]},{"name":"Ransomware","settings":[{"id":"BackupDeletion","name":"Backup Deletion","type":"toggle","value":{"enabled":true}},{"id":"SomethingNew","name":"Something New","type":"toggle","value":{"enabled":false}}]}],"modified_by":"admin@kestrel.example","modified_timestamp":"2026-10-01T00:00:00Z"},{"id":"p3","name":"platform_default","platform_name":"Windows","enabled":true,"groups":[],"prevention_settings":[{"name":"Next-Gen Antivirus","settings":[{"id":"NextGenAV","name":"Quarantine &amp; Security Center Registration","type":"toggle","value":{"enabled":true}}]}]},{"id":"p2","name":"Old servers","platform_name":"Windows","enabled":false,"groups":[]}]}"#
+        service.answers[path] = (200, policies)
+        service.answers["/policy/queries/prevention-members/v1?id=p1&limit=1"] = (200, #"{"meta":{"pagination":{"offset":0,"limit":1,"total":40}},"resources":["\#(laptop)"]}"#)
+        service.answers["/policy/queries/prevention-members/v1?id=p3&limit=1"] = (200, #"{"meta":{"pagination":{"offset":0,"limit":1,"total":12}},"resources":["\#(laptop)"]}"#)
+        service.answers["/devices/queries/devices/v1"] = (200, #"{"meta":{"pagination":{"offset":0,"limit":1,"total":3}},"resources":["\#(laptop)"]}"#)
+        let result = try await call("prevention-policies", "{}", service)
+        XCTAssertFalse(result.isError, result.text)
+        let lines = result.text.split(separator: "\n").map(String.init)
+        XCTAssertEqual(lines.first, "3 prevention policies: 3 Windows.")
+        XCTAssertTrue(lines.contains { $0.hasPrefix("Disabled (1): Old servers [Windows].") }, result.text)
+        XCTAssertTrue(lines.contains { $0.hasPrefix("On each platform's default policy") && $0.hasSuffix(": Windows 12 hosts.") }, result.text)
+        XCTAssertTrue(lines.contains("Hosts whose prevention policy is not yet applied: 3."), result.text)
+        XCTAssertTrue(lines.contains("⚠ Workstations [Windows, 40 hosts]: Sensor Tampering Protection, Cloud Anti-malware"), result.text)
+        let workstations = try XCTUnwrap(lines.first { $0.hasPrefix("Workstations [p1]") })
+        XCTAssertTrue(workstations.contains("(Windows; enabled; 40 hosts; groups Finance; modified 2026-10-01T00:00:00Z by admin@kestrel.example)"), workstations)
+        XCTAssertTrue(workstations.contains(": Sensor Tampering Protection off; Cloud Anti-malware detection MODERATE, prevention DISABLED; Backup Deletion on; also off: Something New"), workstations)
+        XCTAssertTrue(lines.contains { $0.hasPrefix("Default (Windows) [p3] (Windows; enabled; 12 hosts") && $0.contains("Quarantine & Security Center Registration on") }, result.text)
+        let order = lines.compactMap { line in ["Workstations [", "Old servers [", "Default (Windows) ["].first { line.hasPrefix($0) } }
+        XCTAssertEqual(order, ["Workstations [", "Old servers [", "Default (Windows) ["], "the default last")
+        XCTAssertEqual(queryItems(service.requests.first)["sort"], "precedence.asc")
+        XCTAssertNil(queryItems(service.requests.first)["filter"])
+        XCTAssertEqual(queryItems(service.requests.first { $0.url?.path == "/devices/queries/devices/v1" })["filter"], "device_policies.prevention.applied:false")
+        XCTAssertFalse(service.requests.contains { queryItems($0)["id"] == "p2" }, "a disabled policy's hosts are not counted")
+        XCTAssertEqual(result.structured?["disabled"] as? Int, 1)
+        XCTAssertEqual(result.structured?["weakened"] as? Int, 1)
+        XCTAssertTrue(service.requests.allSatisfy { $0.httpMethod == "GET" })
+
+        // A Falcon that will not sort by precedence lists them as it keeps them, and says so.
+        let unsorted = FakeService()
+        unsorted.sequences[path] = [(400, #"{"errors":[{"code":400,"message":"invalid sort field"}]}"#), (200, policies)]
+        let plain = try await call("prevention-policies", #"{"platform":"Windows"}"#, unsorted)
+        XCTAssertFalse(plain.isError, plain.text)
+        XCTAssertTrue(plain.text.contains("Falcon did not sort them by precedence"), plain.text)
+        XCTAssertEqual(queryItems(unsorted.requests.first)["filter"], "platform_name:'Windows'")
+        XCTAssertNil(queryItems(unsorted.requests[1])["sort"])
+
+        let refused = FakeService()
+        refused.answers[path] = (403, #"{"errors":[{"code":403,"message":"access denied, authorization failed"}]}"#)
+        let denied = try await call("prevention-policies", "{}", refused)
+        XCTAssertTrue(denied.isError && denied.text.contains("the API client lacks the scope Prevention policies: Read"), denied.text)
+    }
+
+    /// Every kind of exclusion, listed by ID then read in batches, led by those for every host or with patterns that
+    /// reach a whole drive or any program; a kind the client may not read is said, and the rest still read.
+    func testExclusionsLeadWithGlobalAndBroadOnesAndSayWhichKindsCouldNotBeRead() async throws {
+        let service = FakeService()
+        service.answers["/policy/queries/ml-exclusions/v1"] = (200, #"{"meta":{"pagination":{"offset":0,"limit":500,"total":2}},"resources":["m1","m2"]}"#)
+        service.answers["/policy/entities/ml-exclusions/v1"] = (200, #"{"resources":[{"id":"m2","value":"\\Program Files\\Vendor\\app.exe","excluded_from":["extraction"],"groups":[{"id":"g1","name":"Finance"}],"applied_globally":false,"created_by":"it@kestrel.example","created_on":"2026-02-01T00:00:00Z"},{"id":"m1","value":"C:\\**","excluded_from":["blocking"],"groups":[{"id":"all","name":"all"}],"applied_globally":true,"created_by":"admin@kestrel.example","created_on":"2025-01-01T00:00:00Z","modified_by":"ops@kestrel.example","last_modified":"2026-01-01T00:00:00Z"}]}"#)
+        service.answers["/policy/queries/ioa-exclusions/v1"] = (200, #"{"meta":{"pagination":{"offset":0,"limit":500,"total":1}},"resources":["i1"]}"#)
+        service.answers["/policy/entities/ioa-exclusions/v1"] = (200, #"{"resources":[{"id":"i1","name":"Allow backup","pattern_name":"Suspicious PowerShell","ifn_regex":".*","cl_regex":".*backup.*","groups":["g2"],"applied_globally":false}]}"#)
+        service.answers["/policy/queries/sv-exclusions/v1"] = (403, #"{"errors":[{"code":403,"message":"access denied, authorization failed"}]}"#)
+        let result = try await call("exclusions", "{}", service)
+        XCTAssertFalse(result.isError, result.text)
+        let lines = result.text.split(separator: "\n").map(String.init)
+        XCTAssertEqual(lines.first, "Machine learning exclusions: 2 (1 for every host, 1 broad); IOA exclusions: 1 (0 for every host, 1 broad).")
+        XCTAssertEqual(lines.dropFirst().first, "For every host or broad (2):")
+        XCTAssertTrue(lines[2].hasPrefix(#"⚠ Machine learning exclusion: `C:\**` [m1] — every host; broad: a whole drive; excluded from blocking; created 2025-01-01T00:00:00Z by admin@kestrel.example; modified 2026-01-01T00:00:00Z by ops@kestrel.example"#), lines[2])
+        XCTAssertTrue(lines[3].hasPrefix("⚠ IOA exclusion: Allow backup: `program .*, command line .*backup.*` [i1] — groups g2; broad: any program, by its command line alone; indicator Suspicious PowerShell"), lines[3])
+        XCTAssertTrue(lines.contains { $0.hasPrefix(#"  `\Program Files\Vendor\app.exe` [m2] — groups Finance; excluded from extraction"#) }, result.text)
+        XCTAssertFalse(lines.contains { $0.hasPrefix("⚠") && $0.contains("[m2]") }, "a narrow exclusion for some groups is not led with")
+        XCTAssertTrue(result.text.contains("Sensor visibility exclusions not read: Falcon refused sensor visibility exclusions") && result.text.contains("Sensor Visibility Exclusions: Read"), result.text)
+        let batch = try XCTUnwrap(service.requests.first { $0.url?.path == "/policy/entities/ml-exclusions/v1" })
+        XCTAssertEqual(URLComponents(url: batch.url!, resolvingAgainstBaseURL: false)?.queryItems?.filter { $0.name == "ids" }.map(\.value), ["m1", "m2"])
+        XCTAssertEqual(queryItems(service.requests.first)["sort"], "last_modified.desc")
+        XCTAssertEqual(result.structured?["broadOrGlobal"] as? Int, 2)
+        XCTAssertEqual(result.structured?["notRead"] as? [String], ["sensor-visibility"])
+        XCTAssertEqual(result.structured?["complete"] as? Bool, false)
+
+        let one = FakeService()
+        one.answers["/policy/queries/ml-exclusions/v1"] = service.answers["/policy/queries/ml-exclusions/v1"]
+        one.answers["/policy/entities/ml-exclusions/v1"] = service.answers["/policy/entities/ml-exclusions/v1"]
+        let ml = try await call("exclusions", #"{"kind":"ml"}"#, one)
+        XCTAssertFalse(ml.isError, ml.text)
+        XCTAssertTrue(one.requests.allSatisfy { $0.url?.path.contains("ml-exclusions") == true }, "only the kind asked for")
+        let denied = try await call("exclusions", #"{"kind":"sensor-visibility"}"#, service)
+        XCTAssertTrue(denied.isError && denied.text.contains("Sensor Visibility Exclusions: Read"), denied.text)
+        let wrong = try await call("exclusions", #"{"kind":"files"}"#, service)
+        XCTAssertTrue(wrong.isError, wrong.text)
+    }
+
+    /// Patterns that reach every file, a whole drive, any folder or a folder anyone may write to are broad; one that
+    /// names a program's own folder is not.
+    func testBroadExclusionPatterns() {
+        XCTAssertEqual(CrowdStrike.broadPath("**"), "matches every file")
+        XCTAssertEqual(CrowdStrike.broadPath("/**"), "matches every file")
+        XCTAssertEqual(CrowdStrike.broadPath(#"D:\*"#), "a whole drive")
+        XCTAssertEqual(CrowdStrike.broadPath(#"\Device\HarddiskVolume3\**"#), "a whole drive")
+        XCTAssertEqual(CrowdStrike.broadPath(#"**\evil.exe"#), "any folder, as it starts with a wildcard")
+        XCTAssertEqual(CrowdStrike.broadPath(#"C:\Users\*\Downloads\**"#), "a folder people or programs may write to, and everything below it")
+        XCTAssertEqual(CrowdStrike.broadPath("/tmp/**"), "a folder people or programs may write to, and everything below it")
+        XCTAssertEqual(CrowdStrike.broadPath(#"\Windows\**"#), "a top-level folder and everything below it")
+        XCTAssertNil(CrowdStrike.broadPath(#"C:\Program Files\Vendor\Agent\bin\agent.exe"#))
+        XCTAssertNil(CrowdStrike.broadPath("/opt/vendor/agent/bin/**"))
+    }
+
     func testValuesThatCouldChangeAFilterAreRefused() async throws {
         let service = FakeService()
         for (tool, arguments) in [("hosts", #"{"name":"x'+platform_name:'Mac"}"#), ("host", #"{"host":"a'b"}"#), ("alerts", #"{"since":"soon"}"#),
@@ -256,7 +357,9 @@ final class CrowdStrikeTests: XCTestCase {
     func testCheckAccessSendsOnlyReadsAndSaysWhatItCannotVerify() async throws {
         let service = FakeService()
         let empty = (200, #"{"meta":{"pagination":{"offset":0,"limit":1,"total":0}},"resources":[]}"#)
-        for path in ["/devices/queries/devices/v1", "/alerts/queries/alerts/v2", "/devices/queries/host-groups/v1", "/user-management/queries/users/v1"] { service.answers[path] = empty }
+        for path in ["/devices/queries/devices/v1", "/alerts/queries/alerts/v2", "/devices/queries/host-groups/v1", "/user-management/queries/users/v1",
+                     "/policy/queries/prevention/v1", "/policy/queries/ml-exclusions/v1", "/policy/queries/ioa-exclusions/v1"] { service.answers[path] = empty }
+        service.answers["/policy/queries/sv-exclusions/v1"] = (403, #"{"errors":[{"code":403,"message":"access denied, authorization failed"}]}"#)
         service.answers["/real-time-response-audit/combined/sessions/v1"] = (403, #"{"errors":[{"code":403,"message":"access denied, authorization failed"}]}"#)
         service.answers["/container-security/combined/image-assessment/images/v1"] = (403, #"{"errors":[{"code":403,"message":"This feature requires a Falcon Cloud Security subscription."}]}"#)
         service.answers["/real-time-response/entities/active-responder-command/v1"] = (404, #"{"errors":[{"code":404,"message":"no such request"}]}"#)
@@ -266,6 +369,9 @@ final class CrowdStrikeTests: XCTestCase {
         for words in ["Falcon cloud EU-1, api.eu-1.crowdstrike.com", "✓ Hosts (Hosts: Read)", "✓ Alerts (Alerts: Read)",
                       "⚠ Real Time Response sessions: the API client lacks the scope Real time response audit: Read",
                       "⚠ Container image assessments: this needs a Falcon subscription",
+                      "✓ Prevention policies (Prevention policies: Read)", "✓ Machine learning exclusions (Machine Learning Exclusions: Read)",
+                      "✓ IOA exclusions (IOA Exclusions: Read)",
+                      "⚠ Sensor visibility exclusions: the API client lacks the scope Sensor Visibility Exclusions: Read",
                       "⚠ Appears to hold Real time response: Write, which Detection must not have", "✓ Holds no Real time response (admin): Write",
                       "Hosts: Write, Host groups: Write, Alerts: Write, IOC Management: Write: write access not verified — Falcon offers no way to list a client's scopes without attempting a change",
                       "and no Write scope at all"] {

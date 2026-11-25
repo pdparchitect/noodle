@@ -6,8 +6,9 @@ with an API client of its own:
 - **CrowdStrike Falcon Detection** reads what Falcon's sensors see: hosts, with
   their containment status and whether they are online, alerts with their
   process trees, who used Real Time Response on which host and every command
-  they ran, host groups, assessed container images, and who can use the
-  console. It wakes the agents it is assigned to for new high and critical
+  they ran, host groups, assessed container images, who can use the
+  console, prevention policies with the protections they turn on, and
+  exclusions. It wakes the agents it is assigned to for new high and critical
   alerts, Real Time Response sessions and hosts newly contained. It only reads.
 - **CrowdStrike Falcon Containment** acts: it contains a host or lifts
   containment, blocks a hash (or alerts on a domain or address) as a custom
@@ -36,7 +37,7 @@ scopes** you give it, whoever made it; no user's roles are involved.
 
 | Tool | Scopes it needs | Scopes it must not have |
 | --- | --- | --- |
-| CrowdStrike Falcon Detection | **Hosts: Read**, **Alerts: Read**; and, for the parts that use them, **Real time response audit: Read**, **Host groups: Read**, **Falcon Container Image: Read**, **User management: Read** | any **Write** scope |
+| CrowdStrike Falcon Detection | **Hosts: Read**, **Alerts: Read**; and, for the parts that use them, **Real time response audit: Read**, **Host groups: Read**, **Falcon Container Image: Read**, **User management: Read**, **Prevention policies: Read**, **Machine Learning Exclusions: Read**, **IOA Exclusions: Read**, **Sensor Visibility Exclusions: Read** | any **Write** scope |
 | CrowdStrike Falcon Containment | **Hosts: Read**, **Hosts: Write**, **Alerts: Read**, **Alerts: Write**, **IOC Management: Read**, **IOC Management: Write**, **Real time response: Read**, **Real time response: Write** | **Real time response (admin): Write**, **Host groups: Write**, and any other Write scope |
 
 Why each is needed:
@@ -50,6 +51,11 @@ Why each is needed:
 - **Host groups: Read** lists host groups and their members.
 - **Falcon Container Image: Read** reads container image assessments.
 - **User management: Read** lists console users and their roles.
+- **Prevention policies: Read** lists prevention policies, their settings and
+  how many hosts each reaches.
+- **Machine Learning Exclusions: Read**, **IOA Exclusions: Read** and
+  **Sensor Visibility Exclusions: Read** each list one kind of exclusion;
+  `exclusions` reads the kinds it may and says which it may not.
 - **Hosts: Write** contains a host and lifts containment.
 - **Alerts: Write** closes alerts, sets them in progress or reopens them.
 - **IOC Management: Read and Write** reads, makes and removes custom
@@ -91,8 +97,10 @@ an offset or a token, never an address, so a listing never leads elsewhere.
 1. **Make the client.** In **Support and resources › API clients and keys**,
    choose **Create API client**. Name it **Pion Falcon Detection**.
 2. **Give it only Read scopes**: **Hosts** and **Alerts**, and those of
-   Real time response audit, Host groups, Falcon Container Image and User
-   management you want agents to read. Leave every **Write** box empty.
+   Real time response audit, Host groups, Falcon Container Image, User
+   management, Prevention policies, Machine Learning Exclusions, IOA
+   Exclusions and Sensor Visibility Exclusions you want agents to read. Leave
+   every **Write** box empty.
 3. **Copy the Client ID and Secret** into the form; Falcon shows the secret
    only once.
 4. **Choose the Falcon cloud** your console's address names:
@@ -107,7 +115,8 @@ Then ask an agent to run **check-access**.
 - **Searches are bounded and say what they left out.** `alerts` searches by
   when each was raised, up to 90 days back, newest first, reading Falcon's
   combined listing page after page by the token each page gives. `hosts`,
-  `rtr-sessions`, `host-groups`, `container-images` and `users` page by offset.
+  `rtr-sessions`, `host-groups`, `container-images`, `users`,
+  `prevention-policies` and `exclusions` page by offset.
   Every result says when it stopped before the end, and why, and when more
   matched than it kept, with Falcon's own count when it gives one.
 - **Falcon pages by offset only through the first 10,000** of a search. A
@@ -119,6 +128,20 @@ Then ask an agent to run **check-access**.
   short wait, and then waits once more for as long as Falcon's
   `X-RateLimit-RetryAfter` asks, when that is under 20 seconds; otherwise the
   answer says how long Falcon asked to wait.
+- **Prevention policies.** Falcon puts every host no other policy reaches on
+  its platform's default policy, so "hosts on the default policy" is where a
+  host in no policy shows up. The hosts each policy reaches are Falcon's count
+  of its members, read for the defaults and enabled policies, up to 60; a
+  disabled policy reaches none. When Falcon does not sort policies by
+  precedence, the result says their order is not Falcon's. A protection is
+  said to be off when its toggle is off or its machine learning slider is
+  DISABLED; Falcon's own setting names are shown, and protections Pion does not
+  know are listed with the rest when off.
+- **Exclusions.** Pion reads the three kinds through Falcon's v1 exclusion
+  APIs; certificate-based exclusions and exclusions made in other modules are
+  not read. "Broad" is Pion's reading of the pattern, not Falcon's: confirm
+  each with whoever made it. Sensor visibility exclusions stop Falcon recording
+  what matching processes do, so even a narrow one deserves a reason.
 - **Kubernetes and containers.** `host` says when Falcon's record of a host
   holds a hint that it runs Kubernetes workloads (a cluster ID, a DaemonSet
   sensor, pod fields or tags) or containers (tags). A hint suggests what runs
@@ -143,6 +166,21 @@ Then ask an agent to run **check-access**.
   vulnerability severity.
 - `users`: everyone who can use the console, with their roles, administrators
   first.
+- `prevention-policies`: each platform's prevention policies in the order
+  Falcon applies them, its default last, with whether each is enabled, its host
+  groups, how many hosts it reaches, who changed it last, and its protections:
+  sensor tampering protection, quarantine, the machine learning levels, and
+  the exploit, ransomware and other behaviour protections, with every other
+  setting that is off. It leads with disabled policies, how many hosts are on
+  each platform's default policy and how many have not yet applied theirs, and
+  the protections turned off in enabled policies.
+- `exclusions`: machine learning, IOA and sensor visibility exclusions, each
+  with its pattern, whether it applies to every host or which host groups,
+  what it is excluded from, and who made and last changed it. It leads with
+  those for every host and broad ones: a pattern for every file, a whole drive,
+  any folder, a folder people may write to such as Users, Temp or Downloads,
+  or an IOA exclusion for any program or command line. Agents can ask for one
+  kind.
 - `security-events`: what the alert watch wakes for, for a window. When no
   window is given, the last 24 hours.
 - **check-access**: see [When something does not work](#when-something-does-not-work).
@@ -215,7 +253,8 @@ nothing, and says:
 
 - which Falcon cloud it reaches;
 - for each read, whether it works, and if not, which scope to add or that the
-  customer lacks the subscription;
+  customer lacks the subscription, prevention policies and each kind of
+  exclusion included;
 - whether the client appears to hold **Real time response: Write** or
   **Real time response (admin): Write**, which Detection must not, with a warning to
   remove either;
@@ -346,3 +385,20 @@ saved, which the result says, is removed in the console.
 Falcon takes no condition on a change, so someone else can act on the host,
 indicator or alert between Pion reading it and acting. Each result says when
 Pion read the host.
+
+## What to check on a live account
+
+`prevention-policies` and `exclusions` follow CrowdStrike's published API
+specification, but were tested only against stand-ins:
+
+- the scope names as the API client page shows them: **Prevention policies**,
+  **Machine Learning Exclusions**, **IOA Exclusions** and **Sensor Visibility
+  Exclusions**;
+- that prevention policies sort by `precedence.asc` in the order Falcon
+  applies them, and that `prevention-members` counts the hosts a policy
+  reaches rather than every host in its groups;
+- that hosts filter on `device_policies.prevention.applied:false`;
+- the IDs of prevention settings on Mac and Linux, which Pion knows from
+  Windows's and shows by name otherwise;
+- that exclusions give their host groups as objects with a name, and the group
+  `all` for those on every host.

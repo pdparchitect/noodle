@@ -2,9 +2,10 @@ import Foundation
 import NoodleCore
 import NoodleToolConnections
 
-/// Cloudflare: one account's edge (its zones and DNS records, firewall events, audit log, members and API tokens) and
-/// its Zero Trust (Access authentication logs, applications, policies, users and their sessions, Gateway activity,
-/// rules and lists, WARP devices with their posture, and Cloudflare Tunnels), read with an API token. Cloudflare Detection
+/// Cloudflare: one account's edge (its zones with their DNS records and security settings, firewall events, audit log,
+/// members and API tokens) and its Zero Trust (Access authentication logs, applications, policies, users and their
+/// sessions, Gateway activity, rules and lists, WARP devices with their posture, and Cloudflare Tunnels), read with an
+/// API token. Cloudflare Detection
 /// only reads; Cloudflare Containment, a tool of its own with a token of its own, blocks addresses, networks and
 /// countries at the edge, revokes a user's Access sessions, blocks domains and addresses in Gateway, and revokes WARP
 /// devices.
@@ -14,20 +15,25 @@ import NoodleToolConnections
 /// the token and tries each read once, and sends no change.
 ///
 /// Every request, and every next page, which Cloudflare gives as a page number or a cursor rather than an address,
-/// goes to api.cloudflare.com under /client/v4, and nowhere else. Cloudflare Radar is a separate tool on Cloudflare's
-/// own MCP server.
+/// goes to api.cloudflare.com under /client/v4, and nowhere else; only dns-exposure also looks the targets of a zone's
+/// records up, at Cloudflare's own DNS-over-HTTPS resolver, cloudflare-dns.com, carrying no token and nothing of the
+/// connection. Cloudflare Radar is a separate tool on Cloudflare's own MCP server.
 ///
 /// Both tools' guide is Incubator/Pion/docs/tools/cloudflare.md. Change it with the setup steps, permissions or
 /// operations here.
 public enum Cloudflare {
     public static let preset = ToolDefinition(
         id: "a975fdab-e1f0-486c-abf6-d941d667d6f7", name: "Cloudflare Detection",
-        summary: "Zones, DNS, firewall events, the audit log, members and tokens at the edge, and Access logins, apps, users, Gateway activity and rules, WARP devices and tunnels in Zero Trust, read-only.",
+        summary: "Zones, their DNS and security settings, firewall events, the audit log, members and tokens at the edge, and Access logins, apps, users, Gateway activity and rules, WARP devices and tunnels in Zero Trust, read-only.",
         defaultInstructions: """
         Use Cloudflare Detection to see an account from Cloudflare's side. At the edge: zones and zone-dns list zones and \
         their DNS records; firewall-events reads what the WAF and firewall did to requests, by client IP, country, \
         path and rule; audit-log reads who changed what in the account and from where; members lists who holds which \
-        role and whether they use 2FA; api-tokens lists the account's own tokens. In Zero Trust: access-logs reads who \
+        role and whether they use 2FA; api-tokens lists the account's own tokens. To assess how zones are set up, \
+        zone-settings reads each zone's SSL/TLS mode, minimum TLS, HTTPS enforcement, HSTS, DNSSEC and WAF managed rules, \
+        weak ones first; dns-exposure groups a zone's records that point outside it by provider, for the champion to \
+        confirm each is still in use, and marks CNAMEs whose target doesn't resolve, which is a lead to confirm and never \
+        proof of a takeover. In Zero Trust: access-logs reads who \
         signed in to which Access application, allowed or blocked, from which IP address and country; access-apps and \
         access-app read applications and their policies; access-users and access-user read users, their last login \
         and active sessions; gateway-activity reads Gateway's DNS, HTTP and network decisions; gateway-rules and \
@@ -72,6 +78,7 @@ public enum Cloudflare {
     static let auditPermissions = [
         "Account › Account Settings › Read", "Account › Account API Tokens › Read", "Account › Zero Trust › Read",
         "Account › Account Analytics › Read", "Account › Cloudflare Tunnel › Read", "Zone › Zone › Read", "Zone › DNS › Read", "Zone › Analytics › Read",
+        "Zone › Zone Settings › Read", "Zone › Zone WAF › Read",
     ]
 
     static let setup = [
@@ -83,7 +90,7 @@ public enum Cloudflare {
 
     /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
     static let operations: [any ServiceOperation] = [
-        Zones(), ZoneDNS(), FirewallEvents(), AuditLog(), Members(), APITokens(), AccessLogs(), AccessApps(), AccessApp(), AccessUsers(),
+        Zones(), ZoneDNS(), ZoneSettings(), DNSExposure(), FirewallEvents(), AuditLog(), Members(), APITokens(), AccessLogs(), AccessApps(), AccessApp(), AccessUsers(),
         AccessUser(), GatewayActivity(), GatewayRules(), GatewayLists(), Devices(), Tunnels(), SecurityEvents(), CheckAccess(),
         ContainmentAccessUser(), ContainmentDevice(), ActionStatus(), BlockIP(), BlockASN(), BlockCountry(), Unblock(), RevokeAccessSessions(),
         GatewayBlock(), GatewayUnblock(), RevokeDevice(), ContainmentCheckAccess(),
@@ -1089,6 +1096,17 @@ extension Cloudflare {
                 record(await Cloudflare.probe(Cloudflare.dnsNeed, required: true) {
                     _ = try await Cloudflare.list(service, ["zones", zone, "dns_records"], query: [:], as: Item.self, size: 5, pages: 1)
                 }, zt: false)
+                record(await Cloudflare.probe(Cloudflare.zoneSettingsNeed, required: false) {
+                    _ = try await Cloudflare.get(service, ["zones", zone, "settings", "ssl"], as: Value.self)
+                }, zt: false)
+                record(await Cloudflare.probe(Cloudflare.dnssecNeed, required: false) {
+                    _ = try await Cloudflare.get(service, ["zones", zone, "dnssec"], as: Value.self)
+                }, zt: false)
+                record(await Cloudflare.probe(Cloudflare.wafNeed, required: false) {
+                    // A zone whose managed rules were never deployed answers 404, which the token was allowed to ask.
+                    do { _ = try await Cloudflare.get(service, ["zones", zone, "rulesets", "phases", "http_request_firewall_managed", "entrypoint"], as: Value.self) }
+                    catch ServiceError.notFound {}
+                }, zt: false)
                 record(await Cloudflare.probe(Cloudflare.firewallNeed, required: false) {
                     struct Variables: Encodable { let zoneTag: String; let since: String }
                     struct Answer: Decodable { let viewer: Value? }
@@ -1096,7 +1114,7 @@ extension Cloudflare {
                                                      variables: Variables(zoneTag: zone, since: Cloudflare.iso(Date().addingTimeInterval(-3_600))), as: Answer.self)
                 }, zt: false)
             } else {
-                lines.append("· DNS records and firewall events were not tried: the token sees no zone. If the account has zones, include them under the token's Zone Resources.")
+                lines.append("· DNS records, zone settings, DNSSEC, WAF managed rules and firewall events were not tried: the token sees no zone. If the account has zones, include them under the token's Zone Resources.")
             }
             record(await Cloudflare.probe(Cloudflare.auditNeed, required: true) {
                 _ = try await Cloudflare.list(service, ["accounts", account, "audit_logs"], query: ["since": Cloudflare.iso(Date().addingTimeInterval(-3_600))], as: Item.self, size: 1, pages: 1)
