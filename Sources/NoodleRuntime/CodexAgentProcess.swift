@@ -672,7 +672,7 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
         trace.begin(reason: reason)
         let policy: [String: Any] = extendedAccess ? [
             "type": "workspaceWrite",
-            "writableRoots": [workspaceURL.path, workspaceURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Conversations").path],
+            "writableRoots": [workspaceURL.path],
             "networkAccess": false
         ] : ["type": "externalSandbox", "networkAccess": "restricted"]
         var params: [String: Any] = [

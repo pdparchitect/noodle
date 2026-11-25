@@ -54,6 +54,11 @@ import XCTest
             try await f.wait { f.heartbeats == 1 }
             let turn = try XCTUnwrap(wire.last("turn/start")["params"] as? [String: Any])
             XCTAssertEqual((turn["sandboxPolicy"] as? [String: Any])?["type"] as? String, extended ? "workspaceWrite" : "externalSandbox")
+            if extended {
+                // Messages and attachments travel through Noodle's broker as workspace copies, so
+                // shell commands write without asking only in the bot's own workspace.
+                XCTAssertEqual((turn["sandboxPolicy"] as? [String: Any])?["writableRoots"] as? [String], [f.workspace.path])
+            }
             complete(wire); try await f.wait { p.canReceiveHeartbeat }
             p.stop()
             let next = HarnessWire(), restarted = f.codex(next, extended: extended)
