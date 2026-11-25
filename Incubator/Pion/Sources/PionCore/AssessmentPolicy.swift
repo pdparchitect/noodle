@@ -12,6 +12,8 @@ public struct AssessmentPolicy: Codable, Equatable, Sendable {
 
     public enum ExternalSharing: String, Codable, CaseIterable, Sendable {
         case allowed, notAllowed = "not-allowed"
+        /// Only with the domains the organisation trusts, as Drive's allowlisted domains.
+        case trustedDomainsOnly = "trusted-domains-only"
     }
 
     public enum TwoStepVerification: String, Codable, CaseIterable, Sendable {

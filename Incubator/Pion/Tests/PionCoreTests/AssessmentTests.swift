@@ -415,7 +415,8 @@ final class AssessmentTests: XCTestCase {
         let service = FakeService()
         service.answers[Self.users] = (403, #"{"error":{"code":403,"message":"Not Authorized to access this resource/api"}}"#)
         service.answers[Self.domains] = (403, #"{"error":{"code":403,"message":"Request had insufficient authentication scopes."}}"#)
-        let run = await AssessmentRunner.run(GoogleWorkspaceChecks.all, policy: .defaults, detection: google(service), containment: nil)
+        let run = await AssessmentRunner.run([GoogleWorkspaceChecks.twoStepEnrolment, GoogleWorkspaceChecks.unverifiedDomains], policy: .defaults,
+                                             detection: google(service), containment: nil)
         XCTAssertEqual(run.results.map(\.status), [.couldNotRun, .couldNotRun])
         XCTAssertTrue(run.results[0].reason?.contains("Users › Read") == true, run.results[0].reason ?? "")
         XCTAssertTrue(run.results[1].reason?.contains("https://www.googleapis.com/auth/admin.directory.domain.readonly") == true, run.results[1].reason ?? "")

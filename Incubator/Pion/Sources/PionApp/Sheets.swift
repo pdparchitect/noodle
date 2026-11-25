@@ -614,7 +614,7 @@ struct PolicyForm: View {
                 }
                 GridRow {
                     Text("Sharing outside")
-                    answer($policy.externalSharing, [(.notAllowed, "Not allowed"), (.allowed, "Allowed")])
+                    answer($policy.externalSharing, [(.notAllowed, "Not allowed"), (.trustedDomainsOnly, "Trusted domains only"), (.allowed, "Allowed")])
                 }
                 GridRow {
                     Text("Super admins")

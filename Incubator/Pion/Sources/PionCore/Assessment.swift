@@ -20,13 +20,16 @@ public struct AssessmentCheck: Sendable {
     public let reads: @Sendable (AssessmentPolicy) throws -> [CheckRead]
     /// Passes or fails it on what its reads answered; throws `AssessmentCheckError` when it cannot tell.
     public let evaluate: @Sendable (CheckInputs, AssessmentPolicy) throws -> CheckOutcome
+    /// Why it couldn't run when a read failed, given why the read did, such as a refusal said as what this check needs.
+    public let unread: @Sendable (_ reason: String) -> String
 
     public init(id: String, title: String, severity: Investigation.Severity, rationale: String, fix: String,
                 source: String, policyKeys: [String] = [],
+                unread: @escaping @Sendable (_ reason: String) -> String = { $0 },
                 reads: @escaping @Sendable (AssessmentPolicy) throws -> [CheckRead],
                 evaluate: @escaping @Sendable (CheckInputs, AssessmentPolicy) throws -> CheckOutcome) {
         self.id = id; self.title = title; self.severity = severity; self.rationale = rationale; self.fix = fix
-        self.source = source; self.policyKeys = policyKeys; self.reads = reads; self.evaluate = evaluate
+        self.source = source; self.policyKeys = policyKeys; self.unread = unread; self.reads = reads; self.evaluate = evaluate
     }
 }
 
@@ -89,11 +92,13 @@ public struct CheckRead: Codable, Hashable, Sendable {
     }
 }
 
-/// The answers a check's reads gave, as their structured results.
+/// The answers a check's reads gave, as their structured results, and when the run read them.
 public struct CheckInputs: Sendable {
     let answers: [CheckRead: Data]
+    /// The run's time, which a check that counts days goes by rather than the clock.
+    public let now: Date
 
-    public init(_ answers: [CheckRead: Data]) { self.answers = answers }
+    public init(_ answers: [CheckRead: Data], now: Date = Date()) { self.answers = answers; self.now = now }
 
     /// `read`'s structured result as `type`; an answer of another shape means the check cannot run.
     public func decode<Value: Decodable>(_ type: Value.Type, from read: CheckRead) throws -> Value {
@@ -221,18 +226,18 @@ public enum AssessmentRunner {
         let results = zip(checks, planned).map { check, plan in
             switch plan {
             case .failure(let error): CheckResult(check: check, status: .couldNotRun, reason: error.localizedDescription)
-            case .success(let reads): evaluate(check, reads: reads, answers: answers, policy: policy)
+            case .success(let reads): evaluate(check, reads: reads, answers: answers, policy: policy, now: now)
             }
         }
         return AssessmentRun(date: now, connection: connection, policy: policy, results: results)
     }
 
     private static func evaluate(_ check: AssessmentCheck, reads: [CheckRead], answers: [CheckRead: Answer],
-                                 policy: AssessmentPolicy) -> CheckResult {
+                                 policy: AssessmentPolicy, now: Date) -> CheckResult {
         var inputs: [CheckRead: Data] = [:], caveats: [String] = [], partly: [String] = []
         for read in reads {
             switch answers[read] {
-            case .failed(let reason): return CheckResult(check: check, status: .couldNotRun, reason: reason, reads: reads)
+            case .failed(let reason): return CheckResult(check: check, status: .couldNotRun, reason: check.unread(reason), reads: reads)
             case .read(let data, let partial, let count, let total):
                 inputs[read] = data
                 guard partial else { continue }
@@ -248,7 +253,7 @@ public enum AssessmentRunner {
             }
         }
         do {
-            switch try check.evaluate(CheckInputs(inputs), policy) {
+            switch try check.evaluate(CheckInputs(inputs, now: now), policy) {
             case .pass(let summary):
                 // What was not read may fail it, so a pass on part of the answer is no pass.
                 guard partly.isEmpty else {
