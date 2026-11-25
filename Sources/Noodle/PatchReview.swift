@@ -25,12 +25,13 @@ import SwiftUI
 @MainActor struct AttachmentOpening {
     let preview: AttachmentPreviewController
     let capture: ScreenCapturePreviewController
-    let patchReviews: PatchReviewWindows
+    let windows: AttachmentWindows
 
     /// A web link opens in the browser unless previews are on; a file opens in its own app while the bypass key is
     /// held, though an annotation stays in Quick Look, where its note is shown and edited; a patch opens in a review,
-    /// though a file that only has the name of one opens as any other; anything else opens in Quick Look among the
-    /// others shown with it, where it can be annotated.
+    /// though a file that only has the name of one opens as any other; a Markdown or shader file opens in a window of
+    /// its own that shows it rendered or as its source; anything else opens in Quick Look among the others shown with
+    /// it, where it can be annotated.
     func open(_ attachment: ConversationAttachment, among group: [ConversationAttachment], host: any AttachmentOpeningHost) {
         if let link = attachment.url, MessageLink.webURL(from: link, preservingFragment: true) != nil,
            !WebLinkPreview.opensInPreview() {
@@ -46,8 +47,13 @@ import SwiftUI
         if attachment.isPatchFile, let patch = PatchCache.patchNow(at: host.attachmentFileURL(attachment)) {
             preview.close()
             capture.close()
-            patchReviews.open(attachment, patch: patch, store: host)
+            windows.open(attachment, patch: patch, store: host)
             return
+        }
+        if attachment.opensAsDocument {
+            preview.close()
+            capture.close()
+            if windows.openDocument(attachment, store: host) { return }
         }
         let edit: ((ConversationAttachment, String) throws -> ConversationAttachment)? = host.canEditAnnotation(attachment)
             ? { [weak host] attachment, comment in
@@ -73,40 +79,81 @@ import SwiftUI
     }
 }
 
-@MainActor final class PatchReviewWindows: NSObject, NSWindowDelegate {
+/// Patch reviews and Markdown and shader documents, each in a window of its own that comments as any preview does.
+@MainActor final class AttachmentWindows: NSObject, NSWindowDelegate {
     @MainActor private final class Review {
         let panel: PatchReviewPanel
-        let model: PatchReviewModel
+        let attachment: ConversationAttachment
+        /// A patch's review; nil for a document.
+        let patch: PatchReviewModel?
         let fileURL: URL
         /// The editor every other preview comments with.
         let editor = AttachmentPreviewController()
-        /// The picture of the review being taken for a region annotation.
+        /// The selection being copied or the picture being taken before an annotation starts.
         var capture: Task<Void, Never>?
         weak var host: NSWindow?
 
-        init(panel: PatchReviewPanel, model: PatchReviewModel, fileURL: URL, host: NSWindow?) {
-            self.panel = panel; self.model = model; self.fileURL = fileURL; self.host = host
+        init(panel: PatchReviewPanel, attachment: ConversationAttachment, patch: PatchReviewModel?, fileURL: URL, host: NSWindow?) {
+            self.panel = panel; self.attachment = attachment; self.patch = patch; self.fileURL = fileURL; self.host = host
         }
     }
 
     private var reviews: [UUID: Review] = [:]
 
-    /// The review in front, if one is open.
+    /// The window in front, if one is open.
     var frontmost: NSWindow? {
         let open = reviews.values.map(\.panel)
         return NSApp.orderedWindows.first { window in open.contains { $0 === window } } ?? open.first
     }
 
-    func model(for attachment: ConversationAttachment) -> PatchReviewModel? { reviews[attachment.id]?.model }
+    func model(for attachment: ConversationAttachment) -> PatchReviewModel? { reviews[attachment.id]?.patch }
 
     /// Opens the review of `attachment`, or brings it forward. `frame` is in screen coordinates.
     func open(_ attachment: ConversationAttachment, patch: Patch, store: any PatchReviewHost, frame: NSRect? = nil) {
-        if let review = reviews[attachment.id] {
-            if let frame { review.panel.setFrame(frame, display: true) }
-            return review.panel.makeKeyAndOrderFront(nil)
+        if bringForward(attachment, frame: frame) { return }
+        let title = patch.title(filename: attachment.originalFilename)
+        let model = PatchReviewModel(patch: patch, attachment: attachment, viewed: store.viewedPatchFiles(attachment)) { [weak store] in
+            store?.saveViewedPatchFiles($0, for: attachment)
         }
-        let host = NSApp.keyWindow
-        let panel = PatchReviewPanel(contentRect: NSRect(x: 0, y: 0, width: 880, height: 900),
+        let content = NSHostingView(rootView: PatchReviewView(model: model, store: store).environment(\.colorScheme, .dark))
+        content.sizingOptions = []
+        let panel = makePanel(size: NSSize(width: 880, height: 900), minSize: NSSize(width: 560, height: 360), title: title,
+                              content: content, kindLabel: patch.commits.isEmpty ? "Diff" : "Patch", accessories: [])
+        panel.clearSelection = { [weak model] in
+            guard let model, model.selection != nil else { return false }
+            model.selection = nil
+            return true
+        }
+        show(Review(panel: panel, attachment: attachment, patch: model, fileURL: store.attachmentFileURL(attachment),
+                    host: NSApp.keyWindow), store: store, frame: frame)
+    }
+
+    /// Opens a Markdown or shader document, or brings it forward; false when `attachment` is neither or can't be read.
+    @discardableResult
+    func openDocument(_ attachment: ConversationAttachment, store: any PatchReviewHost, frame: NSRect? = nil) -> Bool {
+        if bringForward(attachment, frame: frame) { return true }
+        let url = store.attachmentFileURL(attachment)
+        guard let model = DocumentPreviewModel(attachment, url: url) else { return false }
+        let content = NSHostingView(rootView: DocumentPreviewView(model: model).environment(\.colorScheme, .dark))
+        content.sizingOptions = []
+        let panel = makePanel(size: model.kind == .shader ? NSSize(width: 880, height: 560) : NSSize(width: 820, height: 900),
+                              minSize: NSSize(width: 420, height: 320), title: attachment.originalFilename,
+                              content: content, kindLabel: model.kind.label, accessories: [DocumentModeControl(model: model)])
+        show(Review(panel: panel, attachment: attachment, patch: nil, fileURL: url, host: NSApp.keyWindow), store: store, frame: frame)
+        return true
+    }
+
+    private func bringForward(_ attachment: ConversationAttachment, frame: NSRect?) -> Bool {
+        guard let review = reviews[attachment.id] else { return false }
+        if let frame { review.panel.setFrame(frame, display: true) }
+        review.panel.makeKeyAndOrderFront(nil)
+        return true
+    }
+
+    /// `accessories` sit in the header before Share.
+    private func makePanel(size: NSSize, minSize: NSSize, title: String, content: NSView, kindLabel: String,
+                           accessories: [NSView]) -> PatchReviewPanel {
+        let panel = PatchReviewPanel(contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false; panel.hidesOnDeactivate = false
         panel.identifier = NSUserInterfaceItemIdentifier("NoodlePatchReview")
@@ -116,30 +163,29 @@ import SwiftUI
         for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
             panel.standardWindowButton(button)?.isHidden = true
         }
-        panel.minSize = NSSize(width: 560, height: 360)
-        let title = patch.title(filename: attachment.originalFilename)
+        panel.minSize = minSize
         panel.title = title
-        let model = PatchReviewModel(patch: patch, attachment: attachment, viewed: store.viewedPatchFiles(attachment)) { [weak store] in
-            store?.saveViewedPatchFiles($0, for: attachment)
-        }
-        let content = NSHostingView(rootView: PatchReviewView(model: model, store: store).environment(\.colorScheme, .dark))
-        content.sizingOptions = []
         let share = NSButton(image: NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: "Share")!,
                              target: self, action: #selector(share(_:)))
         share.isBordered = false; share.contentTintColor = .secondaryLabelColor; share.toolTip = "Share"
-        panel.contentView = AnnotationPreviewFrame(content: content, filename: title,
-            kindLabel: patch.commits.isEmpty ? "Diff" : "Patch", accessory: share)
+        let header = NSStackView(views: accessories + [share])
+        header.spacing = 12
+        panel.contentView = AnnotationPreviewFrame(content: content, filename: title, kindLabel: kindLabel, accessory: header)
+        return panel
+    }
+
+    private func show(_ review: Review, store: any PatchReviewHost, frame: NSRect?) {
+        let panel = review.panel
         if let frame {
             panel.setFrame(frame, display: false)
         } else {
-            let screen = host?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? panel.frame
+            let screen = review.host?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? panel.frame
             var frame = panel.frame
             frame.size.width = min(frame.width, screen.width)
             frame.size.height = min(frame.height, screen.height)
             frame.origin = NSPoint(x: screen.midX - frame.width / 2, y: screen.midY - frame.height / 2)
             panel.setFrame(frame, display: false)
         }
-        let review = Review(panel: panel, model: model, fileURL: store.attachmentFileURL(attachment), host: host)
         panel.annotate = { [weak self, weak review, weak store] in
             guard let self, let review, let store else { return }
             self.annotate(review, store: store)
@@ -148,25 +194,31 @@ import SwiftUI
             guard let self, let review, let store else { return }
             self.markRegion(review, store: store)
         }
-        panel.clearSelection = { [weak model] in
-            guard let model, model.selection != nil else { return false }
-            model.selection = nil
-            return true
-        }
         panel.delegate = self
-        reviews[attachment.id] = review
+        reviews[review.attachment.id] = review
         panel.makeKeyAndOrderFront(nil)
     }
 
-    /// Comments on the selected lines, or on the whole patch when none are, with the editor and
-    /// annotation of every other preview, so the note waits in the composer and reaches the bot as any other does.
+    /// Comments on the selected lines of a patch or the selected text of a document, or on the whole file when none
+    /// is selected, with the editor and annotation of every other preview, so the note waits in the composer and
+    /// reaches the bot as any other does.
     private func annotate(_ review: Review, store: any PatchReviewHost) {
         guard !review.editor.hasPendingAnnotation, review.capture == nil else { NSSound.beep(); return }
-        review.editor.annotateConversation(in: review.panel, source: review.model.attachment,
-                                           quote: review.model.selectedQuote, save: Self.save(to: store))
+        if let patch = review.patch {
+            review.editor.annotateConversation(in: review.panel, source: review.attachment,
+                                               quote: patch.selectedQuote, save: Self.save(to: store))
+            return
+        }
+        let panel = review.panel
+        review.capture = Task { @MainActor [weak review, weak store] in
+            let quote = await CopiedSelection.text()
+            defer { if !Task.isCancelled { review?.capture = nil } }
+            guard !Task.isCancelled, let review, let store, panel.isVisible, !review.editor.hasPendingAnnotation else { return }
+            review.editor.annotateConversation(in: panel, source: review.attachment, quote: quote, save: Self.save(to: store))
+        }
     }
 
-    /// Marks a region of a picture of the review, as in a conversation or any other preview.
+    /// Marks a region of a picture of the window, as in a conversation or any other preview.
     private func markRegion(_ review: Review, store: any PatchReviewHost) {
         guard !review.editor.hasPendingAnnotation, review.capture == nil else { NSSound.beep(); return }
         let panel = review.panel, frame = panel.frame
@@ -177,7 +229,7 @@ import SwiftUI
                 // A review resized or closed meanwhile no longer matches its picture.
                 guard !Task.isCancelled, let review, let store, panel.isVisible, panel.frame == frame,
                       !review.editor.hasPendingAnnotation else { return }
-                review.editor.annotateConversation(in: panel, source: review.model.attachment, quote: nil,
+                review.editor.annotateConversation(in: panel, source: review.attachment, quote: nil,
                     snapshot: NSImage(cgImage: image, size: frame.size), save: Self.save(to: store))
             } catch {
                 guard !Task.isCancelled, panel.isVisible else { return }

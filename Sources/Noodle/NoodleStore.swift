@@ -249,7 +249,7 @@ final class NoodleStore {
     /// Live views of what Hub bots' links point at.
     @ObservationIgnored let surfacePanels = HubSurfacePanels()
     /// Patches open for review.
-    @ObservationIgnored let patchReviews = PatchReviewWindows()
+    @ObservationIgnored let attachmentWindows = AttachmentWindows()
     /// Noodlets opened from conversations, annotated in place from Noodle Applet.
     @ObservationIgnored let noodletAnnotations: NoodletAnnotations
     @ObservationIgnored private let noodletOverlay = NoodletAnnotationOverlay()

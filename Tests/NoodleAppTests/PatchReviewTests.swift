@@ -162,7 +162,7 @@ import XCTest
         let f = try fixture()
         let attachment = try attachment(diff, in: f)
         let patch = try XCTUnwrap(Patch(diff))
-        let windows = PatchReviewWindows()
+        let windows = AttachmentWindows()
         windows.open(attachment, patch: patch, store: f.store)
         var panel = try XCTUnwrap(windows.frontmost)
         defer { windows.frontmost?.close() }

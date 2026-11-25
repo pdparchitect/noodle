@@ -118,6 +118,8 @@ jobs:
         run: swift test --disable-sandbox --package-path Shared/ExternalTools --scratch-path .build/external-tools
       - name: Test reading patches
         run: swift test --disable-sandbox --package-path Shared/Patch --scratch-path .build/patch
+      - name: Test reading Markdown documents
+        run: swift test --disable-sandbox --package-path Shared/Document --scratch-path .build/document
       - name: Test Noodle Push
         run: swift test --disable-sandbox --package-path Push --scratch-path .build/push
 

@@ -235,7 +235,7 @@ struct ChatView: View {
     }
 
     private var opening: AttachmentOpening {
-        AttachmentOpening(preview: attachmentPreview, capture: screenCapturePreview, patchReviews: store.patchReviews)
+        AttachmentOpening(preview: attachmentPreview, capture: screenCapturePreview, windows: store.attachmentWindows)
     }
 
     private var composerControlRow: some View {

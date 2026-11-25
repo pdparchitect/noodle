@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Markdown files open laid out with headings, lists, tables and code, and Metal shaders open playing; Preview and Source under the title switch to the text as written, where you can select text and comment on it. Mark Up works on both.
+- Noodle no longer adds a Quick Look preview or thumbnail for `.metal` files to the Files app.
+
+### What to Test
+
+- Open a `.md` file a bot sent. It shows laid out; tap Source for the text, select some and choose Comment…, then Preview again.
+- Open a `.metal` shader a bot sent. It plays; Source shows its code. Mark Up on the playing shader marks a still of it.
+
 ## [0.60.0] - 2026-11-23
 
 ### Changed

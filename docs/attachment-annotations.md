@@ -17,7 +17,11 @@ conversations cancels an unfinished annotation.
 
 ## Annotate an attachment
 
-Open an attachment in Noodle's Quick Look preview, then:
+Markdown and Metal shader files open in a window of their own, laid out or
+playing; choose **Preview** or **Source** in its header to switch to the text as
+written. Other attachments open in Noodle's Quick Look preview.
+
+Open an attachment, then:
 
 1. Select text and press **⌘⇧A**, or choose **Preview → Add Annotation**.
    For images, this starts region selection. If text selection is unavailable,

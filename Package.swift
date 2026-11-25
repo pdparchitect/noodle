@@ -80,6 +80,7 @@ let package = Package(
         .package(path: "Shared/Wallpaper"),
         .package(path: "Shared/Brand"),
         .package(path: "Shared/Patch"),
+        .package(path: "Shared/Document"),
         .package(path: "Computer/Bridge"),
         .package(path: "Applet/Protocol"),
         .package(path: "Browser/BrowserProtocol"),
@@ -163,7 +164,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleAppletTools", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleContextFieldsTools", "NoodleImagesTools", "NoodleRemindersTools", "NoodleToolConnections", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "NoodleVoicePeer", "HubCore", "HubMac", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "NoodleEnterprise", .product(name: "NoodletRuntime", package: "Protocol")],
+            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleAppletTools", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleContextFieldsTools", "NoodleImagesTools", "NoodleRemindersTools", "NoodleToolConnections", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "NoodleVoicePeer", "HubCore", "HubMac", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleDocument", package: "Document"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "NoodleEnterprise", .product(name: "NoodletRuntime", package: "Protocol")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",

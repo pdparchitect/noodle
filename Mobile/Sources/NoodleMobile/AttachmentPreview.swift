@@ -1,4 +1,6 @@
 import HubLink
+import NoodleDocument
+import NoodleWallpaperCore
 import PDFKit
 import QuickLook
 import SwiftUI
@@ -24,6 +26,16 @@ struct AttachmentPreviewRequest: Identifiable {
     /// Who sent the files and when, under their name.
     var subtitle: String?
 
+    enum Document { case markdown, shader }
+
+    /// A Markdown or shader file, which shows rendered or as its source.
+    static func document(_ attachment: LinkAttachment) -> Document? {
+        guard attachment.annotation == nil else { return nil }
+        if MarkdownDocument.isMarkdown(name: attachment.filename, mediaType: attachment.mediaType) { return .markdown }
+        if ShaderSourceFile.isShader(URL(fileURLWithPath: attachment.filename)) { return .shader }
+        return nil
+    }
+
     /// A text file small enough to read whole shows as its own text, to select and comment on.
     static func isText(_ item: Item) -> Bool {
         guard item.attachment.annotation == nil else { return false }
@@ -33,14 +45,17 @@ struct AttachmentPreviewRequest: Identifiable {
     }
 }
 
-/// A message's files in Quick Look, or a text file as its own selectable text, with Mark Up to comment
-/// on part of what shows and Comment… in Mark Up's menu for the whole file.
+/// A message's files in Quick Look, a text file as its own selectable text, or a Markdown or shader file rendered or
+/// as its source, with Mark Up to comment on part of what shows and Comment… in Mark Up's menu for the whole file.
 struct AttachmentPreviewScreen: View {
     let request: AttachmentPreviewRequest
     let annotating: Annotating
     @State private var content = PreviewContent()
     @State private var current: Int
     @State private var text: String?
+    /// A document's source rather than the document rendered.
+    @State private var showsSource = false
+    @State private var markdown: MarkdownDocument?
     /// The still being marked, while Mark Up is on.
     @State private var snapshot: UIImage?
     @State private var selection: CGRect?
@@ -57,7 +72,16 @@ struct AttachmentPreviewScreen: View {
     }
 
     private var item: AttachmentPreviewRequest.Item { request.items[min(current, request.items.count - 1)] }
-    private var showsText: Bool { request.items.count == 1 && AttachmentPreviewRequest.isText(item) }
+    /// A Markdown or shader file on its own; a Markdown file over 2 MB opens in Quick Look, as it would take too long
+    /// to lay out.
+    private var document: AttachmentPreviewRequest.Document? {
+        guard request.items.count == 1, let document = AttachmentPreviewRequest.document(item.attachment) else { return nil }
+        let size = (try? item.url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? .max
+        return document == .shader || size <= 2 << 20 ? document : nil
+    }
+    private var showsText: Bool {
+        request.items.count == 1 && (document == nil ? AttachmentPreviewRequest.isText(item) : showsSource)
+    }
     /// A PDF on its own shows in PDFKit, which tells the page showing for Mark Up, as Quick Look does not.
     private var showsPDF: Bool { request.items.count == 1 && MarkUpStill.kind(of: item.attachment, at: item.url) == .pdf }
 
@@ -76,6 +100,11 @@ struct AttachmentPreviewScreen: View {
                     } else {
                         ProgressView()
                     }
+                } else if document == .markdown {
+                    if let markdown { HostedContent(content: content) { MarkdownDocumentView(markdown) } }
+                    else { ProgressView() }
+                } else if document == .shader {
+                    ShaderPreview(url: item.url)
                 } else if showsPDF {
                     PDFContent(url: item.url, content: content)
                 } else {
@@ -91,6 +120,15 @@ struct AttachmentPreviewScreen: View {
                 }
             }
             .ignoresSafeArea(edges: .bottom)
+            .safeAreaInset(edge: .top) {
+                if document != nil, snapshot == nil {
+                    Picker("Show", selection: $showsSource) {
+                        Text("Preview").tag(false)
+                        Text("Source").tag(true)
+                    }
+                    .pickerStyle(.segmented).fixedSize().padding(.vertical, 6)
+                }
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() }.keyboardShortcut(.cancelAction) }
@@ -114,10 +152,15 @@ struct AttachmentPreviewScreen: View {
                 if snapshot == nil, let index = content.currentIndex, index != current { current = index }
             }
         }
-        .task(id: showsText) {
-            guard showsText, text == nil else { return }
-            let url = item.url
-            text = await Task.detached { (try? String(contentsOf: url, encoding: .utf8)) ?? "" }.value
+        .task(id: showsText || document != nil) {
+            guard showsText || document != nil, text == nil else { return }
+            let url = item.url, renders = document == .markdown
+            let (read, parsed) = await Task.detached {
+                let read = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+                return (read, renders ? MarkdownDocument(read) : nil)
+            }.value
+            text = read
+            markdown = parsed
         }
         .sheet(item: $commenting, onDismiss: {
             if saved { snapshot = nil }
@@ -158,8 +201,15 @@ struct AttachmentPreviewScreen: View {
     /// A picture is marked on itself, as it shows before zooming, and a PDF on the page showing. Quick Look draws
     /// in another process, so a snapshot of it is black: any other file is marked on the page Quick Look renders of it.
     private func still() async -> UIImage? {
-        if showsText { return content.snapshot() }
         let item = item
+        if document == .shader, !showsText {
+            // Metal draws outside the view hierarchy, so a snapshot of it is black.
+            let size = content.view?.bounds.size ?? CGSize(width: 1024, height: 640)
+            return (try? await ShaderPipeline.still(of: item.url, width: Int(size.width * displayScale),
+                                                    height: Int(size.height * displayScale), scale: Float(displayScale)))
+                .map { UIImage(cgImage: $0, scale: displayScale, orientation: .up) }
+        }
+        if showsText || document != nil { return content.snapshot() }
         switch MarkUpStill.kind(of: item.attachment, at: item.url) {
         case .image:
             return DecodedImages.downsampled(item.url, to: 2400)
@@ -263,6 +313,23 @@ private struct QuickLookContent: UIViewControllerRepresentable {
         nonisolated func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
             urls[index] as NSURL
         }
+    }
+}
+
+/// SwiftUI content kept as the view Mark Up freezes.
+private struct HostedContent<Content: View>: UIViewControllerRepresentable {
+    let content: PreviewContent
+    @ViewBuilder let view: () -> Content
+
+    func makeUIViewController(context: Context) -> UIHostingController<Content> {
+        let controller = UIHostingController(rootView: view())
+        content.view = controller.view
+        return controller
+    }
+
+    func updateUIViewController(_ controller: UIHostingController<Content>, context: Context) {
+        controller.rootView = view()
+        content.view = controller.view
     }
 }
 

@@ -238,7 +238,7 @@ public struct ShaderBackground: UIViewRepresentable {
 }
 #endif
 
-/// A shader file as Quick Look shows it: playing, or the reason it can't, in the compiler's words.
+/// A shader file as its preview shows it: playing, or the reason it can't, in the compiler's words.
 public struct ShaderPreview: View {
     let url: URL
     @State private var status = ShaderCanvas.Status.loading

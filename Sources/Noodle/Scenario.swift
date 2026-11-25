@@ -1164,7 +1164,7 @@ extension Scenario {
             // Let the last change settle on screen before it is photographed.
             try? await Task.sleep(for: .milliseconds(700))
             // A patch open for review is what the shot is of; otherwise the main window.
-            guard let window = store.patchReviews.frontmost ?? mainWindow, let region = mainWindowRegion else { break }
+            guard let window = store.attachmentWindows.frontmost ?? mainWindow, let region = mainWindowRegion else { break }
             write("SCENARIO SHOT \(name) id=\(window.windowNumber) rect=\(region)")
             await terminal.awaitAnswer()
         }
@@ -1233,8 +1233,8 @@ extension Scenario {
                let attachment = store.attachments(for: message).first(where: \.isPatchFile),
                let patch = PatchCache.patchNow(at: store.attachmentFileURL(attachment)) {
                 if let viewed = extra.viewed { store.saveViewedPatchFiles(Set(viewed), for: attachment) }
-                store.patchReviews.open(attachment, patch: patch, store: store, frame: extra.frame.map(ScenarioSupport.rect))
-                store.patchReviews.model(for: attachment)?.expanded.formUnion(extra.expanded ?? [])
+                store.attachmentWindows.open(attachment, patch: patch, store: store, frame: extra.frame.map(ScenarioSupport.rect))
+                store.attachmentWindows.model(for: attachment)?.expanded.formUnion(extra.expanded ?? [])
             }
         }
         if initial {

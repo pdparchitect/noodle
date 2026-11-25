@@ -295,6 +295,11 @@ struct AttachmentView: View {
                 reviewPatch(PatchReviewRequest(attachment: attachment, patch: patch, file: url))
                 return
             }
+            // A Markdown or shader file shows on its own, rendered or as its source.
+            if let previewAttachments, AttachmentPreviewRequest.document(attachment) != nil {
+                previewAttachments(AttachmentPreviewRequest(items: [.init(attachment: attachment, url: url)], start: 0, subtitle: subtitle))
+                return
+            }
             if let previewAttachments {
                 let items = LinkAttachment.previewGallery(opening: attachment, among: group).compactMap { other in
                     (other.id == attachment.id ? url : chats.downloadedFile(for: other))
