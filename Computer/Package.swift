@@ -78,6 +78,15 @@ let package = Package(
             .product(name: "ContainerizationExtras", package: "containerization"),
             .product(name: "ContainerizationOCI", package: "containerization")
         ], swiftSettings: appSettings),
+        // Development only: boots linked Linux pods through the engine to try out networking. Never shipped.
+        .executableTarget(name: "ComputerLab", dependencies: [
+            "ComputerEngine",
+            "ComputerCore",
+            .product(name: "Containerization", package: "containerization"),
+            .product(name: "ContainerizationEXT4", package: "containerization"),
+            .product(name: "ContainerizationExtras", package: "containerization"),
+            .product(name: "ContainerizationOCI", package: "containerization")
+        ]),
         .testTarget(name: "NeptuneTransportTests", dependencies: ["NeptuneTransport"]),
         .testTarget(name: "ComputerCoreTests", dependencies: ["ComputerCore"]),
         .testTarget(name: "ComputerExternalTests", dependencies: ["ComputerExternal"]),
