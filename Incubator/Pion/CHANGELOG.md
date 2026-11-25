@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-25
+
 ### Changed
 
 - The ten read-only tools are now named Detection instead of Audit, such as Cloudflare Detection beside Cloudflare Containment, as they watch and read for investigations rather than audit a configuration; their Setup Steps suggest names such as Pion Detection for the token, app or user. A connection you have not renamed shows the new name, and its agents keep calling it as before.

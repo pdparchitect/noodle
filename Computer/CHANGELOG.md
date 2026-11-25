@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-25
+
 ### Changed
 
 - Upgrading a computer’s image shows its progress in a window of its own, with Cancel Upgrade, then the result or why it failed, instead of inside Edit Computer.

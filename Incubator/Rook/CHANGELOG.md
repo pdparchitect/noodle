@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-25
+
 ### Changed
 
 - A computer's terminal and files are slightly see-through, so Rook's window shows behind them.

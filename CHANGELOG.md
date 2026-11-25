@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.96.0] - 2026-11-25
+
 ### Changed
 
 - Bots open a tab on a Linux desktop computer when its browser has none, as newer desktop images start Chromium without a window.
