@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- apt fetches Kali's packages from kali.download, Kali's own CDN, rather than a mirror near the computer chosen by http.kali.org, so installing works behind a Mission's gateway.
+
 ## [0.2.3] - 2026-11-25
 
 ### Fixed

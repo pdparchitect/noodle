@@ -16,6 +16,13 @@ LABEL org.opencontainers.image.title="${IMAGE_PRODUCT} Shell" \
       org.opencontainers.image.version="${IMAGE_VERSION}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}"
 
+# Kali's apt goes to kali.download, Kali's own CDN, instead of http.kali.org, which redirects each download to a
+# mirror near the computer: behind a Rook Mission's gateway only listed package sources are open, and the mirrors
+# are too many to list. Only files naming http.kali.org change, so Ubuntu's sources stay as they are.
+RUN for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do \
+      [ -f "$f" ] && grep -q 'http\.kali\.org' "$f" && sed -i 's#http://http\.kali\.org/kali#http://kali.download/kali#g' "$f"; \
+    done; true
+
 # Every computer's network is set up from this image, with its ip and udhcpc, on a 256 MB disk: keep it small.
 # The account starts from an empty skeleton, so Kali's own prompt never replaces the image's.
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \

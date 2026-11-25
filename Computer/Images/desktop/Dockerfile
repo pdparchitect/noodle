@@ -31,6 +31,13 @@ LABEL org.opencontainers.image.title="${DESKTOP_BRAND}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
       im.noodle.desktop.contract="2"
 
+# Kali's apt goes to kali.download, Kali's own CDN, instead of http.kali.org, which redirects each download to a
+# mirror near the computer: behind a Rook Mission's gateway only listed package sources are open, and the mirrors
+# are too many to list. Only files naming http.kali.org change, so Ubuntu's sources stay as they are.
+RUN for f in /etc/apt/sources.list /etc/apt/sources.list.d/*; do \
+      [ -f "$f" ] && grep -q 'http\.kali\.org' "$f" && sed -i 's#http://http\.kali\.org/kali#http://kali.download/kali#g' "$f"; \
+    done; true
+
 # Xorg drives the VM's virtio GPU: no display manager, udev, Snap or systemd.
 RUN arch="${TARGETARCH:-$(dpkg --print-architecture)}" && \
     case "$arch" in arm64|amd64) ;; *) echo "Unsupported architecture: $arch" >&2; exit 1;; esac && \
