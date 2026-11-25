@@ -251,6 +251,10 @@ struct ConversationView: View {
                             .disabled(investigation.isClosed)
                         Divider()
                     }
+                    if investigation.isAssessment {
+                        Button("Export Report…") { model.exportReport(investigation) }
+                            .disabled(!model.canExportReport(investigation))
+                    }
                     Button("Export as Zip…") { model.exportInvestigation(investigation) }
                     Button("Show in Finder") { model.reveal(conversation) }
                 } label: {

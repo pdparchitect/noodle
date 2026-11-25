@@ -38,11 +38,23 @@ public enum AssessmentCheckError: LocalizedError, Equatable, Sendable {
     /// The policy has no answer to the question, such as "whether 2-step verification is required".
     case policyMissing(String)
     case couldNotRun(String)
+    /// The service doesn't let a read tell, such as a setting it lists without its value: a limit of what can be read,
+    /// not something gone wrong.
+    case limitation(String)
 
     public var errorDescription: String? {
         switch self {
         case .policyMissing(let question): "The policy doesn't say \(question); answer it in the questionnaire."
-        case .couldNotRun(let reason): reason
+        case .couldNotRun(let reason), .limitation(let reason): reason
+        }
+    }
+
+    /// What kept a check from running, for an error a check threw.
+    static func obstacle(of error: Error) -> CheckResult.Obstacle {
+        switch error as? AssessmentCheckError {
+        case .policyMissing?: .policy
+        case .limitation?: .limitation
+        default: .problem
         }
     }
 }
@@ -131,6 +143,13 @@ public struct CheckResult: Codable, Equatable, Sendable {
     /// The most offenders kept; `offenderCount` counts them all.
     public static let keptOffenders = 500
 
+    /// What kept a check from running: a policy answer still to give; a limit of what the service lets it read, such
+    /// as settings only a super admin may read or a list cut short, which is no error; or a problem to fix, such as
+    /// no connection or a refused read.
+    public enum Obstacle: String, Codable, Sendable {
+        case policy, limitation, problem
+    }
+
     public let checkID: String
     public let title: String
     public let severity: Investigation.Severity
@@ -143,6 +162,8 @@ public struct CheckResult: Codable, Equatable, Sendable {
     public let offenderCount: Int
     /// Why it couldn't run.
     public let reason: String?
+    /// What kind of thing kept it from running; nil when it ran, and for a result kept before results said.
+    public let obstacle: Obstacle?
     public let reads: [CheckRead]
     public let policyKeys: [String]
     /// The evidence its result was recorded as.
@@ -155,16 +176,20 @@ public struct CheckResult: Codable, Equatable, Sendable {
     public var resolves: String?
 
     public init(check: AssessmentCheck, status: CheckStatus, summary: String? = nil, offenders: [String] = [], reason: String? = nil,
-                reads: [CheckRead] = []) {
+                obstacle: Obstacle? = nil, reads: [CheckRead] = []) {
         let unique = Array(Set(offenders)).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
         checkID = check.id; title = check.title; severity = check.severity; source = check.source
         self.status = status; self.summary = summary; self.reason = reason; self.reads = reads; policyKeys = check.policyKeys
+        self.obstacle = status == .couldNotRun ? obstacle ?? .problem : nil
         self.offenders = Array(unique.prefix(Self.keptOffenders))
         offenderCount = unique.count
     }
 
     /// The failure finding a later run carries or resolves, if this result left one open.
     var openFinding: String? { status == .pass ? nil : findingID }
+
+    /// Whether it couldn't run for a problem to fix rather than the policy or a limit of what can be read.
+    var hasProblem: Bool { status == .couldNotRun && (obstacle ?? .problem) == .problem }
 }
 
 /// One run of an Assessment's checks, with the policy as it stood.
@@ -173,10 +198,12 @@ public struct AssessmentRun: Codable, Equatable, Sendable {
     /// The connection its reads went through, by name.
     public let connection: String?
     public let policy: AssessmentPolicy
+    /// The person's prose under the policy's answers as it read for this run; nil for a run kept before runs kept it.
+    public var policyBody: String?
     public var results: [CheckResult]
 
-    public init(date: Date, connection: String?, policy: AssessmentPolicy, results: [CheckResult]) {
-        self.date = date; self.connection = connection; self.policy = policy; self.results = results
+    public init(date: Date, connection: String?, policy: AssessmentPolicy, policyBody: String? = nil, results: [CheckResult]) {
+        self.date = date; self.connection = connection; self.policy = policy; self.policyBody = policyBody; self.results = results
     }
 
     public func count(_ status: CheckStatus) -> Int { results.count { $0.status == status } }
@@ -184,6 +211,42 @@ public struct AssessmentRun: Codable, Equatable, Sendable {
     /// Such as "Ran 11 checks: 3 failed, 7 passed, 1 couldn't run."
     public var tally: String {
         "Ran \(results.count) check\(results.count == 1 ? "" : "s"): \(count(.fail)) failed, \(count(.pass)) passed, \(count(.couldNotRun)) couldn't run."
+    }
+
+    /// The policy's keys that checks needed an answer to but didn't get, in the policy's order.
+    public var unansweredKeys: [String] {
+        let needed = Set(results.filter { $0.status == .couldNotRun && $0.obstacle == .policy }.flatMap(\.policyKeys))
+        return AssessmentPolicy.keys.filter { needed.contains($0) && policy.value(forKey: $0) == nil }
+    }
+
+    /// Whether checks couldn't run for want of a policy answer.
+    public var isPolicyIncomplete: Bool { results.contains { $0.status == .couldNotRun && $0.obstacle == .policy } }
+
+    /// What the policy leaves unanswered, such as "it doesn't answer max-super-admins, which 1 check needs", for a run
+    /// labelled policy incomplete; nil when the policy answers all the checks ask.
+    public var policyGaps: String? {
+        guard isPolicyIncomplete else { return nil }
+        let waiting = results.count { $0.status == .couldNotRun && $0.obstacle == .policy }
+        let keys = unansweredKeys
+        let unanswered = keys.isEmpty ? "it is missing answers" : "it doesn't answer " + keys.joined(separator: ", ")
+        return "\(unanswered), which \(waiting) check\(waiting == 1 ? "" : "s") need\(waiting == 1 ? "s" : "")"
+    }
+
+    /// The one problem every check that hit one couldn't run for, such as no connection or a sign-in needed, when
+    /// more than one did: said once instead of for each.
+    public var sharedProblem: (reason: String, count: Int)? {
+        let problems = results.filter(\.hasProblem)
+        guard problems.count > 1, let reason = problems.first?.reason, problems.allSatisfy({ $0.reason == reason }) else { return nil }
+        return (reason, problems.count)
+    }
+
+    /// The shared problem as one line, such as "Google Workspace Detection needs signing in. None of the checks
+    /// could run." Nil when there is none.
+    public var sharedProblemLine: String? {
+        guard let (reason, count) = sharedProblem else { return nil }
+        let said = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ended = said.hasSuffix(".") || said.hasSuffix("!") || said.hasSuffix("?") ? said : said + "."
+        return ended + (count == results.count ? " None of the checks could run." : " \(count) of the \(results.count) checks couldn't run because of it.")
     }
 }
 
@@ -199,7 +262,7 @@ public enum AssessmentRunner {
         case failed(String)
     }
 
-    public static func run(_ checks: [AssessmentCheck], policy: AssessmentPolicy, connection: String? = nil,
+    public static func run(_ checks: [AssessmentCheck], policy: AssessmentPolicy, policyBody: String? = nil, connection: String? = nil,
                            detection: AssessmentCall?, containment: AssessmentCall?,
                            detectionName: String = "Google Workspace Detection", containmentName: String = "Google Workspace Containment",
                            now: Date = Date()) async -> AssessmentRun {
@@ -225,11 +288,12 @@ public enum AssessmentRunner {
         }
         let results = zip(checks, planned).map { check, plan in
             switch plan {
-            case .failure(let error): CheckResult(check: check, status: .couldNotRun, reason: error.localizedDescription)
+            case .failure(let error):
+                CheckResult(check: check, status: .couldNotRun, reason: error.localizedDescription, obstacle: AssessmentCheckError.obstacle(of: error))
             case .success(let reads): evaluate(check, reads: reads, answers: answers, policy: policy, now: now)
             }
         }
-        return AssessmentRun(date: now, connection: connection, policy: policy, results: results)
+        return AssessmentRun(date: now, connection: connection, policy: policy, policyBody: policyBody, results: results)
     }
 
     private static func evaluate(_ check: AssessmentCheck, reads: [CheckRead], answers: [CheckRead: Answer],
@@ -237,7 +301,10 @@ public enum AssessmentRunner {
         var inputs: [CheckRead: Data] = [:], caveats: [String] = [], partly: [String] = []
         for read in reads {
             switch answers[read] {
-            case .failed(let reason): return CheckResult(check: check, status: .couldNotRun, reason: check.unread(reason), reads: reads)
+            case .failed(let reason):
+                // A check that says a failed read as what it needs knows it as a limit, such as a super admin to read.
+                let said = check.unread(reason)
+                return CheckResult(check: check, status: .couldNotRun, reason: said, obstacle: said == reason ? .problem : .limitation, reads: reads)
             case .read(let data, let partial, let count, let total):
                 inputs[read] = data
                 guard partial else { continue }
@@ -258,14 +325,16 @@ public enum AssessmentRunner {
                 // What was not read may fail it, so a pass on part of the answer is no pass.
                 guard partly.isEmpty else {
                     return CheckResult(check: check, status: .couldNotRun,
-                                       reason: "\(partly.joined(separator: " and ")) was read only in part, and a pass needs all of it.", reads: reads)
+                                       reason: "\(partly.joined(separator: " and ")) was read only in part, and a pass needs all of it.",
+                                       obstacle: .limitation, reads: reads)
                 }
                 return CheckResult(check: check, status: .pass, summary: summary, reads: reads)
             case .fail(let summary, let offenders):
                 return CheckResult(check: check, status: .fail, summary: ([summary] + caveats).joined(separator: " "), offenders: offenders, reads: reads)
             }
         } catch {
-            return CheckResult(check: check, status: .couldNotRun, reason: error.localizedDescription, reads: reads)
+            return CheckResult(check: check, status: .couldNotRun, reason: error.localizedDescription,
+                               obstacle: AssessmentCheckError.obstacle(of: error), reads: reads)
         }
     }
 
@@ -429,6 +498,8 @@ extension AssessmentRun {
     /// before (nil `changes` for the first run), and what to do with it.
     public func announcement(changes: [CheckChange]?) -> String {
         var lines = ["Pion's checks ran\(connection.map { " on \($0)" } ?? ""). \(tally)"]
+        if let shared = sharedProblemLine { lines.append(shared) }
+        if let gaps = policyGaps { lines.append("Policy incomplete: \(gaps).") }
         if let changes {
             lines.append(changes.isEmpty ? "Nothing changed since the last run." : "Since the last run:")
             lines += changes.map { "- " + $0.line }
@@ -444,7 +515,12 @@ extension AssessmentRun {
         let skipped = results.filter { $0.status == .couldNotRun }
         if !skipped.isEmpty {
             lines.append("\nCouldn't run:")
-            lines += skipped.map { "- \($0.title)\($0.evidenceID.map { " (\($0))" } ?? ""): \($0.reason ?? "")" }
+            let shared = sharedProblem?.reason
+            lines += skipped.map { result in
+                let line = "- \(result.title)\(result.evidenceID.map { " (\($0))" } ?? "")"
+                // The shared problem was said once, above.
+                return result.hasProblem && result.reason == shared ? line : line + ": \(result.reason ?? "")"
+            }
         }
         lines.append(failed.isEmpty
             ? "\nNothing failed. Tell the champion what couldn't run and what it would take to run it, if anything."

@@ -242,7 +242,7 @@ public enum GoogleWorkspaceChecks {
             }
             guard !cut || devices.compromised == 0 else {
                 // Those Google counts are all past the list, as none listed is compromised.
-                throw AssessmentCheckError.couldNotRun("There are more phones and tablets than the \(devices.listed.count) this check reads at once, and Google finds \(devices.compromised ?? 0) of the others compromised, so whether \(devices.compromised == 1 ? "it is" : "any is") approved can't be told here; filter the Admin console's Devices › Mobile & endpoints › Mobile devices by compromised status to see.")
+                throw AssessmentCheckError.limitation("There are more phones and tablets than the \(devices.listed.count) this check reads at once, and Google finds \(devices.compromised ?? 0) of the others compromised, so whether \(devices.compromised == 1 ? "it is" : "any is") approved can't be told here; filter the Admin console's Devices › Mobile & endpoints › Mobile devices by compromised status to see.")
             }
             return .pass("Google finds none of the \(plural(approved.count, "approved phone or tablet", "approved phones and tablets")) compromised.")
         })
@@ -352,7 +352,7 @@ public enum GoogleWorkspaceChecks {
         struct Listed: Decodable { let settings: [Setting]? }
         let all = try inputs.decode(Listed.self, from: organisationSettings).settings ?? []
         guard let root = wholeOrganisation(all) else {
-            throw AssessmentCheckError.couldNotRun("Google didn't say which organisational unit is the whole organisation, so whether \(named) is set for everyone can't be told here; check it in the Admin console under \(page).")
+            throw AssessmentCheckError.limitation("Google didn't say which organisational unit is the whole organisation, so whether \(named) is set for everyone can't be told here; check it in the Admin console under \(page).")
         }
         let found = all.filter { $0.settingType == type }
         let isWhole = { (setting: Setting) in setting.group == nil && setting.unit == root }
@@ -378,7 +378,7 @@ public enum GoogleWorkspaceChecks {
             }
         }
         if offenders.isEmpty, unknown > 0 {
-            throw AssessmentCheckError.couldNotRun("Google listed \(named) without saying what it is in \(plural(unknown, "place", "places")); check it in the Admin console under \(page).")
+            throw AssessmentCheckError.limitation("Google listed \(named) without saying what it is in \(plural(unknown, "place", "places")); check it in the Admin console under \(page).")
         }
         return (offenders, 1 + others.count, note)
     }

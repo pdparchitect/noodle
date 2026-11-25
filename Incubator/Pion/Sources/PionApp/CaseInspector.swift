@@ -95,10 +95,15 @@ private struct ChecksSection: View {
             Heading(title: "Checks", count: runs.last?.results.count)
             if let latest = runs.last {
                 let before = runs.dropLast().last.map { Dictionary($0.results.map { ($0.checkID, $0.status) }, uniquingKeysWith: { first, _ in first }) }
-                Text("\(latest.tally) Last run \(latest.date.pionShort)\(latest.connection.map { " on \($0)" } ?? "").")
+                // A problem every check that couldn't run shares is said here once, not on each.
+                let shared = latest.sharedProblem?.reason
+                let notes = [latest.sharedProblemLine, latest.policyGaps.map { "Policy incomplete: \($0)." }].compactMap { $0 }
+                Text((["\(latest.tally) Last run \(latest.date.pionShort)\(latest.connection.map { " on \($0)" } ?? "")."] + notes)
+                    .joined(separator: " "))
                     .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 ForEach(latest.results, id: \.checkID) { result in
-                    CheckRow(result: result, previous: before.map { $0[result.checkID] })
+                    CheckRow(result: result, previous: before.map { $0[result.checkID] }, saysReason: result.reason != shared)
                 }
             } else {
                 Text(model.isRunningChecks(investigation.id) ? "Running checks…" : "No checks run yet.")
@@ -112,6 +117,8 @@ private struct CheckRow: View {
     let result: CheckResult
     /// The check's status in the run before, nil when it had none; nil altogether on the first run.
     let previous: CheckStatus??
+    /// False when the section already said why it couldn't run, as the reason many shared.
+    var saysReason = true
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -123,7 +130,7 @@ private struct CheckRow: View {
                     if let change { Tag(text: change.text, color: change.color) }
                     Tag(text: result.severity.title, color: result.status == .fail ? result.severity.color : .secondary)
                 }
-                if result.status == .couldNotRun, let reason = result.reason {
+                if result.status == .couldNotRun, saysReason, let reason = result.reason {
                     Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 }
             }

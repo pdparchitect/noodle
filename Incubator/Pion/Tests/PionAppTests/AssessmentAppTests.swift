@@ -143,6 +143,57 @@ import XCTest
         XCTAssertTrue(model.store.assessmentRuns(investigation.id).isEmpty)
     }
 
+    func testAMissingConnectionIsSaidOnceForEveryCheck() async throws {
+        let avery = try agent()
+        let assessment = try model.openAssessment(PionModel.Draft(title: "Google Workspace assessment", lead: avery.id),
+                                                  policy: .defaults, body: "")
+        let finished = await model.runChecks(on: assessment)
+        let run = try XCTUnwrap(finished)
+        let reason = "Google Workspace Detection isn't connected or given to an agent on this Assessment."
+        XCTAssertEqual(run.sharedProblem?.count, run.results.count)
+        let message = try XCTUnwrap(model.messages(in: assessment.id).last?.body)
+        XCTAssertTrue(message.hasPrefix("Pion's checks ran. \(run.tally)\n\(reason) None of the checks could run."), message)
+        XCTAssertEqual(message.components(separatedBy: "isn't connected").count, 2, "said once:\n\(message)")
+        XCTAssertFalse(message.contains("Policy incomplete"), message)
+    }
+
+    func testAnUnansweredPolicyMarksTheRunIncomplete() async throws {
+        let avery = try agent()
+        var policy = AssessmentPolicy.defaults
+        policy.maxSuperAdmins = nil
+        let assessment = try model.openAssessment(PionModel.Draft(title: "Google Workspace assessment", lead: avery.id),
+                                                  policy: policy, body: "")
+        let finished = await model.runChecks(on: assessment)
+        let run = try XCTUnwrap(finished)
+        XCTAssertEqual(run.unansweredKeys, ["max-super-admins"])
+        let message = try XCTUnwrap(model.messages(in: assessment.id).last?.body)
+        XCTAssertTrue(message.contains("Policy incomplete: it doesn't answer max-super-admins, which 1 check needs."), message)
+        XCTAssertTrue(model.report(of: assessment).contains("**Policy incomplete**: it doesn't answer max-super-admins"))
+    }
+
+    func testTheReportCanBeExportedOnceTheChecksHaveRun() async throws {
+        let avery = try agent()
+        let investigation = try model.open(PionModel.Draft(title: "Beaconing laptop", lead: avery.id))
+        XCTAssertFalse(model.canExportReport(investigation), "An Investigation has no report")
+        let assessment = try model.openAssessment(PionModel.Draft(title: "Google Workspace assessment", lead: avery.id),
+                                                  policy: .defaults, body: "Contractors may use personal phones.")
+        XCTAssertFalse(model.canExportReport(assessment), "Nothing to report until a run is recorded")
+        let destination = root.appendingPathComponent("Report.md")
+        XCTAssertThrowsError(try model.writeReport(of: assessment, to: destination))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+
+        _ = await model.runChecks(on: assessment)
+        XCTAssertTrue(model.canExportReport(assessment))
+        try model.writeReport(of: assessment, to: destination)
+        let written = try String(contentsOf: destination, encoding: .utf8)
+        XCTAssertTrue(written.hasPrefix("# Google Workspace assessment (\(assessment.reference))\n"), written)
+        XCTAssertTrue(written.contains("- Champion: \(model.champion)"), written)
+        XCTAssertTrue(written.contains("### Couldn't run"), written)
+        XCTAssertTrue(written.contains("### Notes\n\nContractors may use personal phones."), written)
+        XCTAssertTrue(AssessmentReport.fileName(of: assessment, runs: model.assessmentRuns(assessment.id))
+            .hasPrefix("Google Workspace assessment 2"))
+    }
+
     func testChecksNeverCallAToolThatChangesThings() async throws {
         let called = Called()
         let stub: AssessmentCall = { tool, _ in await called.add(tool); return Data("{}".utf8) }

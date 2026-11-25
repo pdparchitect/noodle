@@ -1504,6 +1504,24 @@ import UniformTypeIdentifiers
 
     func isRunningChecks(_ id: UUID) -> Bool { checkRuns[id] != nil }
 
+    /// Whether an Assessment has a run of its checks to report on.
+    func canExportReport(_ investigation: Investigation) -> Bool {
+        investigation.isAssessment && !assessmentRuns(investigation.id).isEmpty
+    }
+
+    /// An Assessment's report in Markdown, as its latest run left it.
+    func report(of assessment: Investigation) -> String {
+        AssessmentReport.markdown(investigation: store.investigation(assessment.id) ?? assessment, record: caseRecord(assessment.id),
+                                  runs: assessmentRuns(assessment.id),
+                                  policy: try? String(contentsOf: store.policyURL(assessment.id), encoding: .utf8), name: name(of:))
+    }
+
+    /// Writes an Assessment's report to `url`; one with no run yet has nothing to report.
+    func writeReport(of assessment: Investigation, to url: URL) throws {
+        guard canExportReport(assessment) else { throw CaseError("\(assessment.reference) has no run of its checks to report on yet.") }
+        try Data(report(of: assessment).utf8).write(to: url, options: .atomic)
+    }
+
     /// The adapters an Assessment of Google Workspace reads through: Detection's, and Containment's for what only it reads.
     static let detectionAdapter = "google-workspace", containmentAdapter = "google-workspace-containment"
 
@@ -1556,7 +1574,7 @@ import UniformTypeIdentifiers
         var detectionCall: AssessmentCall?, containmentCall: AssessmentCall?
         if let detection { detectionCall = await Self.readOnly(call(detection), on: detection) }
         if let containment { containmentCall = await Self.readOnly(call(containment), on: containment) }
-        let run = await AssessmentRunner.run(GoogleWorkspaceChecks.all, policy: policy, connection: detection?.name,
+        let run = await AssessmentRunner.run(GoogleWorkspaceChecks.all, policy: policy, policyBody: policyBody(of: assessment), connection: detection?.name,
                                              detection: detectionCall, containment: containmentCall, now: now)
         let previous = store.assessmentRuns(id).last
         do {
