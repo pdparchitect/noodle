@@ -502,6 +502,67 @@ final class GoogleTests: XCTestCase {
         XCTAssertEqual(queryItems(service.requests.last)["query"], "email:m.okafor@kestrel.example")
     }
 
+    /// Every phone and tablet in the domain, read page after page, counted and listed longest unsynced first, so one
+    /// sold a year ago but still approved stands out; and narrowed by owner, status or how long since it synced.
+    func testAllDevicesListsTheDomainsPhonesLongestUnsyncedFirst() async throws {
+        let path = "/admin/directory/v1/customer/my_customer/devices/mobile"
+        let ago = { (days: Double) in ISO8601DateFormatter().string(from: Date().addingTimeInterval(-days * 86400 - 3600)) }
+        let first = #"{"mobiledevices":[{"resourceId":"d-old","email":["a.sold@kestrel.example"],"model":"iPhone 12","os":"iOS 16.1","type":"IOS_SYNC","status":"APPROVED","firstSync":"2023-02-01T10:00:00.000Z","lastSync":"\#(ago(400))"},{"resourceId":"d-new","email":["b@kestrel.example"],"model":"Pixel 8","os":"Android 15","type":"ANDROID","status":"APPROVED","lastSync":"\#(ago(1))","deviceCompromisedStatus":"Compromise detected","managedAccountIsOnOwnerProfile":false}],"nextPageToken":"p2"}"#
+        let second = #"{"mobiledevices":[{"resourceId":"d-never","email":["c@kestrel.example"],"model":"Galaxy S23","status":"PENDING","lastSync":"1970-01-01T00:00:00.000Z"},{"resourceId":"d-blocked","email":["m.okafor@kestrel.example"],"model":"iPad","type":"IOS_SYNC","status":"BLOCKED","lastSync":"\#(ago(200))","deviceCompromisedStatus":"No compromise detected"},{"resourceId":"d-other","email":["m.okafor.sabia@kestrel.example"],"model":"iPhone 15","status":"APPROVED","lastSync":"\#(ago(10))"}]}"#
+        let service = FakeService()
+        service.sequences[path] = [(200, first), (200, second)]
+        let all = try await callTool(GoogleWorkspace.adapter, "all-devices", "{}", on: service, in: workspace)
+        XCTAssertFalse(all.isError, all.text)
+        XCTAssertEqual(service.requests.count, 2, "the second page was not read")
+        let asked = queryItems(service.requests.first), next = queryItems(service.requests.last)
+        XCTAssertEqual(asked["maxResults"], "100")
+        XCTAssertEqual(asked["projection"], "FULL")
+        XCTAssertTrue(asked["fields"]?.contains("lastSync") == true && asked["fields"]?.contains("nextPageToken") == true, asked["fields"] ?? "")
+        XCTAssertNil(asked["query"], "the whole domain is not searched")
+        XCTAssertEqual(next["pageToken"], "p2")
+        let lines = all.text.split(separator: "\n").map(String.init)
+        XCTAssertEqual(lines.first, "5 phones and tablets in the domain.")
+        XCTAssertEqual(lines.dropFirst().first, "1 approved but not synced for 90 days or more, 1 blocked, 1 pending, 1 found compromised by Google.")
+        let order = lines.compactMap { line in ["d-never", "d-old", "d-blocked", "d-other", "d-new"].first { line.hasSuffix("resource ID " + $0) } }
+        XCTAssertEqual(order, ["d-old", "d-other", "d-new", "d-never", "d-blocked"], all.text)
+        let old = try XCTUnwrap(lines.first { $0.hasPrefix("a.sold@kestrel.example: ") })
+        XCTAssertTrue(old.contains("iPhone 12 (iOS 16.1, IOS_SYNC, APPROVED)") && old.contains("(400 days ago)")
+                      && old.contains("first synced 2023-02-01T10:00:00.000Z"), old)
+        XCTAssertTrue(lines.contains { $0.hasPrefix("c@kestrel.example: ") && $0.contains("never synced") && !$0.contains("first synced") }, all.text)
+        let new = try XCTUnwrap(lines.first { $0.hasPrefix("b@kestrel.example: ") })
+        XCTAssertTrue(new.contains("Compromise detected") && new.contains("account in a work profile"), new)
+        XCTAssertFalse(lines.contains { $0.hasPrefix("m.okafor@") && $0.contains("ompromise") }, "a device Google found clean is not flagged")
+        XCTAssertEqual(all.structured?["stale"] as? Int, 1)
+        XCTAssertEqual(all.structured?["compromised"] as? Int, 1)
+        XCTAssertEqual(all.structured?["incomplete"] as? Bool, false)
+        XCTAssertEqual((all.structured?["mobiledevices"] as? [[String: Any]])?.count, 5)
+
+        // One owner's, by the Directory's search, keeping only theirs and not an address that starts the same.
+        service.answers[path] = (200, second)
+        let owned = try await callTool(GoogleWorkspace.adapter, "all-devices", #"{"owner":"M.Okafor@kestrel.example"}"#, on: service, in: workspace)
+        XCTAssertEqual(queryItems(service.requests.last)["query"], "email:m.okafor@kestrel.example")
+        XCTAssertTrue(owned.text.hasPrefix("1 phone or tablet syncing m.okafor@kestrel.example.") && owned.text.contains("d-blocked")
+                      && !owned.text.contains("d-other"), owned.text)
+
+        // By status and by days since the last sync, which also sets what counts as stale.
+        service.answers[path] = nil
+        service.sequences[path] = [(200, first), (200, second)]
+        let blocked = try await callTool(GoogleWorkspace.adapter, "all-devices", #"{"status":"blocked"}"#, on: service, in: workspace)
+        XCTAssertTrue(blocked.text.hasPrefix("1 of the 5 phones and tablets in the domain match status BLOCKED.") && blocked.text.contains("d-blocked")
+                      && !blocked.text.contains("d-old"), blocked.text)
+        service.sequences[path] = [(200, first), (200, second)]
+        let stale = try await callTool(GoogleWorkspace.adapter, "all-devices", #"{"inactiveDays":300,"limit":1}"#, on: service, in: workspace)
+        let staleLines = stale.text.split(separator: "\n").map(String.init)
+        XCTAssertEqual(staleLines.first, "2 of the 5 phones and tablets in the domain match not synced for 300 days or more.")
+        XCTAssertTrue(staleLines.contains("1 approved but not synced for 300 days or more, 0 blocked, 1 pending, 0 found compromised by Google."), stale.text)
+        XCTAssertTrue(stale.text.contains("d-old") && !stale.text.contains("d-never") && !stale.text.contains("d-blocked"), stale.text)
+        XCTAssertTrue(staleLines.last?.hasPrefix("1 more matched than are listed") == true, stale.text)
+        XCTAssertEqual(stale.structured?["matched"] as? Int, 2)
+
+        let wrong = try await callTool(GoogleWorkspace.adapter, "all-devices", #"{"status":"LOST"}"#, on: service, in: workspace)
+        XCTAssertTrue(wrong.isError && wrong.text.contains("APPROVED"), wrong.text)
+    }
+
     // MARK: Investigation
 
     /// An account's 2-step verification enforcement, and recovery details an attacker would change, flagged when they
@@ -1027,6 +1088,8 @@ final class GoogleTests: XCTestCase {
             ("user-groups", #"{"user":"a@kestrel.example"}"#, directory + "/groups",
              (200, #"{"groups":[{"email":"g@kestrel.example"}],"nextPageToken":"more"}"#)),
             ("user-devices", #"{"user":"a@kestrel.example"}"#, directory + "/customer/my_customer/devices/mobile",
+             (200, #"{"mobiledevices":[{"email":["a@kestrel.example"],"model":"Pixel"}],"nextPageToken":"more"}"#)),
+            ("all-devices", "{}", directory + "/customer/my_customer/devices/mobile",
              (200, #"{"mobiledevices":[{"email":["a@kestrel.example"],"model":"Pixel"}],"nextPageToken":"more"}"#)),
             ("admin-roles", "{}", directory + "/customer/my_customer/roleassignments",
              (200, #"{"items":[{"roleId":"r","assignedTo":"u","assigneeType":"USER"}],"nextPageToken":"more"}"#)),

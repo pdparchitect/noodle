@@ -39,7 +39,9 @@ public enum GoogleWorkspace {
         window and narrow it. To audit who holds what, \
         admin-roles lists the super admins and every admin role with what it allows and who holds it. For a breach's \
         scope, users finds accounts by search, such as isEnrolledIn2Sv=false; user-groups and user-devices show what a user \
-        reaches through groups and which phones hold their data; and the takeout and vault reports show what was exported. \
+        reaches through groups and which phones hold their data; all-devices lists every phone and tablet in the domain, \
+        longest unsynced first, with whose it is, to find one sold or lost but still allowed in; and the takeout and vault \
+        reports show what was exported. \
         To investigate an account, start with user-timeline, everything it and admins did to it in one list; to follow an \
         address, ip-activity; for a deleted account, users with deleted true gives the profile ID to read its history by. \
         activity filters on an event's details, such as doc_id== for who opened a file or client_id== for an app. In a \
@@ -97,7 +99,7 @@ public enum GoogleWorkspace {
 
     /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
     static let operations: [any ServiceOperation] = [
-        Activity(), SecurityEvents(), AdminRoles(), Users(), UserGroups(), UserDevices(), GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(),
+        Activity(), SecurityEvents(), AdminRoles(), Users(), UserGroups(), UserDevices(), AllDevices(), GroupMembers(), OAuthApps(), AppActivity(), UserTimeline(),
         IPActivity(), LinkClicks(), Domains(), CheckAccess(), DriveExposure(), MailTrace(), ClientActivity(),
         UserState(), Tokens(), Apps(), AppPasswords(), ContainmentDevices(), ContainmentCheckAccess(), SignOut(), ResetPassword(), RemoveRecovery(),
         RevokeToken(), DeleteAppPassword(), InvalidateBackupCodes(), DeviceBlock(), Suspend(), Unsuspend(),
@@ -1531,6 +1533,115 @@ extension GoogleWorkspace {
         }
     }
 
+    /// Every phone and tablet that syncs an account in the domain, whose it is and when it last synced, longest unsynced
+    /// first, so an assessment finds devices still allowed in long after anyone used them, such as a phone sold or lost
+    /// but never removed. Google keeps a device approved however long it has not synced. Laptops and desktops are not
+    /// listed, as for user-devices. Only the fields shown are asked for, as a device's full record lists its apps.
+    struct AllDevices: ServiceOperation {
+        struct Input: Decodable, Sendable { let owner: String?, inactiveDays: Int?, status: String?, limit: Int? }
+        static let name = "all-devices"
+        static let jobs: Set<ToolJob> = [.audit]
+        static let summary = "Every phone and tablet in the domain, approved ones first and longest unsynced first, with whose it is, its model, OS, status, first and last sync, whether Google finds it compromised and its resource ID, and counts of those approved but not synced for months, blocked, pending and compromised; optionally only one owner's, one status or those not synced for some days."
+        /// The states Google gives a device (https://developers.google.com/workspace/admin/directory/reference/rest/v1/mobiledevices).
+        static let statuses = ["APPROVED", "PENDING", "BLOCKED", "UNPROVISIONED", "WIPING", "WIPED"]
+        static let input = JSONSchema.object([
+            "owner": .string("Only the devices that sync this account, by email. Everyone's when left out."),
+            "inactiveDays": .integer("Only devices that have not synced for at least this many days, or never. Also how long an approved device goes unsynced before it is counted; 90 when left out.",
+                                     minimum: 1, maximum: 3650),
+            "status": .string("Only devices in this state.", oneOf: statuses),
+            "limit": .integer("How many devices to list, at most; the counts cover every device that matched.", minimum: 1, maximum: 5000),
+        ])
+        static let fields = "nextPageToken,mobiledevices(resourceId,deviceId,email,model,os,type,status,firstSync,lastSync,deviceCompromisedStatus,"
+            + "managedAccountIsOnOwnerProfile,supportsWorkProfile)"
+
+        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
+            let limit = input.limit ?? 500
+            guard (1...5000).contains(limit) else { throw ServiceError.input("Ask for between 1 and 5000 devices.") }
+            let staleDays = input.inactiveDays ?? 90
+            guard (1...3650).contains(staleDays) else { throw ServiceError.input("Ask for between 1 and 3650 days.") }
+            let owner = try input.owner.map(ServiceInput.email)
+            let status = input.status?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            if let status, !Self.statuses.contains(status) {
+                throw ServiceError.input("A device's status is one of \(Self.statuses.joined(separator: ", ")).")
+            }
+            var query: [String: String?] = ["projection": "FULL", "fields": Self.fields]
+            // The search matches addresses that start the same too, so only the owner's own are kept below.
+            if let owner { query["query"] = "email:\(owner)" }
+            let (read, more): ([MobileDevice], Bool) = try await GoogleWorkspace.read(.mobileDevices) {
+                try await GoogleWorkspace.listAll(service.at(host: "admin.googleapis.com"),
+                                                  ["admin", "directory", "v1", "customer", "my_customer", "devices", "mobile"],
+                                                  query: query, pageSize: 100, limit: 10000)
+            }
+            // Days since each device last synced; nil for one that never did, which Google may give as 1970.
+            let now = Date()
+            let age = { (device: MobileDevice) -> Int? in
+                guard let synced = ServiceAlert.time(device.lastSync), synced.timeIntervalSince1970 > 86400 else { return nil }
+                return max(0, Int(now.timeIntervalSince(synced) / 86400))
+            }
+            let isStale = { (device: MobileDevice) in age(device).map { $0 >= staleDays } ?? true }
+            // An approved device can still reach the accounts; one blocked, wiped or never provisioned cannot.
+            let isApproved = { (device: MobileDevice) in device.status?.uppercased() == "APPROVED" }
+            let pool = owner.map { owner in read.filter { ($0.email ?? []).contains { $0.lowercased() == owner } } } ?? read
+            let matched = pool.filter { device in
+                (status.map { device.status?.uppercased() == $0 } ?? true) && (input.inactiveDays == nil || isStale(device))
+            }.sorted { a, b in
+                if isApproved(a) != isApproved(b) { return isApproved(a) }
+                let (x, y) = (age(a) ?? .max, age(b) ?? .max)
+                return x != y ? x > y : (a.email?.first ?? "") < (b.email?.first ?? "")
+            }
+            let listed = Array(matched.prefix(limit))
+            let unused = matched.filter { isApproved($0) && isStale($0) }
+            let stale = unused.count, never = unused.filter { age($0) == nil }.count
+            let blocked = matched.filter { $0.status?.uppercased() == "BLOCKED" }.count, pending = matched.filter { $0.status?.uppercased() == "PENDING" }.count
+            let compromised = matched.filter { GoogleWorkspace.isCompromised($0) }.count
+
+            let plural = { (count: Int, one: String, many: String) in "\(count) \(count == 1 ? one : many)" }
+            let whose = owner.map { "syncing \($0)" } ?? "in the domain"
+            let filters = [status.map { "status \($0)" }, input.inactiveDays.map { "not synced for \($0) days or more" }].compactMap { $0 }
+            var lines: [String] = []
+            if pool.isEmpty {
+                lines.append(owner.map { "\($0) syncs no mobile devices." } ?? "No phones or tablets sync any account in the domain.")
+            } else if filters.isEmpty {
+                lines.append("\(plural(pool.count, "phone or tablet", "phones and tablets")) \(whose).")
+            } else {
+                lines.append("\(matched.count) of the \(plural(pool.count, "phone or tablet", "phones and tablets")) \(whose) match \(filters.joined(separator: " and ")).")
+            }
+            if !matched.isEmpty {
+                lines.append("\(stale) approved but not synced for \(staleDays) days or more\(never > 0 ? " (\(never) never synced)" : ""), \(blocked) blocked, "
+                             + "\(pending) pending, \(compromised) found compromised by Google.")
+                lines.append("Approved first, then longest unsynced first: a device sold, lost or replaced stops syncing but stays approved until an admin removes it.")
+            }
+            for device in listed {
+                let owners = (device.email ?? []).joined(separator: ", ")
+                var parts = ["\(device.model ?? "A device") (\([device.os, device.type, device.status].compactMap { $0 }.joined(separator: ", ")))"]
+                parts.append(age(device).map { "last synced \(device.lastSync ?? "?") (\(plural($0, "day", "days")) ago)" } ?? "never synced")
+                if let first = device.firstSync, ServiceAlert.time(first).map({ $0.timeIntervalSince1970 > 86400 }) == true { parts.append("first synced \(first)") }
+                if GoogleWorkspace.isCompromised(device) { parts.append(device.deviceCompromisedStatus ?? "compromised") }
+                if let profile = device.managedAccountIsOnOwnerProfile { parts.append(profile ? "account on the main profile" : "account in a work profile") }
+                parts.append("resource ID \(device.resourceId ?? "?")")
+                lines.append("\(owners.isEmpty ? "No owner listed" : owners): " + parts.joined(separator: ", "))
+            }
+            if matched.count > listed.count {
+                lines.append("\(matched.count - listed.count) more matched than are listed; narrow by owner, status or inactiveDays, or raise limit.")
+            }
+            if more { lines.append(GoogleWorkspace.incomplete("devices") + " The counts cover only those read.") }
+            struct Kept: Encodable {
+                let mobiledevices: [MobileDevice]; let matched: Int, total: Int, staleDays: Int, stale: Int, neverSynced: Int, blocked: Int, pending: Int
+                let compromised: Int, incomplete: Bool
+            }
+            return try ServiceResult(text: lines.joined(separator: "\n"),
+                                     structured: Kept(mobiledevices: listed, matched: matched.count, total: pool.count, staleDays: staleDays, stale: stale,
+                                                      neverSynced: never, blocked: blocked, pending: pending, compromised: compromised, incomplete: more))
+        }
+    }
+
+    /// Whether Google finds a device compromised, such as rooted or jailbroken. It says "No compromise detected" for
+    /// one it checked and found clean; anything else it says is shown rather than hidden.
+    static func isCompromised(_ device: MobileDevice) -> Bool {
+        guard let said = device.deviceCompromisedStatus?.trimmingCharacters(in: .whitespaces), !said.isEmpty else { return false }
+        return said.lowercased() != "no compromise detected"
+    }
+
     /// A phone or tablet as the Directory lists it.
     struct MobileDevice: Codable, Sendable {
         let resourceId: String?, deviceId: String?, email: [String]?, model: String?, os: String?, type: String?, status: String?
@@ -1553,7 +1664,7 @@ extension GoogleWorkspace {
     /// A device on one line: its model, OS, type, status, last sync and whether Google finds it compromised.
     static func described(_ device: MobileDevice) -> String {
         "\(device.model ?? "A device") (\([device.os, device.type, device.status].compactMap { $0 }.joined(separator: ", "))), last synced \(device.lastSync ?? "?")"
-            + (device.deviceCompromisedStatus.map { $0 == "No compromise detected" || $0.isEmpty ? "" : ", \($0)" } ?? "")
+            + (isCompromised(device) ? ", \(device.deviceCompromisedStatus ?? "")" : "")
     }
 
     /// What one thing the tools read needs from the setup, to say exactly what to change when Google refuses it.

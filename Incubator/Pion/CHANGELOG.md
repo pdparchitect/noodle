@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Google Workspace Detection's `all-devices` lists every phone and tablet in the domain: who owns each, its model, OS and status, when it first and last synced, whether Google finds it compromised and its resource ID, approved ones first and longest unsynced first, with counts of those approved but not synced for months, blocked, pending and compromised, so an assessment finds a phone sold or lost long ago but still approved. Google Workspace Detection's `user-devices` now shows any compromise status Google gives other than "No compromise detected", as `all-devices` does. Agents can ask for one owner's, one status, or only those not synced for a number of days. It uses the read access to mobile devices the tool already has, so nothing changes in its setup.
+
 ### Changed
 
 - Each service's Detection and Containment tools now draw on one list of its operations, each naming whether it serves detection, audit or containment, so an Audit tool of its own can later offer its share; until then Detection keeps the audit reads it has, but never one that needs Containment's access, such as Google Workspace's tokens. Every tool offers exactly what it did.

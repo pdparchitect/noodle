@@ -17,9 +17,9 @@ final class ToolJobTests: XCTestCase {
 
     private static let services = [
         Service(name: "GoogleWorkspace", operations: GoogleWorkspace.operations, detection: GoogleWorkspace.adapter, containment: GoogleWorkspace.containmentAdapter,
-                detectionTools: ["activity", "security-events", "admin-roles", "users", "user-groups", "user-devices", "group-members", "oauth-apps",
-                                 "app-activity", "user-timeline", "ip-activity", "link-clicks", "domains", "check-access", "drive-exposure", "mail-trace",
-                                 "client-activity"],
+                detectionTools: ["activity", "security-events", "admin-roles", "users", "user-groups", "user-devices", "all-devices", "group-members",
+                                 "oauth-apps", "app-activity", "user-timeline", "ip-activity", "link-clicks", "domains", "check-access", "drive-exposure",
+                                 "mail-trace", "client-activity"],
                 containmentTools: ["user", "tokens", "apps", "app-passwords", "devices", "check-access", "sign-out", "reset-password", "remove-recovery",
                                    "revoke-token", "delete-app-password", "invalidate-backup-codes", "device-block", "suspend", "unsuspend"],
                 detectionRequests: 8, containmentRequests: 8),

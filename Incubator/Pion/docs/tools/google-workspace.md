@@ -76,6 +76,16 @@ roles, groups, mobile devices and domains. With it agents can investigate an acc
   recovery email and phone (flagged when they lead outside the domain), aliases.
 - **What it reaches:** its groups and who else reads them, flagging outside
   members; the phones and tablets that sync its mail and files.
+- **Every phone and tablet in the domain:** who owns each, its model, OS and
+  status, when it first and last synced, and whether Google finds it
+  compromised, with counts of those approved but not synced for 90 days or
+  more, blocked, pending and compromised. Approved ones come first, longest
+  unsynced first: a
+  phone sold, lost or replaced stops syncing but stays approved until an admin
+  removes it. Agents can ask for one person's, one status, or only those not
+  synced for a number of days. Google does not say whether a device is
+  personal or company-owned; its type says how it syncs, and for Android
+  whether the account is in a work profile.
 - **OAuth apps:** every app people granted access in the last six months, by
   client ID and scopes, with who granted and revoked it, and what each app
   pulled through its API calls and how much data. Apps an admin gave
