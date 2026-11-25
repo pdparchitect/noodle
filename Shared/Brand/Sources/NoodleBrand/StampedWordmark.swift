@@ -35,8 +35,8 @@ public struct StampedWordmark: View {
         self.stamped = stamped
     }
 
-    private static let drop = 0.15
-    private static let settle = 0.17
+    private static let drop = 0.12
+    private static let settle = 0.13
     /// A tilt for each letter in the air, alternating so the word doesn't lean one way.
     private static let tilts: [Double] = [-8, 6, -5, 7, -6, 5]
 
@@ -95,7 +95,7 @@ public struct StampedWordmark: View {
             return
         }
         do {
-            try await Task.sleep(for: .milliseconds(350))
+            try await Task.sleep(for: .milliseconds(250))
             for index in letters.indices {
                 // Falls faster as it nears the page, then strikes.
                 withAnimation(.timingCurve(0.55, 0, 1, 0.45, duration: Self.drop)) { dropped = index + 1 }
@@ -103,7 +103,7 @@ public struct StampedWordmark: View {
                 landed = index + 1
                 try await Task.sleep(for: .seconds(Self.settle))
             }
-            try await Task.sleep(for: .milliseconds(200))
+            try await Task.sleep(for: .milliseconds(150))
         } catch {
             return
         }
