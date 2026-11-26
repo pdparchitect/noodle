@@ -52,6 +52,7 @@ under a uniform `.icon` extension. They are bundled, never remotely fetched by t
 | evernote.icon (2026-09-29) | https://evernote.com/favicon.ico |
 | exa.icon | https://exa.ai/images/favicon-32x32.png |
 | fal.icon (2026-10-06) | https://fal.ai/apple-touch-icon.png |
+| fastmail.icon (2026-11-26) | https://www.fastmail.com/apple-touch-icon.png |
 | fathom.icon (2026-10-06) | https://fathom.ai (fathom_favicon.png on its Webflow CDN) |
 | fireflies.icon | https://fireflies.ai/favicon.ico |
 | gamma.icon (2026-10-06) | https://www.google.com/s2/favicons?domain=gamma.app&sz=128 |

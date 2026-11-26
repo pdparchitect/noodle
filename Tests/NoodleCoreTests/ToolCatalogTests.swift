@@ -57,7 +57,7 @@ final class ToolCatalogTests: XCTestCase {
                                "datadog": "https://mcp.datadoghq.com/api/unstable/mcp-server/mcp",
                                "socket": "https://mcp.socket.dev/", "semgrep": "https://mcp.semgrep.ai/mcp",
                                "elevenlabs": "https://api.us.elevenlabs.io/v1/mcp", "coinbase": "https://agents.coinbase.com/mcp",
-                               "kling": "https://kling.ai/mcp", "inkbox": "https://inkbox.ai/mcp",
+                               "kling": "https://kling.ai/mcp", "fastmail": "https://api.fastmail.com/mcp", "inkbox": "https://inkbox.ai/mcp",
                                "krea": "https://api.krea.ai/mcp", "basecamp": "https://mcp.basecamp.com/mcp",
                                "wordpress": "https://public-api.wordpress.com/wpcom/v2/mcp/v1"] {
             XCTAssertEqual(ToolCatalog.definition(forMCPEndpoint: URL(string: endpoint)!)?.iconName, id)

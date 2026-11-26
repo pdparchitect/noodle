@@ -10,6 +10,7 @@ All notable changes to Noodle are documented here, following
 
 - Devin is a harness, off until turned on in **Settings → Harness**. Noodle can install it, signs in through Devin's page in your browser into a login of its own, offers the models your Devin account allows, shows the account it is signed in to, and supports profiles and restricted bots like the other harnesses. It leaves out the plugins and MCP servers you added to your Devin account, and its self-updates are turned off; Devin has no setting to turn off its usage reports, which follow your Devin account's setting.
 - Settings shows the GitHub account Copilot is signed in to, for its own row and each profile, as it does for Codex and Claude Code.
+- Fastmail can be added as a tool.
 
 ## [0.98.0] - 2026-11-26
 

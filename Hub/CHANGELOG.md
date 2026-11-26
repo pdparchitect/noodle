@@ -6,6 +6,7 @@
 
 - Devin is a harness, off until turned on: the Hub can install it, signs in through Devin's page in the browser, offers the models the Devin account allows, shows the account it is signed in to and lends it like the other harnesses. It leaves out the plugins and MCP servers added to the Devin account, and its self-updates are turned off.
 - Settings shows the GitHub account Copilot is signed in to, for its own row and each profile, as it does for Codex and Claude Code.
+- Fastmail can be added as a tool.
 
 ## [0.61.0] - 2026-11-26
 
