@@ -8,7 +8,7 @@ let usage = """
 USAGE: noodled <command> [--config <path>]
 
 COMMANDS:
-  setup            Sets up this machine as a Noodle Server, step by step, asking before each change.
+  setup            Sets up this Linux machine as a Noodle Server, step by step, asking before each change.
   check            Reads the configuration and reports every problem in it.
   run              Serves devices until stopped.
   invite <user>    Prints a link that pairs one device for someone in the configuration.
@@ -18,11 +18,11 @@ COMMANDS:
                    --profile <name>  Signs in that profile of the harness instead.
 
 OPTIONS:
-  --config <path>    The configuration file (default: /etc/noodled/noodled.yaml).
+  --config <path>    The configuration file (default: \(ServerConfiguration.defaultFile.path)).
 """
 
 var arguments = Array(CommandLine.arguments.dropFirst())
-var configurationFile = URL(fileURLWithPath: "/etc/noodled/noodled.yaml")
+var configurationFile = ServerConfiguration.defaultFile
 if let index = arguments.firstIndex(of: "--config") {
     guard index + 1 < arguments.count else {
         FileHandle.standardError.write(Data("--config needs the path to a configuration file.\n".utf8))
@@ -63,19 +63,21 @@ case "check":
         let unsigned = ServerLogins(configuration: configuration, profiles: HarnessProfileStore(root: configuration.data)).unsigned()
         if !unsigned.isEmpty { print("\nBots cannot start on these logins yet:\n" + unsigned.map { "  \($0)" }.joined(separator: "\n")) }
     }
-    #if os(Linux)
-    if let problem = HarnessSandbox().problem() {
+    #if os(Linux) || os(macOS)
+    if let problem = PlatformHarnessIsolation().problem() {
         print("\n\(problem)")
         exit(1)
     }
     #endif
 case "run":
     let configuration = loadConfiguration()
-    #if os(Linux)
-    if let problem = HarnessSandbox().problem() {
+    #if os(Linux) || os(macOS)
+    if let problem = PlatformHarnessIsolation().problem() {
         print("noodled could not start: \(problem)")
         exit(1)
     }
+    #endif
+    #if os(Linux)
     let listen = QUICListener.listen(certificates: configuration.data.appendingPathComponent("Link/Certificates", isDirectory: true))
     #else
     let listen = LinkServer.listen
@@ -148,6 +150,10 @@ case "invite":
         exit(1)
     }
 case "setup":
+    #if !os(Linux)
+    print("noodled setup is for Linux. Here, write \(configurationFile.path) from the example beside noodled, then run noodled check and noodled run.")
+    exit(1)
+    #else
     guard getuid() == 0 else {
         print("Run setup as root: sudo \(CommandLine.arguments[0]) setup")
         exit(1)
@@ -165,6 +171,7 @@ case "setup":
         print(error.localizedDescription)
         exit(1)
     }
+    #endif
 case "login":
     var options = Array(arguments.dropFirst())
     var profile: String?

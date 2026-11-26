@@ -56,7 +56,15 @@ final class ServerConfigurationTests: XCTestCase {
 
     func testAlmostEverythingHasADefault() throws {
         let configuration = try ServerConfiguration(yaml: "users:\n  Ada: {}\n")
+        #if os(macOS)
+        // On a Mac, with the account that runs it.
+        let folder = FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Application Support/Noodle Server"
+        XCTAssertEqual(configuration.data.path, folder + "/Data")
+        XCTAssertEqual(ServerConfiguration.defaultFile.path, folder + "/noodled.yaml")
+        #else
         XCTAssertEqual(configuration.data, URL(fileURLWithPath: "/var/lib/noodled"))
+        XCTAssertEqual(ServerConfiguration.defaultFile.path, "/etc/noodled/noodled.yaml")
+        #endif
         XCTAssertEqual(configuration.port, 38_415)
         XCTAssertNil(configuration.address)
         XCTAssertFalse(configuration.name.isEmpty)

@@ -3,9 +3,7 @@ import Glibc
 #endif
 import Foundation
 import NoodleCore
-#if os(Linux)
 import NoodleRuntime
-#endif
 
 /// How a bot's harness runs under bubblewrap: the system read-only, the harness's installation read-only,
 /// the bot's package read-only and its workspace writable. The rest of the server's data, the admin's home
@@ -38,14 +36,19 @@ public struct HarnessSandbox: Sendable {
         arguments += ["--ro-bind-try", "/opt", "/opt"]
         for name in Self.settings { arguments += ["--ro-bind-try", "/etc/" + name, "/etc/" + name] }
         arguments += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
-        let installation = program.deletingLastPathComponent()
-        let root = installation.lastPathComponent == "bin" ? installation.deletingLastPathComponent() : installation
+        let root = Self.installation(of: program)
         arguments += ["--ro-bind", root.path, root.path]
         arguments += ["--ro-bind", AgentStorageLayout(workspace: workspace).package.path, AgentStorageLayout(workspace: workspace).package.path]
         arguments += ["--bind", workspace.path, workspace.path]
         for (key, value) in environment.sorted(by: { $0.key < $1.key }) { arguments += ["--setenv", key, value] }
         arguments += ["--chdir", workspace.path, "--", program.path] + command
         return arguments
+    }
+
+    /// Where the harness at `program` is installed: the program's folder, or the folder above a `bin`.
+    static func installation(of program: URL) -> URL {
+        let installation = program.deletingLastPathComponent()
+        return installation.lastPathComponent == "bin" ? installation.deletingLastPathComponent() : installation
     }
 
     #if os(Linux)
@@ -86,7 +89,7 @@ public struct HarnessSandbox: Sendable {
         let home = home(workspace: workspace)
         let temporary = workspace.appendingPathComponent(".noodle/tmp", isDirectory: true)
         var environment = [
-            "HOME": home.path, "PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C.UTF-8", "TMPDIR": temporary.path,
+            "HOME": home.path, "PATH": searchPath(home: home), "LANG": "C.UTF-8", "TMPDIR": temporary.path,
             "NOODLE_AGENT_ID": AgentStorageLayout(workspace: workspace).package.lastPathComponent,
             "NOODLE_WORKSPACE": workspace.path,
         ].merging(provider.reportingOffEnvironment) { own, _ in own }
@@ -107,10 +110,32 @@ public struct HarnessSandbox: Sendable {
             throw HarnessSetupError("noodled runs only Claude Code and Codex.")
         }
     }
+
+    /// Where a bot's commands are looked for. On a Mac, where Noodle's own restricted bots look: the developer
+    /// tools' come first.
+    static func searchPath(home: URL) -> String {
+        #if os(macOS)
+        RestrictedAgentSandbox.searchPath(home: home)
+        #else
+        "/usr/local/bin:/usr/bin:/bin"
+        #endif
+    }
 }
 
 #if os(Linux)
-/// A bot's harness run by the server itself, under bubblewrap, in place of the Mac's Agent Host.
+extension HarnessSandbox: HarnessIsolation {
+    /// bubblewrap itself, with the harness's whole environment in its arguments. Ending it ends everything in
+    /// the sandbox.
+    public func launch(workspace: URL, program: URL, command: [String], environment: [String: String]) -> HarnessLaunchPlan {
+        HarnessLaunchPlan(name: "bubblewrap", executable: bubblewrap,
+                          arguments: arguments(workspace: workspace, program: program, command: command, environment: environment),
+                          environment: [:], directory: nil, endsGroup: false)
+    }
+}
+#endif
+
+#if os(Linux) || os(macOS)
+/// A bot's harness run by the server itself, in this machine's isolation, in place of the Mac's Agent Host.
 /// Its output arrives in order, and it is reported gone only once all of it has.
 @MainActor public final class SandboxedHarnessConnection: HarnessRuntimeConnection {
     public var onData: ((Data, Bool) -> Void)?
@@ -120,9 +145,8 @@ public struct HarnessSandbox: Sendable {
     private let logins: ServerLogins
     /// A login the bot runs on for now, in place of its own, as when its own ran out.
     private let profileOverride: UUID?
-    private let sandbox: HarnessSandbox
-    private var process: Process?
-    private var input: ProcessInputWriter?
+    private let isolation: any HarnessIsolation
+    private var launcher: (any HarnessLauncher)?
     private var lock: Int32?
     /// The pipes still open and whether the process ended, before its exit is reported.
     private var open = 0
@@ -130,20 +154,21 @@ public struct HarnessSandbox: Sendable {
     private var stopping = false
     private var stopReplies: [(Bool) -> Void] = []
 
-    public init(workspace: URL, logins: ServerLogins, profileOverride: UUID? = nil, sandbox: HarnessSandbox = HarnessSandbox()) {
+    public init(workspace: URL, logins: ServerLogins, profileOverride: UUID? = nil,
+                isolation: any HarnessIsolation = PlatformHarnessIsolation()) {
         self.workspace = workspace
         self.logins = logins
         self.profileOverride = profileOverride
-        self.sandbox = sandbox
+        self.isolation = isolation
     }
 
     public func startHarness(provider: HarnessProvider, agentID: UUID, executablePath: String,
                              extendedAccess: Bool, appsEnabled: Bool, sessionID: UUID?, resumeSession: Bool,
                              modelIdentifier: String?, effortIdentifier: String?,
                              reply: @escaping (Int32, String?) -> Void) {
-        guard process == nil, !stopping else { return reply(0, "Runtime already started or stopping.") }
+        guard launcher == nil, !stopping else { return reply(0, "Runtime already started or stopping.") }
         do {
-            let command = try HarnessSandbox.command(provider: provider, workspace: workspace, sessionID: sessionID,
+            var command = try HarnessSandbox.command(provider: provider, workspace: workspace, sessionID: sessionID,
                                                      resumeSession: resumeSession, model: modelIdentifier, effort: effortIdentifier)
             let program = URL(fileURLWithPath: executablePath).resolvingSymlinksInPath()
             guard FileManager.default.isExecutableFile(atPath: program.path) else {
@@ -168,45 +193,28 @@ public struct HarnessSandbox: Sendable {
                 throw RestrictedHarnessStorage.refused(provider)
             }
             try logins.prepare(provider, login: login, workspace: workspace)
+            command.environment.merge(try isolation.environment(provider: provider, workspace: workspace)) { _, isolation in isolation }
+            let plan = try isolation.launch(workspace: workspace, program: program, command: command.arguments,
+                                            environment: command.environment)
             // Held until the harness is gone, so no second server runs this bot.
             let lock = try AgentRuntimeLock.acquire(layout: AgentStorageLayout(workspace: workspace))
-            let child = Process()
-            child.executableURL = sandbox.bubblewrap
-            child.arguments = sandbox.arguments(workspace: workspace, program: program,
-                                                command: command.arguments, environment: command.environment)
-            child.environment = [:]
-            let input = Pipe(), output = Pipe(), errors = Pipe()
-            child.standardInput = input
-            child.standardOutput = output
-            child.standardError = errors
-            for (handle, isError) in [(output.fileHandleForReading, false), (errors.fileHandleForReading, true)] {
-                handle.readabilityHandler = { [weak self] handle in
-                    let data = handle.availableData
-                    if data.isEmpty { handle.readabilityHandler = nil }
-                    DispatchQueue.main.async {
-                        MainActor.assumeIsolated {
-                            guard let self else { return }
-                            if data.isEmpty { self.closed() } else { self.onData?(data, isError) }
-                        }
-                    }
-                }
-            }
-            child.terminationHandler = { [weak self] child in
-                let status = child.terminationStatus
-                DispatchQueue.main.async { MainActor.assumeIsolated { self?.terminated(status) } }
-            }
-            do { try child.run() } catch {
+            let launcher = PlatformHarnessLauncher()
+            let identifier: Int32
+            do {
+                identifier = try launcher.run(plan, received: { [weak self] data, isError in self?.onData?(data, isError) },
+                                              closed: { [weak self] in self?.closed() },
+                                              exited: { [weak self] status in self?.terminated(status) })
+            } catch {
                 close(lock)
-                throw HarnessSetupError("bubblewrap could not start: \(error.localizedDescription)")
+                throw HarnessSetupError("\(plan.name) could not start: \(error.localizedDescription)")
             }
             self.lock = lock
             open = 2
-            process = child
+            self.launcher = launcher
             // A login the bot renews goes back to be shared, and one renewed elsewhere comes to the bot.
             SharedLogins.shared.add(self, provider: provider, workspace: workspace, loginHome: loginHome, secret: { _, _ in nil },
                                     writeSecret: nil, restricted: true, executable: program, environment: logins.environment(login))
-            self.input = ProcessInputWriter(handle: input.fileHandleForWriting)
-            reply(child.processIdentifier, nil)
+            reply(identifier, nil)
         } catch {
             reply(0, error.localizedDescription)
         }
@@ -214,27 +222,28 @@ public struct HarnessSandbox: Sendable {
 
     public func write(_ data: Data) {
         guard !stopping else { return }
-        input?.write(data) { _ in }
+        launcher?.write(data)
     }
 
-    /// bubblewrap ends everything in the sandbox when it goes, so ending it ends the harness and its tools.
+    /// The harness is asked to end, and ended after 5 seconds if it has not. Its tools end with it: bubblewrap
+    /// ends everything in its sandbox, and elsewhere the launcher ends them.
     public func stop(reply: @escaping (Bool) -> Void) {
-        guard let process, status == nil else { return reply(true) }
+        guard let launcher, status == nil else { return reply(true) }
         stopReplies.append(reply)
         guard !stopping else { return }
         stopping = true
-        kill(process.processIdentifier, SIGTERM)
+        launcher.terminate()
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.status == nil, let process = self.process else { return }
-                kill(process.processIdentifier, SIGKILL)
+                guard let self, self.status == nil, let launcher = self.launcher else { return }
+                launcher.kill()
             }
         }
     }
 
     public func invalidate() {
         stopping = true
-        if let process, status == nil { kill(process.processIdentifier, SIGKILL) }
+        if let launcher, status == nil { launcher.kill() }
     }
 
     private func closed() {
@@ -247,7 +256,6 @@ public struct HarnessSandbox: Sendable {
         SharedLogins.shared.remove(self)
         if let lock { close(lock) }
         lock = nil
-        input = nil
         finish()
     }
 
