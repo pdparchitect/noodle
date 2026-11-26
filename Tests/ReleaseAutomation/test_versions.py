@@ -194,12 +194,13 @@ class VersionTests(unittest.TestCase):
             '[arm64](https://github.com/pdparchitect/noodle/releases/download/terminal-v1.2.3/Noodle-Terminal-linux-arm64.tar.gz) · '
             '[x86_64](https://github.com/pdparchitect/noodle/releases/download/terminal-v1.2.3/Noodle-Terminal-linux-x86_64.tar.gz)'
             '\n\n- A release change.\n')
-        # The server is for Linux, one archive for each processor.
+        # The server is a ZIP for the Mac, and an archive for each Linux processor.
         self.write_version('server', '1.2.3', body='- A release change.')
         result = run('python3', 'scripts/release-versions.py', 'notes', 'server', cwd=self.root)
-        base = 'https://github.com/pdparchitect/noodle/releases/download/server-v1.2.3/Noodle-Server-linux'
+        base = 'https://github.com/pdparchitect/noodle/releases/download/server-v1.2.3/Noodle-Server'
         self.assertEqual(result.stdout,
-            f'Download for Linux on [arm64]({base}-arm64.tar.gz) · [x86_64]({base}-x86_64.tar.gz)\n\n- A release change.\n')
+            f'[Download ZIP for Apple silicon]({base}-macos-arm64.zip) · '
+            f'Linux on [arm64]({base}-linux-arm64.tar.gz) · [x86_64]({base}-linux-x86_64.tar.gz)\n\n- A release change.\n')
         # Container images and the phone app have no macOS app installer.
         for product in ['images', 'mobile']:
             with self.subTest(product=product):

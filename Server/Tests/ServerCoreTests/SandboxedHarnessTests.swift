@@ -1,12 +1,15 @@
-#if os(Linux)
+#if os(Linux) || os(macOS)
+#if canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 import NoodleCore
 @testable import ServerCore
 import XCTest
 
-/// A bot's harness run for real under bubblewrap: it talks over its pipes, works on its own copy of its
-/// login, sees only its own bot, and everything it started ends when it is stopped. Skipped where
-/// bubblewrap cannot make a sandbox.
+/// A bot's harness run for real in this machine's isolation, bubblewrap on Linux and Seatbelt on a Mac: it
+/// talks over its pipes, works on its own copy of its login, sees only its own bot, and everything it started
+/// ends when it is stopped or exits. Skipped where the isolation cannot be made.
 @MainActor final class SandboxedHarnessTests: XCTestCase {
     private var root: URL!
     private var workspace: URL!
@@ -14,9 +17,11 @@ import XCTest
     private var output = Data()
     private var errors = Data()
     private var exited: Int32?
+    /// What had arrived when the harness was reported gone.
+    private var outputAtExit = Data()
 
     override func setUp() async throws {
-        if let problem = HarnessSandbox().problem() { throw XCTSkip(problem) }
+        if let problem = PlatformHarnessIsolation().problem() { throw XCTSkip(problem) }
 
         root = FileManager.default.temporaryDirectory.appendingPathComponent("noodled-\(UUID())").resolvingSymlinksInPath()
         let repository = WorkspaceRepository(rootURL: root)
@@ -51,7 +56,10 @@ import XCTest
     private func start(_ program: URL, provider: HarnessProvider = .claudeCode) async throws -> SandboxedHarnessConnection {
         let connection = SandboxedHarnessConnection(workspace: workspace, logins: logins)
         connection.onData = { [unowned self] data, isError in isError ? errors.append(data) : output.append(data) }
-        connection.onExit = { [unowned self] in exited = $0 }
+        connection.onExit = { [unowned self] in
+            exited = $0
+            outputAtExit = output
+        }
         addTeardownBlock { @MainActor in connection.invalidate() }
         let failure: String? = await withCheckedContinuation { continuation in
             connection.startHarness(provider: provider, agentID: UUID(), executablePath: program.path, extendedAccess: false,
@@ -70,9 +78,33 @@ import XCTest
 
     private var text: String { String(decoding: output, as: UTF8.self) }
 
+    /// The workspace as the kernel spells it, which a Mac's /var differs from.
+    private var workspacePath: String {
+        guard let resolved = realpath(workspace.path, nil) else { return workspace.path }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
+
+    /// A background tool that writes a growing count into `beat` in the workspace, for as long as it runs.
+    private let beating = "(i=0; while true; do i=$((i+1)); echo $i > beat; sleep 0.05; done) &"
+
+    /// Whether the count in `beat` stays where it is: whatever wrote it has ended.
+    private func beatStopped() async throws -> Bool {
+        let beat = workspace.appendingPathComponent("beat")
+        let last = try Data(contentsOf: beat)
+        try await Task.sleep(for: .milliseconds(500))
+        return try Data(contentsOf: beat) == last
+    }
+
+    private func waitForBeat() async throws {
+        let beat = workspace.appendingPathComponent("beat")
+        let deadline = Date().addingTimeInterval(10)
+        while !FileManager.default.fileExists(atPath: beat.path), Date() < deadline { try await Task.sleep(for: .milliseconds(50)) }
+    }
+
     func testTheHarnessTalksOverItsPipesFromItsWorkspace() async throws {
         let connection = try await start(try harness("""
-        echo "cwd=$(pwd)"
+        echo "cwd=$(pwd -P)"
         echo "home=$HOME"
         echo "login=$(cat "$CLAUDE_CONFIG_DIR/.credentials.json")"
         echo "args=$*"
@@ -84,12 +116,24 @@ import XCTest
         connection.write(Data("hello\n".utf8))
         let status = try await waitForExit()
         XCTAssertEqual(status, 3)
-        XCTAssertTrue(text.contains("cwd=\(workspace.path)\n"), text)
+        XCTAssertTrue(text.contains("cwd=\(workspacePath)\n"), text)
         XCTAssertTrue(text.contains("home=\(workspace.path)/.noodle/home\n"), text)
         XCTAssertTrue(text.contains("the-login"), text)
         XCTAssertTrue(text.contains("--input-format stream-json"), text)
         XCTAssertTrue(text.contains("got=hello\n"), text)
         XCTAssertEqual(String(decoding: errors, as: UTF8.self), "oops\n")
+    }
+
+    /// Everything a harness wrote has arrived, in order, by the time it is reported gone.
+    func testTheHarnessIsReportedGoneOnlyAfterAllItsOutput() async throws {
+        _ = try await start(try harness("""
+        i=0
+        while [ $i -lt 2000 ]; do echo "line $i"; i=$((i+1)); done
+        """))
+        let status = try await waitForExit()
+        XCTAssertEqual(status, 0)
+        let expected = (0..<2000).map { "line \($0)\n" }.joined()
+        XCTAssertEqual(String(decoding: outputAtExit, as: UTF8.self), expected)
     }
 
     func testTheHarnessSeesOnlyItsOwnBot() async throws {
@@ -98,7 +142,7 @@ import XCTest
         cat \(root.path)/Agents/other/workspace/memory.md 2>/dev/null || echo "no other bot"
         touch ../agent.json 2>/dev/null || echo "package read-only"
         echo kept > notes.md && echo "workspace writable"
-        ls /home 2>/dev/null | grep -q . && echo "home visible" || echo "no home"
+        { ls /home; ls /Users; } 2>/dev/null | grep -q . && echo "home visible" || echo "no home"
         """))
         let status = try await waitForExit()
         XCTAssertEqual(status, 0)
@@ -109,18 +153,29 @@ import XCTest
     /// Tools a harness leaves running in the background end with it.
     func testStoppingEndsEverythingTheHarnessStarted() async throws {
         let connection = try await start(try harness("""
-        (while true; do date +%s%N > beat; sleep 0.05; done) &
+        \(beating)
         echo started
         exec cat
         """))
-        let beat = workspace.appendingPathComponent("beat")
-        let deadline = Date().addingTimeInterval(10)
-        while !FileManager.default.fileExists(atPath: beat.path), Date() < deadline { try await Task.sleep(for: .milliseconds(50)) }
+        try await waitForBeat()
         let stopped = await withCheckedContinuation { continuation in connection.stop { continuation.resume(returning: $0) } }
         XCTAssertTrue(stopped)
-        let last = try Data(contentsOf: beat)
-        try await Task.sleep(for: .milliseconds(500))
-        XCTAssertEqual(try Data(contentsOf: beat), last, "a background tool kept running")
+        let ended = try await beatStopped()
+        XCTAssertTrue(ended, "a background tool kept running")
+    }
+
+    /// A harness that exits by itself takes its tools with it, so they cannot keep it from being reported gone.
+    func testToolsEndWhenTheHarnessExits() async throws {
+        _ = try await start(try harness("""
+        \(beating)
+        while [ ! -f beat ]; do sleep 0.05; done
+        echo started
+        exit 4
+        """))
+        let status = try await waitForExit()
+        XCTAssertEqual(status, 4)
+        let ended = try await beatStopped()
+        XCTAssertTrue(ended, "a background tool kept running")
     }
 
     func testOnlyClaudeCodeAndCodexRun() async throws {

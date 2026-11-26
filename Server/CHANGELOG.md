@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Noodle Server runs on a Mac with Apple silicon: download the ZIP, then run `noodled check`, `noodled login` and `noodled run` in Terminal. Each bot works in a sandbox of its own, as on Linux, and whatever it started ends with it. The server keeps its file and data in `~/Library/Application Support/Noodle Server`.
+
 ## [0.5.0] - 2026-11-26
 
 ### Changed

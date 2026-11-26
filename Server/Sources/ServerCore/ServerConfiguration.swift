@@ -33,7 +33,16 @@ public struct ServerConfiguration: Equatable, Sendable {
         public var canPairDevices: Bool
     }
 
+    #if os(macOS)
+    /// On a Mac the server keeps its file and its data with the account that runs it.
+    public static let folder = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Application Support/Noodle Server", isDirectory: true)
+    public static let defaultFile = folder.appendingPathComponent("noodled.yaml")
+    public static let defaultData = folder.appendingPathComponent("Data", isDirectory: true)
+    #else
+    public static let defaultFile = URL(fileURLWithPath: "/etc/noodled/noodled.yaml")
     public static let defaultData = URL(fileURLWithPath: "/var/lib/noodled")
+    #endif
     public static let defaultPlan = "Default"
     /// The harnesses the server knows how to run in its sandbox.
     public static let supported: [HarnessProvider] = [.claudeCode, .codex]

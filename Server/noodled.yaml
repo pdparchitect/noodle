@@ -1,9 +1,10 @@
-# Noodle Server's configuration. After changing it, run `noodled check`, then restart the service.
+# Noodle Server's configuration. After changing it, run `noodled check`, then restart the server.
 
 # What devices call this server.
 name: Home Server
 
-# Where the server keeps its data. Only the account noodled runs as may read it.
+# Where the server keeps its data; on a Mac, in Data beside this file. Only the account noodled runs
+# as may read it.
 # data: /var/lib/noodled
 
 # The port devices connect to.
