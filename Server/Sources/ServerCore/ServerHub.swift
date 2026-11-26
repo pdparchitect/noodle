@@ -26,8 +26,9 @@ import NoodleRuntime
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         repository = WorkspaceRepository(rootURL: root)
         try repository.prepare()
-        // Bots run the harnesses the file names, from where it says; on Linux under bubblewrap, by the server itself.
-        #if os(Linux)
+        // Bots run the harnesses the file names, from where it says, by the server itself: under bubblewrap on
+        // Linux, and under Seatbelt on a Mac.
+        #if os(Linux) || os(macOS)
         let logins = ServerLogins(configuration: configuration, profiles: repository.harnessProfiles)
         runtime = AgentRuntimeCoordinator(discovery: HarnessDiscovery(fixed: configuration.harnesses), harnesses: HarnessSelection(),
                                           makeProcess: { [logins] launch in

@@ -68,10 +68,11 @@ def release_notes(product):
     _, tag = version(product)
     basename = 'Noodle' if product == 'noodle' else product.title() if product in INCUBATOR else f'Noodle-{product.title()}'
     download = f'https://github.com/pdparchitect/noodle/releases/download/{tag}/{basename}-arm64'
-    # The server is for Linux: one archive for each processor.
+    # The server is a ZIP for the Mac, and an archive for each Linux processor.
     if product == 'server':
-        base = f'https://github.com/pdparchitect/noodle/releases/download/{tag}/Noodle-Server-linux'
-        return f'Download for Linux on [arm64]({base}-arm64.tar.gz) · [x86_64]({base}-x86_64.tar.gz)\n\n' + body
+        base = f'https://github.com/pdparchitect/noodle/releases/download/{tag}/Noodle-Server'
+        return (f'[Download ZIP for Apple silicon]({base}-macos-arm64.zip) · '
+                f'Linux on [arm64]({base}-linux-arm64.tar.gz) · [x86_64]({base}-linux-x86_64.tar.gz)\n\n' + body)
     # The terminal app is one command-line binary: a ZIP for the Mac, and an archive for each Linux processor.
     if product == 'terminal':
         linux = f'https://github.com/pdparchitect/noodle/releases/download/{tag}/Noodle-Terminal-linux'

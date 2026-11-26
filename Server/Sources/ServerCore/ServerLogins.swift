@@ -65,7 +65,18 @@ public struct ServerLogins: Sendable {
     /// What a harness working on `login` itself runs with, such as to sign in or renew it: the login's
     /// folder in place of a home.
     public func environment(_ login: HarnessProfile) -> [String: String] {
-        profiles.environment(login, over: ["HOME": profiles.loginHome(login).path, "PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C.UTF-8"])
+        profiles.environment(login, over: ["HOME": profiles.loginHome(login).path, "PATH": Self.searchPath, "LANG": "C.UTF-8"])
+    }
+
+    /// Where a harness working on a login looks for programs. On a Mac, Claude Code keeps its login in the Keychain
+    /// through `security`, found on this path, when it can. Without /usr/bin it keeps it in the login's folder, as on
+    /// Linux: there bots get their copy of it, and the server reads it with nobody signed in to the Mac.
+    static var searchPath: String {
+        #if os(macOS)
+        "/usr/local/bin:/bin:/usr/sbin:/sbin"
+        #else
+        "/usr/local/bin:/usr/bin:/bin"
+        #endif
     }
 
     /// The harness's own sign-in for `login`, kept to the login's folder, so nothing lands in the home of

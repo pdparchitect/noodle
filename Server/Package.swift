@@ -1,7 +1,7 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// Noodle Server: a Hub for Linux, `noodled`, configured by a YAML file and run as a service.
+// Noodle Server: a Hub for Linux and macOS, `noodled`, configured by a YAML file; on Linux it runs as a service.
 // ServerCore is the server's logic, tested on macOS and Linux alike; `noodled` only puts it behind a command.
 // Devices reach it through the Hub's link: msquic on Linux, and on a Mac Noodle Hub's own listener.
 let linux = TargetDependencyCondition.when(platforms: [.linux])

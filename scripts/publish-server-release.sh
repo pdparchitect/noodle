@@ -11,9 +11,9 @@ tag="server-v$version"
 channel="server-latest"
 repo="pdparchitect/noodle"
 assets="$project_root/dist/server-$version"
+# Linux's for each processor, and the Mac's.
 files=()
-for arch in arm64 x86_64; do
-    archive="Noodle-Server-linux-$arch.tar.gz"
+for archive in Noodle-Server-linux-arm64.tar.gz Noodle-Server-linux-x86_64.tar.gz Noodle-Server-macos-arm64.zip; do
     [[ -s "$assets/$archive" && -s "$assets/$archive.sha256" ]]
     (cd "$assets"; sha256sum -c "$archive.sha256")
     files+=("$assets/$archive" "$assets/$archive.sha256")
@@ -36,8 +36,8 @@ gh release create "$tag" "${files[@]}" \
 gh release edit "$tag" --repo "$repo" --draft=false --latest=false
 
 # The channel is a marker, not a version tag, and never becomes the repository's latest release.
-download="https://github.com/$repo/releases/download/$channel/Noodle-Server-linux"
-page="Noodle Server $version. Download for Linux on [arm64]($download-arm64.tar.gz) · [x86_64]($download-x86_64.tar.gz) · [Release notes](https://github.com/$repo/releases/tag/$tag)"
+download="https://github.com/$repo/releases/download/$channel/Noodle-Server"
+page="Noodle Server $version. [Download ZIP for Apple silicon]($download-macos-arm64.zip) · Linux on [arm64]($download-linux-arm64.tar.gz) · [x86_64]($download-linux-x86_64.tar.gz) · [Release notes](https://github.com/$repo/releases/tag/$tag)"
 if [[ -z "$channel_title" ]]; then
     gh release create "$channel" "${files[@]}" \
         --repo "$repo" --target "$(git -C "$project_root" rev-parse "$tag^{commit}")" \

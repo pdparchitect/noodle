@@ -94,7 +94,8 @@ final class ServerSetupTests: XCTestCase {
             "npm install -g @anthropic-ai/claude-code",
             "npm install -g @openai/codex",
             "useradd --system --no-create-home --shell /usr/sbin/nologin noodled",
-            "install -d -m 700 -o noodled -g noodled /var/lib/noodled",
+            // /var/lib/noodled on Linux, where setup runs; the test also runs on a Mac, whose default differs.
+            "install -d -m 700 -o noodled -g noodled \(ServerConfiguration.defaultData.path)",
             "runuser -u noodled -- \(paths().installed.path) login claude-code --config \(paths().configuration.path)",
             "runuser -u noodled -- \(paths().installed.path) login codex --config \(paths().configuration.path)",
             "systemctl daemon-reload",

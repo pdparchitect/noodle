@@ -96,4 +96,17 @@ final class ServerLoginsTests: XCTestCase {
             XCTAssertEqual($0.localizedDescription, "Claude Code has no profile called Home; add it under harnesses.claude-code.profiles first.")
         }
     }
+
+    #if os(macOS)
+    /// On a Mac, Claude Code signing in finds no `security` to put the login in the Keychain with, so it keeps it in
+    /// the login's folder, where the server looks for it and copies it to bots, as on Linux.
+    func testOnAMacASignInKeepsItsLoginInItsFolder() throws {
+        let claude = try logins.signIn(.claudeCode, login: try logins.login(.claudeCode, profile: nil))
+        let path = try XCTUnwrap(claude.environment["PATH"]).split(separator: ":").map(String.init)
+        XCTAssertFalse(path.isEmpty)
+        for folder in path {
+            XCTAssertFalse(FileManager.default.isExecutableFile(atPath: folder + "/security"), folder)
+        }
+    }
+    #endif
 }
