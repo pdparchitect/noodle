@@ -1,5 +1,9 @@
 import Combine
 import Foundation
+import os
+
+/// In the app's own subsystem, so `log show --predicate 'category == "agents"'` finds it.
+private let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "NoodleExternalTools", category: "agents")
 
 /// A browser or computer the caller made, or one a person lent it.
 public struct ExternalResource: Codable, Hashable, Sendable {
@@ -66,6 +70,8 @@ public struct ExternalItem: Identifiable, Hashable, Sendable {
         } catch {
             readable = false
             failure = "Could not read the Agents settings, so agents are not allowed. Existing data was not changed."
+            // Uptime tells a read during login apart from one later on.
+            log.error("Could not read \(url.path, privacy: .public) \(ProcessInfo.processInfo.systemUptime, format: .fixed(precision: 0), privacy: .public) s after boot: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -204,7 +210,11 @@ public struct ExternalItem: Identifiable, Hashable, Sendable {
             do {
                 try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try JSONEncoder().encode(next).write(to: url, options: [.atomic, .completeFileProtectionUnlessOpen])
-            } catch { failure = "Could not save the Agents settings. \(error.localizedDescription)"; return }
+            } catch {
+                failure = "Could not save the Agents settings. \(error.localizedDescription)"
+                log.error("Could not save \(url.path, privacy: .public): \(String(describing: error), privacy: .public)")
+                return
+            }
         }
         grants = next
     }
