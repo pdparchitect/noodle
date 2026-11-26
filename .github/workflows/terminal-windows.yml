@@ -19,6 +19,7 @@ permissions:
 jobs:
   windows:
     strategy:
+      fail-fast: false
       matrix:
         runner: [windows-11-arm, windows-2025]
     runs-on: ${{ matrix.runner }}
