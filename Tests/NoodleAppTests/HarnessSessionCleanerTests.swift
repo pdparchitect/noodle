@@ -143,4 +143,14 @@ import XCTest
         f.runtime.start(agent: agent, repository: f.repository)
         XCTAssertEqual(f.factory.processes.count, 1)
     }
+
+    func testClaudeCleanupRemovesWhatItSyncedFromTheAccount() async throws {
+        let f = try fixture(), agent = try f.agent(harness: .claudeCode)
+        let synced = home(f, agent).appendingPathComponent(".claude/skills/synced/org_account/pdf/SKILL.md")
+        try FileManager.default.createDirectory(at: synced.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: synced)
+        try FileManager.default.createDirectory(at: home(f, agent).appendingPathComponent(".claude/projects"), withIntermediateDirectories: true)
+        await f.runtime.cleanUpSessions(repository: f.repository)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: home(f, agent).appendingPathComponent(".claude/skills/synced").path))
+    }
 }

@@ -28,7 +28,10 @@ public enum ClaudeLaunch {
         arguments += ["--append-system-prompt", MessengerDocumentation.sessionInstructions]
         // The host applies Seatbelt to the entire process tree. Claude's nested
         // Bash sandbox cannot be stacked inside it; keep the normal tool set.
-        var settings: [String: Any] = ["disableClaudeAiConnectors": !appsEnabled]
+        // The skills and plugins enabled on claude.ai are for the person's own sessions; a bot uses Noodle's, and
+        // those include browser and computer skills for tools a bot does not have. Given here, the switches stop the
+        // sync for this run only, so an unrestricted bot leaves the person's own synced copies where they are.
+        var settings: [String: Any] = ["disableClaudeAiConnectors": !appsEnabled, "syncClaudeAiSkills": false, "syncClaudeAiPlugins": false]
         if restricted { settings["sandbox"] = ["enabled": false] }
         arguments += ["--settings", String(decoding: try JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys]), as: UTF8.self)]
         return arguments

@@ -225,4 +225,32 @@ final class HarnessSessionCleanupTests: XCTestCase {
             }
         }
     }
+
+    /// Claude Code runs with the account's skills and plugins unsynced, so the copies it synced before go, while
+    /// its transcripts, memory, built-in plugins and login stay.
+    func testClaudeAccountSyncedSkillsAndPluginsGoButTheRestStays() throws {
+        let claude = ".noodle/home/.claude/"
+        let synced = ["skills/synced/org_account/pdf/SKILL.md", "skills/.trash/old/SKILL.md",
+                      "plugins/synced/org_account/manifest.json", "plugins/.trash/old/plugin.json"]
+        let kept = ["projects/-workspace/memory/MEMORY.md", "plugins/store/cc-plugin-agents-md_builtin.json", ".credentials.json"]
+        for path in synced + kept { try file(claude + path, modified: recent) }
+        XCTAssertTrue(HarnessSessionCleanup.removeClaudeAccountSync(workspace: workspace))
+        for path in ["skills/synced", "skills/.trash", "plugins/synced", "plugins/.trash"] { XCTAssertFalse(exists(claude + path), path) }
+        for path in kept { XCTAssertTrue(exists(claude + path), path) }
+        XCTAssertFalse(HarnessSessionCleanup.removeClaudeAccountSync(workspace: workspace), "Nothing left to remove")
+    }
+
+    /// The skills and plugins enabled on claude.ai are for the person's own sessions; a bot uses Noodle's. Given on
+    /// the command line, which a bot cannot change, and which leaves a person's own synced copies where they are.
+    func testClaudeStartsWithAccountSkillsAndPluginsUnsynced() throws {
+        for (restricted, apps) in [(true, false), (false, true)] {
+            let arguments = try ClaudeLaunch.arguments(sessionID: UUID(), resumeSession: false, model: nil, effort: nil,
+                                                       restricted: restricted, appsEnabled: apps)
+            let index = try XCTUnwrap(arguments.firstIndex(of: "--settings"))
+            let settings = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(arguments[index + 1].utf8)) as? [String: Any])
+            XCTAssertEqual(settings["syncClaudeAiSkills"] as? Bool, false)
+            XCTAssertEqual(settings["syncClaudeAiPlugins"] as? Bool, false)
+            XCTAssertEqual(settings["disableClaudeAiConnectors"] as? Bool, !apps)
+        }
+    }
 }

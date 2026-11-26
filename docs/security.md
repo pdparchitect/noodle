@@ -165,8 +165,9 @@ not disconnect the account, undo completed actions, or erase data already
 returned to the conversation. Manage apps and revoke their permissions in
 ChatGPT or Claude.ai.
 
-Codex bots never get the plugins installed on your ChatGPT account, whatever
-the **Apps** switch says; those are made for ChatGPT itself.
+Codex bots never get the plugins installed on your ChatGPT account, and Claude
+Code bots never get the skills and plugins you enabled on Claude.ai, whatever
+the **Apps** switch says; those are for your own ChatGPT and Claude sessions.
 
 ## Connected tools
 

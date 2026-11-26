@@ -70,13 +70,17 @@ public enum SessionCleanupOutcome: Sendable { case done, busy }
 }
 
 /// Claude Code offers no way for a bot's harness to delete a session, so its transcripts go as files, also while
-/// it runs: it only appends to the session it is in, which stays.
+/// it runs: it only appends to the session it is in, which stays. It runs without the account's skills and
+/// plugins, so the copies it synced before go too.
 struct ClaudeSessionCleaner: HarnessSessionCleaner {
     let provider = HarnessProvider.claudeCode
-    func isPresent(in workspace: URL) -> Bool { HarnessSessionCleaners.folderExists(".claude/projects", in: workspace) }
+    func isPresent(in workspace: URL) -> Bool { HarnessSessionCleaners.folderExists(".claude", in: workspace) }
     func cleanUp(_ context: HarnessSessionCleanupContext) async -> SessionCleanupOutcome {
         let (workspace, kept, cutoff) = (context.workspace, context.kept, context.cutoff)
-        await Task.detached(priority: .utility) { HarnessSessionCleanup.sweepClaude(workspace: workspace, keeping: kept, before: cutoff) }.value
+        await Task.detached(priority: .utility) {
+            HarnessSessionCleanup.removeClaudeAccountSync(workspace: workspace)
+            HarnessSessionCleanup.sweepClaude(workspace: workspace, keeping: kept, before: cutoff)
+        }.value
         return .done
     }
 }

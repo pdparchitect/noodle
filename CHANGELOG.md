@@ -15,6 +15,7 @@ All notable changes to Noodle are documented here, following
 
 ### Changed
 
+- Claude Code bots no longer sync the skills and plugins enabled on your claude.ai account, which are for your own Claude sessions and include browser and computer skills for tools a bot does not have, and the copies already in each bot are removed.
 - Codex bots no longer download OpenAI's plugin catalog or the plugins installed on your ChatGPT account, which are made for ChatGPT and which no bot used, and the copies already in each bot, tens of megabytes apiece, are removed.
 
 ## [0.98.0] - 2026-11-26

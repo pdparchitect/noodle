@@ -10,6 +10,7 @@
 
 ### Changed
 
+- Claude Code agents no longer sync the skills and plugins enabled on the claude.ai account, which are for the person's own Claude sessions and include browser and computer skills for tools an agent does not have, and the copies already in each agent are removed.
 - Codex agents no longer download OpenAI's plugin catalog or the plugins installed on the ChatGPT account, which are made for ChatGPT and which no agent used, and the copies already in each agent, tens of megabytes apiece, are removed.
 
 ## [0.15.0] - 2026-11-26

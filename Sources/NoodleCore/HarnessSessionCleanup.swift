@@ -139,6 +139,21 @@ public enum HarnessSessionCleanup {
         return true
     }
 
+    /// Removes the skills and plugins Claude Code synced from the claude.ai account, with the copies it set aside,
+    /// which a bot's Claude Code runs without; see `ClaudeLaunch`. Answers whether anything went.
+    @discardableResult
+    public static func removeClaudeAccountSync(workspace: URL) -> Bool {
+        var removed = false
+        for path in ["skills", "plugins"] {
+            guard let folder = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/home/.claude/" + path) else { continue }
+            for name in ["synced", ".trash"] where folder.contains(name) {
+                folder.removeTree(name)
+                removed = true
+            }
+        }
+        return removed
+    }
+
     /// Removes the plugins Codex synced from the ChatGPT account and the catalog of every plugin it fetched, which
     /// a bot's Codex runs without; see `CodexLaunch`. Answers whether anything went.
     @discardableResult

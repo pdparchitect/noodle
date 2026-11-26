@@ -9,6 +9,7 @@
 
 ### Changed
 
+- Claude Code bots no longer sync the skills and plugins enabled on the claude.ai account, which are for the account's own Claude sessions and include browser and computer skills for tools a bot does not have, and the copies already in each bot are removed.
 - Codex bots no longer download OpenAI's plugin catalog or the plugins installed on the ChatGPT account, which are made for ChatGPT and which no bot used, and the copies already in each bot, tens of megabytes apiece, are removed.
 
 ## [0.5.0] - 2026-11-26
