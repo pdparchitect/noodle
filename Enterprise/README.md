@@ -7,7 +7,7 @@ and enforces the profile's settings, the Jamf Pro schema and a sample profile in
 ## Licence
 
 Everything in this folder is licensed under the
-[PolyForm Small Business License 1.0.0](LICENSE), not Apache-2.0 like the rest of Noodle.
+[PolyForm Small Business License 1.0.0](LICENSE), not the Functional Source License like the rest of Noodle.
 
 - **Personal use and small businesses are free.** The licence counts a business as small when it
   has fewer than 100 people, employees and contractors together, and less than 1,000,000 US dollars

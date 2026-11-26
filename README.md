@@ -5,7 +5,7 @@
 # Noodle
 
 **Personal AI agents for your Mac, iPhone and iPad.**<br>
-Free and open source. Runs on the AI inference/subscriptions you already have.
+Free and source available. Runs on the AI inference/subscriptions you already have.
 
 <a href="https://github.com/pdparchitect/noodle/releases/download/suite-latest/Noodle-Installer.pkg"><img alt="Download Noodle for Mac" src="https://img.shields.io/badge/Download%20for%20Mac-1f2328?style=for-the-badge&logo=apple&logoColor=white" height="44"></a>
 
@@ -138,7 +138,7 @@ can add an address of your own.
 | | Grok Bot | Muse | Noodle |
 | --- | --- | --- | --- |
 | Models | Grok models only | Muse models only | Bring your own harness (OpenAI, Anthropic, Muse, Fx, Grok, OpenCode) plus local AI models for free |
-| Licence | Closed source | Closed source | Open source, Apache 2.0 |
+| Licence | Closed source | Closed source | Source available (Functional Source License), each version Apache 2.0 after two years |
 | App | HTML-based, not native | HTML-based, not native | Native and fast, taking advantage of all OS features |
 | Computers | Remote VM run by xAI | Remote VM run by Meta | Local desktop-grade secure computers, including first-class support for macOS local accounts |
 | Look and feel | Light or dark | Stock | Customise the look and feel to match your preferences: backgrounds, custom icons and more |
@@ -158,7 +158,7 @@ your people can use. This is Noodle Enterprise, in the `Enterprise/` folder unde
 Small Business License 1.0.0: free for personal use and small businesses, while larger organisations
 need a commercial licence to manage Noodle with profiles, which for now we grant free or on
 favourable terms. The rest of Noodle
-stays Apache 2.0. See [ENTERPRISE.md](ENTERPRISE.md) and the [deployment guide](Enterprise/Deployment.md).
+is under the Functional Source License. See [ENTERPRISE.md](ENTERPRISE.md) and the [deployment guide](Enterprise/Deployment.md).
 
 ## Project
 

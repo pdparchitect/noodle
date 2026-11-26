@@ -1,7 +1,10 @@
 Noodle
 Copyright 2026 Petko D. Petkov (pdp)
 
-Licensed under Apache License 2.0. See LICENSE for terms.
+Licensed under the Functional Source License, Version 1.1, ALv2 Future License
+(FSL-1.1-ALv2). See LICENSE for terms. Each version becomes available under the
+Apache License 2.0 on the second anniversary of its release. Versions released
+before the switch to FSL remain under the Apache License 2.0.
 
 Except for Enterprise/, which is licensed under the PolyForm Small Business
 License 1.0.0 in Enterprise/LICENSE (see ENTERPRISE.md), and Incubator/, whose tools are each

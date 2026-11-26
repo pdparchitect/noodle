@@ -54,3 +54,10 @@ For changes with no visual effect, select **No visual changes** in the PR templa
 Maintainers should request missing visual evidence before approving a visual PR.
 
 See [releases](docs/releases.md) for versioning and publishing.
+
+## License
+
+Noodle is released under the [Functional Source License](LICENSE). By contributing, you agree that
+your contribution is licensed under the Apache License 2.0, so it can be released with Noodle under
+its current and future licences. `Enterprise/` and `Incubator/` have their own contribution terms;
+see [ENTERPRISE.md](ENTERPRISE.md) and each tool's CONTRIBUTING.md.

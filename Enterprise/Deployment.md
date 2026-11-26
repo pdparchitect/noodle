@@ -8,7 +8,7 @@
 > commercial licence from us to manage Noodle with profiles. For now we grant those free of charge
 > or on favourable terms, so you can deploy Noodle today without worrying about licence costs. To
 > ask for one, email [contact@usenoodle.app](mailto:contact@usenoodle.app?subject=Noodle%20Enterprise%20licence). Everything outside `Enterprise/` is
-> Apache-2.0. See [ENTERPRISE.md](../ENTERPRISE.md).
+> under the Functional Source License. See [ENTERPRISE.md](../ENTERPRISE.md).
 >
 > Noodle never checks for a licence and never limits the feature without one.
 

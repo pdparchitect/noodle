@@ -1,6 +1,6 @@
 # Noodle Enterprise
 
-Noodle is free and open source under the [Apache License 2.0](LICENSE). Organisations that
+Noodle is free and source available under the [Functional Source License](LICENSE). Organisations that
 deploy it to their people's Macs can also manage it with a configuration profile from their device
 management system (Jamf Pro, Kandji, Microsoft Intune, Mosyle and others): choose which harnesses
 people can use, whether bots can run outside their sandbox, which tool connections, browsers,
@@ -16,7 +16,7 @@ That management is Noodle Enterprise. It lives in the [`Enterprise/`](Enterprise
 
 `Enterprise/` is licensed under the
 [PolyForm Small Business License 1.0.0](Enterprise/LICENSE), with the additional permissions below.
-Everything outside `Enterprise/` stays Apache-2.0.
+Everything outside `Enterprise/` is under the Functional Source License.
 
 - **Personal use and small businesses are free.** The licence counts a business as small when it
   has fewer than 100 people, employees and contractors together, and less than 1,000,000 US dollars
@@ -48,4 +48,4 @@ use the software in `Enterprise/`:
 
 Contributions to `Enterprise/` are welcome, on terms that let us license them under the PolyForm
 Small Business License and under the commercial licences we grant. Contributions everywhere else
-are Apache-2.0, as before.
+are accepted under the Apache License 2.0, as before.

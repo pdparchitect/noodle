@@ -9,6 +9,7 @@
 ### Changed
 
 - When a link or file opened from the command palette cannot be opened, the line at the bottom says why instead of nothing happening.
+- Noodle's source is now under the Functional Source License instead of Apache 2.0: free to use, read and change for anything except a competing product, and each version becomes Apache 2.0 two years after its release. Earlier versions stay under Apache 2.0.
 
 ## [0.1.0] - 2026-11-11
 

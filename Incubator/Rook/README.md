@@ -116,8 +116,8 @@ files, and the microphone (⌘⇧D) turns what you say into text to read over be
 
 Source available under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): free to
 read, use and change for noncommercial purposes. This is not an open-source license.
-Rook is built on [Noodle](https://github.com/pdparchitect/noodle), which is open source
-under Apache 2.0.
+Rook is built on [Noodle](https://github.com/pdparchitect/noodle), which is source available
+under the Functional Source License.
 
 ## Project
 
