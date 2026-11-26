@@ -52,8 +52,8 @@ final class FakeHub: @unchecked Sendable {
     var port: UInt16 { lock.withLock { portNumber } }
 
     func start() async throws {
-        // The Hub's own link on each system: Network.framework's on a Mac, msquic's on Linux.
-        #if os(Linux)
+        // The Hub's own link on each system: Network.framework's on a Mac, msquic's on Linux and Windows.
+        #if os(Linux) || os(Windows)
         let listen = QUICListener.listen(certificates: FileManager.default.temporaryDirectory.appendingPathComponent("hub-\(UUID())"))
         #else
         let listen = LinkServer.listen

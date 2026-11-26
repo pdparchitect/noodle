@@ -17,9 +17,13 @@ let package = Package(
     swiftLanguageModes: [.v5]
 )
 
-#if os(Linux)
-// Only what crosses the wire builds on Linux; live views need Apple's video and UI frameworks.
+#if os(Linux) || os(Windows)
+// Only what crosses the wire builds on Linux and Windows; live views need Apple's video and UI frameworks.
 package.targets.removeAll { !["SurfaceWire", "SurfaceWireTests"].contains($0.name) }
 // The protocol packages name Surface for Apple platforms only, but the product must still exist.
 package.products = [.library(name: "Surface", targets: ["SurfaceWire"]), .library(name: "SurfaceWire", targets: ["SurfaceWire"])]
+#endif
+#if os(Windows)
+// A live view's local socket needs POSIX sockets, which Windows does not have.
+package.targets.first { $0.name == "SurfaceWire" }?.exclude = ["SurfaceSocket.swift"]
 #endif

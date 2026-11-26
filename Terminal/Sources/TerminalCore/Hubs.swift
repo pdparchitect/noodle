@@ -52,6 +52,11 @@ import Observation
         #if os(macOS)
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Noodle Terminal/Hubs", isDirectory: true)
+        #elseif os(Windows)
+        // Where Windows keeps an app's own data for this computer, under the person's profile.
+        (ProcessInfo.processInfo.environment["LOCALAPPDATA"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("AppData/Local", isDirectory: true))
+            .appendingPathComponent("Noodle Terminal/Hubs", isDirectory: true)
         #else
         // Where Linux keeps an app's own data.
         (ProcessInfo.processInfo.environment["XDG_DATA_HOME"].map { URL(fileURLWithPath: $0, isDirectory: true) }

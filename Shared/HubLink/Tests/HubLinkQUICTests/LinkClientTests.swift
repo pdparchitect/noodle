@@ -1,4 +1,4 @@
-#if os(Linux)
+#if os(Linux) || os(Windows)
 import Foundation
 @testable import HubLink
 import HubWire
