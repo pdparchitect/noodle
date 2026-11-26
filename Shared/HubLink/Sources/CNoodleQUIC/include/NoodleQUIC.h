@@ -1,4 +1,4 @@
-// QUIC for the Hub's link on Linux, over msquic, which is loaded when first used. Only what the link
+// QUIC for the Hub's link on Linux and Windows, over msquic, which is loaded when first used. Only what the link
 // needs: a listener that admits devices by their certificate and hands their streams over, and a
 // client that connects to a Hub it pins by key. Every callback comes on one of msquic's threads.
 #ifndef NOODLE_QUIC_H
@@ -57,7 +57,7 @@ int nq_client_is_closed(nq_client *client);
 nq_stream *nq_client_open(nq_client *client, const uint8_t *bytes, size_t length, int finish);
 /// Waits up to `timeout_ms` for bytes: how many came, 0 once the server finished, -1 when the stream
 /// failed, and -2 when nothing came in time.
-long nq_client_read(nq_stream *stream, uint8_t *buffer, size_t capacity, int timeout_ms);
+ptrdiff_t nq_client_read(nq_stream *stream, uint8_t *buffer, size_t capacity, int timeout_ms);
 void nq_client_close(nq_client *client);
 
 #endif

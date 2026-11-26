@@ -1,23 +1,17 @@
-# Builds Noodle Terminal for Windows on this machine's processor, as dist/terminal-VERSION/
+# Builds Noodle Terminal for Windows on the processor the installed Swift builds for, as dist/terminal-VERSION/
 # Noodle-Terminal-windows-ARCH.zip holding noodle.exe with the msquic.dll it talks to its Hub through and
 # the Swift and Visual C++ runtimes it needs, and the archive's checksum.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. "$PSScriptRoot/windows-common.ps1"
 $root = Split-Path -Parent $PSScriptRoot
 $version = (Get-Content -Raw "$root/Terminal/VERSION").Trim()
 if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid Terminal/VERSION: $version" }
-$arch = switch ($env:PROCESSOR_ARCHITECTURE) {
-    'ARM64' { 'arm64' }
-    'AMD64' { 'x86_64' }
-    default { throw 'Noodle Terminal is built for arm64 and x86_64 only.' }
-}
 # Development hooks are never built into a release.
 if ($env:NOODLE_DEV_HOOKS) { throw 'Unset NOODLE_DEV_HOOKS for a release build.' }
 
 $build = @('build', '-c', 'release', '--package-path', "$root/Terminal",
-           '--scratch-path', "$root/.build/terminal-windows-release", '--product', 'noodle',
-           # Visual Studio 2026's C++ library asks for a newer Clang than Swift 6.4 has, though it builds with it.
-           '-Xcc', '-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH', '-Xcxx', '-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH')
+           '--scratch-path', "$root/.build/terminal-windows-release", '--product', 'noodle') + $SwiftWindowsFlags
 # Swift's warnings on standard error are not failures; its exit code says whether it built.
 function Invoke-Swift {
     $ErrorActionPreference = 'Continue'
@@ -25,6 +19,7 @@ function Invoke-Swift {
     if ($LASTEXITCODE -ne 0) { throw "swift $($args -join ' ') failed." }
 }
 Invoke-Swift @build
+$arch = Get-SwiftTargetArchitecture
 $bin = (Invoke-Swift @build --show-bin-path | Select-Object -Last 1).Trim()
 
 $stage = Join-Path ([IO.Path]::GetTempPath()) "noodle-terminal-$([guid]::NewGuid())"
@@ -51,7 +46,7 @@ try {
             }
         }
     }
-    & "$PSScriptRoot/fetch-msquic-windows.ps1" -Destination $folder
+    & "$PSScriptRoot/fetch-msquic-windows.ps1" -Destination $folder -Architecture $arch
     Copy-Item "$root/Shared/HubLink/Sources/CNoodleQUIC/msquic/LICENSE" "$folder/msquic-LICENSE.txt"
     $usage = & "$folder/noodle.exe" --help | Out-String
     if ($usage -notmatch 'USAGE: noodle') { throw 'The release binary did not start.' }

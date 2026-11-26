@@ -215,7 +215,7 @@ final class LinkQUICStream: @unchecked Sendable {
                 var buffer = [UInt8](repeating: 0, count: 65_536)
                 while true {
                     if isCancelled { return continuation.resume(throwing: CancellationError()) }
-                    let count = Int(nq_client_read(handle, &buffer, buffer.count, 250))
+                    let count = nq_client_read(handle, &buffer, buffer.count, 250)
                     if count > 0 { return continuation.resume(returning: Data(buffer[0..<count])) }
                     if count == 0 { return continuation.resume(returning: nil) }
                     if count == -1 {

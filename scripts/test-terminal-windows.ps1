@@ -1,0 +1,20 @@
+# Tests Noodle Terminal on Windows, with the Hub link over msquic it uses there. The tests load msquic.dll
+# from beside their runner, as noodle.exe does from beside itself.
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+. "$PSScriptRoot/windows-common.ps1"
+$root = Split-Path -Parent $PSScriptRoot
+
+# Swift's warnings on standard error are not failures; its exit code says whether it built and passed.
+function Invoke-Swift {
+    $ErrorActionPreference = 'Continue'
+    & swift @args
+    if ($LASTEXITCODE -ne 0) { throw "swift $($args -join ' ') failed." }
+}
+
+foreach ($package in @(@{ Path = 'Shared/HubLink'; Scratch = 'windows-hub-link' }, @{ Path = 'Terminal'; Scratch = 'terminal-windows' })) {
+    $options = @('--package-path', "$root/$($package.Path)", '--scratch-path', "$root/.build/$($package.Scratch)") + $SwiftWindowsFlags
+    Invoke-Swift build --build-tests @options
+    & "$PSScriptRoot/fetch-msquic-windows.ps1" -Destination (Invoke-Swift build @options --show-bin-path | Select-Object -Last 1)
+    Invoke-Swift test --skip-build @options
+}

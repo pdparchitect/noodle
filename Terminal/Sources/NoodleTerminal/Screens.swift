@@ -598,16 +598,12 @@ import AppKit
     static func open(_ url: URL) {
         #if canImport(AppKit)
         NSWorkspace.shared.open(url)
+        #elseif os(Windows)
+        shellOpen(url)
         #else
         let opener = Process()
-        #if os(Windows)
-        let system = ProcessInfo.processInfo.environment["SystemRoot"] ?? #"C:\Windows"#
-        opener.executableURL = URL(fileURLWithPath: system).appendingPathComponent("System32/rundll32.exe")
-        opener.arguments = ["url.dll,FileProtocolHandler", url.isFileURL ? url.path : url.absoluteString]
-        #else
         opener.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         opener.arguments = ["xdg-open", url.isFileURL ? url.path : url.absoluteString]
-        #endif
         opener.standardInput = FileHandle.nullDevice
         opener.standardOutput = FileHandle.nullDevice
         opener.standardError = FileHandle.nullDevice

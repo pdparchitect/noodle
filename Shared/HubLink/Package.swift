@@ -22,7 +22,8 @@ let package = Package(
         /// msquic, loaded when first used, behind the little the link needs: Linux's and Windows's QUIC,
         /// where Apple platforms use Network.framework. Its headers are vendored in `msquic/`, under their MIT
         /// licence, since Ubuntu's package carries only the library.
-        .target(name: "CNoodleQUIC", exclude: ["msquic/LICENSE"]),
+        .target(name: "CNoodleQUIC", exclude: ["msquic/LICENSE"],
+                linkerSettings: [.linkedLibrary("bcrypt", .when(platforms: [.windows]))]),
         .target(name: "HubLink", dependencies: ["HubWire", .product(name: "X509", package: "swift-certificates"),
                                                 .product(name: "Surface", package: "Surface"),
                                                 .product(name: "PushWire", package: "Wire"),

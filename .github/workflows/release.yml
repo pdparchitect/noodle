@@ -418,9 +418,6 @@ jobs:
     if: contains(fromJSON(needs.versions.outputs.suites), 'terminal-windows')
     runs-on: windows-2025
     timeout-minutes: 45
-    env:
-      # Visual Studio 2026's C++ library asks for a newer Clang than Swift 6.4 has, though it builds with it.
-      SWIFT_FLAGS: -Xcc -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -Xcxx -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH
     steps:
       - uses: actions/checkout@v6
         with:
@@ -428,23 +425,9 @@ jobs:
       - name: Install Swift
         shell: pwsh
         run: ./scripts/install-swift-windows.ps1
-      # The tests load msquic.dll from beside their runner, as noodle.exe does from beside itself.
-      - name: Test the Hub link over msquic on Windows
+      - name: Test the terminal app and the Hub link over msquic on Windows
         shell: pwsh
-        run: |
-          $flags = $env:SWIFT_FLAGS -split ' '
-          swift build --build-tests --package-path Shared/HubLink --scratch-path .build/windows-hub-link @flags
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./scripts/fetch-msquic-windows.ps1 -Destination (swift build --package-path Shared/HubLink --scratch-path .build/windows-hub-link @flags --show-bin-path)
-          swift test --skip-build --package-path Shared/HubLink --scratch-path .build/windows-hub-link @flags
-      - name: Test the terminal app on Windows
-        shell: pwsh
-        run: |
-          $flags = $env:SWIFT_FLAGS -split ' '
-          swift build --build-tests --package-path Terminal --scratch-path .build/terminal-windows @flags
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./scripts/fetch-msquic-windows.ps1 -Destination (swift build --package-path Terminal --scratch-path .build/terminal-windows @flags --show-bin-path)
-          swift test --skip-build --package-path Terminal --scratch-path .build/terminal-windows @flags
+        run: ./scripts/test-terminal-windows.ps1
 
   test-server:
     needs: [versions]
