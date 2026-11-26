@@ -32,6 +32,7 @@
         "opencode",
         "antigravity",
         "copilot",
+        "devin",
         "apple"
       ],
       "description" : "The only harnesses people can use. Others are hidden in Settings and the fallback list, and bots set to one don't start. Missing: every harness. Since Noodle 0.84.0.",
@@ -45,6 +46,7 @@
           "opencode",
           "antigravity",
           "copilot",
+          "devin",
           "apple"
         ],
         "options" : {
@@ -57,6 +59,7 @@
             "OpenCode",
             "Antigravity",
             "Copilot",
+            "Devin",
             "Apple Intelligence"
           ]
         },

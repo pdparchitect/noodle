@@ -126,6 +126,7 @@ public struct HarnessProfileStore: Sendable {
             try AtomicFile.write(Data(#"{"storeTokenPlaintext": true}"#.utf8 + [10]),
                                  to: account.appendingPathComponent("settings.json"))
         }
+        if provider == .devin { try DevinLaunch.prepareConfiguration(home: home) }
     }
 
     public func rename(_ profile: HarnessProfile, to rawName: String) throws -> HarnessProfile {
@@ -208,6 +209,8 @@ public struct HarnessProfileStore: Sendable {
         case .copilot:
             CopilotLaunch.environment.merging(["HOME": loginHome(profile).path,
                 "COPILOT_CACHE_HOME": CopilotLaunch.cacheHome(root: directory.deletingLastPathComponent()).path]) { _, home in home }
+        // Devin keeps its login, configuration and sessions in the home's XDG folders.
+        case .devin: ["HOME": loginHome(profile).path]
         default: [:]
         }
     }
@@ -309,6 +312,7 @@ public struct HarnessProfileStore: Sendable {
         case .fx: ".fx"
         case .openCode: ".local/share/opencode"
         case .copilot: ".copilot"
+        case .devin: ".local/share/devin"
         default: ".codex"
         }
     }

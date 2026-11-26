@@ -195,7 +195,7 @@ public final class HarnessProfilesController {
     fileprivate static func provider(for profile: HarnessProfile, store: HarnessProfileStore) -> (any HarnessProfileAccount)? {
         switch profile.provider {
         case .codex: CodexAccountProvider(codexHome: store.accountHome(profile), profile: profile.id)
-        case .grokBuild, .muse, .claudeCode, .fx, .antigravity, .openCode, .copilot: HostProfileSetupProvider(profile: profile)
+        case .grokBuild, .muse, .claudeCode, .fx, .antigravity, .openCode, .copilot, .devin: HostProfileSetupProvider(profile: profile)
         default: nil
         }
     }
@@ -219,7 +219,7 @@ public final class HarnessProfilesController {
             .claudeCode: ClaudeCodeSetupProvider.installationGuide, .fx: FxSetupProvider.installationGuide,
             .grokBuild: GrokSetupProvider.installationGuide, .muse: MuseSetupProvider.installationGuide,
             .openCode: OpenCodeSetupProvider.installationGuide, .antigravity: AntigravitySetupProvider.installationGuide,
-            .copilot: CopilotSetupProvider.installationGuide
+            .copilot: CopilotSetupProvider.installationGuide, .devin: DevinSetupProvider.installationGuide
         ]
         var providers: [HarnessProvider: any HarnessSetupProviding] = [.apple: AppleSetupProvider()]
         for provider in HarnessProvider.allCases where provider.supportsProfiles {
@@ -279,7 +279,7 @@ public final class HarnessProfilesController {
 
 extension CodexAccountProvider: HarnessProfileAccount {}
 
-/// Grok Build, Muse Code, Claude Code, FX and Copilot sign in through the Agent Host, which
+/// Grok Build, Muse Code, Claude Code, FX, Copilot and Devin sign in through the Agent Host, which
 /// resolves the profile's folder itself and runs the harness's own login.
 /// Antigravity and OpenCode have no such login: the host only checks the profile.
 @MainActor private final class HostProfileSetupProvider: HarnessProfileAccount {

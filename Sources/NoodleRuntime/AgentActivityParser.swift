@@ -10,7 +10,7 @@ public enum AgentActivityParser {
         case .muse: return muse(message)
         case .claudeCode: return claude(message)
         case .antigravity: return antigravity(message)
-        case .fx, .grokBuild, .apple, .openCode, .copilot: return acp(message, provider: provider)
+        case .fx, .grokBuild, .apple, .openCode, .copilot, .devin: return acp(message, provider: provider)
         }
     }
 

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Devin is a harness, off until turned on in **Settings › Harness**, with its self-updates turned off.
+
 ## [0.15.0] - 2026-11-26
 
 ### Added

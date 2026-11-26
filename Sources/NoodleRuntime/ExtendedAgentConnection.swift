@@ -179,6 +179,9 @@ public final class ExtendedAgentConnection: NSObject, AgentHostClient {
     func inspectCopilot(reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.inspectCopilot(withReply: reply)
     }
+    func inspectDevin(reply: @escaping (Data?, String?) -> Void) {
+        proxy(failure: { reply(nil, $0) })?.inspectDevin(withReply: reply)
+    }
     func inspectMuse(reply: @escaping (Data?, String?) -> Void) {
         proxy(failure: { reply(nil, $0) })?.inspectMuse(withReply: reply)
     }

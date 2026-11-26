@@ -107,7 +107,7 @@ final class RestrictedAgentSandboxTests: XCTestCase {
           [outside, inside].each(&:close)
         end
         """#
-        for provider: HarnessProvider in [.codex, .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot] {
+        for provider: HarnessProvider in [.codex, .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot, .devin] {
             let policy = provider == .codex
                 ? RestrictedAgentSandbox.profile(workspace: workspace, repository: root, codexHome: workspace,
                     executableDirectory: URL(fileURLWithPath: "/usr/bin"), application: workspace, temporary: workspace)
@@ -417,7 +417,7 @@ final class RestrictedAgentSandboxTests: XCTestCase {
     func testOnlyMuseCanListTheSystemLibraryFolders() throws {
         let listings = [#"(allow file-read-data (literal "/Library"))"#,
                         #"(allow file-read-data (literal "/Library/Application Support"))"#]
-        for provider in [HarnessProvider.claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot] {
+        for provider in [HarnessProvider.claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot, .devin] {
             let profile = try RestrictedAgentSandbox.profile(provider: provider,
                 workspace: URL(fileURLWithPath: "/fixture/bot/workspace"), repository: URL(fileURLWithPath: "/fixture"),
                 home: URL(fileURLWithPath: "/private-login"), executable: URL(fileURLWithPath: "/native/harness"),
@@ -478,6 +478,51 @@ final class RestrictedAgentSandboxTests: XCTestCase {
         lock.lock(); let reached = addresses.allObjects as? [String] ?? []; lock.unlock()
         XCTAssertTrue(Set(reached).isSubset(of: HarnessProvider.copilot.siloAllowlist(appsEnabled: false)))
         XCTAssertTrue(reached.contains { $0.hasSuffix("githubcopilot.com:443") }, "\(reached)")
+    }
+
+    /// A restricted Devin bot on a real sign-in, through the sandbox and the silo: it answers, runs a command in its
+    /// workspace, and reaches only its silo's address. Point NOODLE_TEST_DEVIN_LOGIN at a login home Devin signed in
+    /// to; the test uses a model request.
+    func testRestrictedDevinAnswersOnARealSignInThroughTheSilo() throws {
+        guard let login = ProcessInfo.processInfo.environment["NOODLE_TEST_DEVIN_LOGIN"] else {
+            throw XCTSkip("Set NOODLE_TEST_DEVIN_LOGIN to a signed-in Devin login home to run a real turn.")
+        }
+        let realHome = HarnessStorage.userHome
+        let executable = try DevinExecutableTrust.executable(at: realHome.appendingPathComponent(".local/bin/devin").path, home: realHome)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = WorkspaceRepository(rootURL: root.appendingPathComponent("Noodle"))
+        let workspace = repository.directory(for: try repository.createAgent(named: "Devin live").agent)
+        try RestrictedHarnessStorage.prepare(provider: .devin, workspace: workspace, loginHome: URL(fileURLWithPath: login),
+                                             secret: { _, _ in nil })
+        let temporary = workspace.appendingPathComponent(".noodle/tmp")
+        let addresses = NSMutableSet(), lock = NSLock()
+        let proxy = try HarnessEgressProxy(allowed: HarnessProvider.devin.siloAllowlist(appsEnabled: false)) { address, allowed in
+            lock.lock(); if allowed { addresses.add(address) }; lock.unlock()
+        }
+        defer { proxy.stop() }
+        let policy = try RestrictedAgentSandbox.profile(provider: .devin, workspace: workspace, repository: repository.rootURL,
+            home: realHome, executable: executable, package: DevinLaunch.package(executable: executable), application: workspace,
+            temporary: temporary, egressPort: proxy.port)
+        var environment = try RestrictedAgentSandbox.environment(provider: .devin, home: realHome, workspace: workspace)
+            .merging(HarnessProvider.devin.reportingOffEnvironment) { own, _ in own }
+            .merging(HarnessEgressProxy.environment(port: proxy.port)) { own, _ in own }
+        environment["TMPDIR"] = temporary.path
+        environment["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
+        let wire = try ACPWireFixture(executable: URL(fileURLWithPath: "/usr/bin/sandbox-exec"), workspace: workspace,
+                                     arguments: ["-p", policy, executable.path] + DevinLaunch.arguments, environment: environment,
+                                     requestTimeout: 120)
+        defer { wire.stop() }
+        _ = try wire.request("initialize", FxProtocol.initializeParameters)
+        let session = try wire.request("session/new", ["cwd": workspace.path, "mcpServers": []])
+        XCTAssertFalse(DevinProtocol.models(fromSession: session).isEmpty, wire.diagnostics)
+        let result = try wire.request("session/prompt", ["sessionId": try XCTUnwrap(session["sessionId"] as? String),
+            "prompt": [["type": "text", "text": "Run the shell command `echo sandboxed > proof.txt`, then reply with just the word pong."]]])
+        XCTAssertEqual(result["stopReason"] as? String, "end_turn")
+        XCTAssertNotNil(result["usage"], wire.diagnostics)
+        XCTAssertEqual(try String(contentsOf: workspace.appendingPathComponent("proof.txt"), encoding: .utf8), "sandboxed\n")
+        lock.lock(); let reached = addresses.allObjects as? [String] ?? []; lock.unlock()
+        XCTAssertEqual(Set(reached), HarnessProvider.devin.siloAllowlist(appsEnabled: false))
     }
 
     /// Copilot runs from the package unpacked once outside the bot, which the profile lets it read but not change.

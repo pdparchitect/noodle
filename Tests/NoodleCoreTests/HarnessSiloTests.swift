@@ -83,7 +83,7 @@ final class HarnessSiloTests: XCTestCase {
         """#
         // The real port is only known to the script, so the policy carries a placeholder number first.
         let placeholder: UInt16 = 65_000
-        for provider: HarnessProvider in [.codex, .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot] {
+        for provider: HarnessProvider in [.codex, .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot, .devin] {
             // OpenCode's and Antigravity's own executables reach their local servers on any loopback port,
             // so ruby stands in for one of their tools here, not for the harness.
             let harness = URL(fileURLWithPath: [.openCode, .antigravity].contains(provider) ? "/usr/bin/true" : "/usr/bin/ruby")

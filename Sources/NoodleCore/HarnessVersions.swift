@@ -85,6 +85,7 @@ public enum HarnessVersionPolicy {
         case .openCode: return ["acp", "api", "auth", "--standalone"]
         case .antigravity: return ["--input-format", "--output-format", "--conversation", "--dangerously-skip-permissions"]
         case .copilot: return ["--acp"]
+        case .devin: return ["acp", "--process-model"]
         }
     }
 
@@ -136,6 +137,8 @@ public enum HarnessVersionPolicy {
         // The manifest Google's installer and the CLI's own updater read.
         case .antigravity: address = "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/darwin_arm64.json"
         case .copilot: address = "https://api.github.com/repos/github/copilot-cli/releases/latest"
+        // The manifest Devin's installer and its own updater read.
+        case .devin: address = "https://static.devin.ai/cli/current/manifest.json"
         }
         return URL(string: address)
     }
@@ -159,7 +162,7 @@ public enum HarnessVersionPolicy {
                   object["channel"] as? String == "muse-stable", object["state"] as? String == "public",
                   let version = object["version"] as? String, MuseExecutableTrust.validVersion(version) else { return nil }
             value = version
-        } else if provider == .antigravity {
+        } else if provider == .antigravity || provider == .devin {
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let version = object["version"] as? String else { return nil }
             value = version
@@ -201,6 +204,9 @@ public enum HarnessVersionPolicy {
         case .copilot:
             command = "copilot update"
             link = "https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli"
+        case .devin:
+            command = "devin update"
+            link = "https://docs.devin.ai/cli"
         }
         return .init(command: command,
             instructions: "Run this command in Terminal, then choose Check Again. Updates follow the provider’s configured release channel; managed or pinned installs may intentionally remain on an older version. Existing bot processes keep their running version until restarted.",

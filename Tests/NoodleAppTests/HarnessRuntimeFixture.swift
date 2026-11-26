@@ -128,7 +128,7 @@ import XCTest
             XCTAssertEqual((try wire.last("session/set_config_option")["params"] as? [String: Any])?["configId"] as? String, "effort")
             try wire.reply("session/set_config_option")
         }
-        if provider == .copilot {
+        if provider == .copilot || provider == .devin {
             try await wait { wire.count("session/set_config_option") == 1 }
             let params = try wire.last("session/set_config_option")["params"] as? [String: Any]
             XCTAssertEqual(params?["configId"] as? String, "model")

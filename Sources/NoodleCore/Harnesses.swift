@@ -10,6 +10,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
     case openCode = "opencode"
     case antigravity
     case copilot
+    case devin
     case apple
 
     public var id: String { rawValue }
@@ -24,7 +25,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
     /// Whether the Agent Host can apply a separate restricted runtime policy.
     public var supportsRestrictedAccess: Bool {
         switch self {
-        case .apple, .codex, .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot: return true
+        case .apple, .codex, .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot, .devin: return true
         }
     }
 
@@ -33,6 +34,8 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
     /// the rest are the switches each executable reads itself. Codex reads only its configuration, so it is turned
     /// off in its arguments. Antigravity keeps its setting with the account and FX was found to report nothing,
     /// so neither has more to set. Copilot ignores DO_NOT_TRACK; its own switch was measured to stop its reports.
+    /// Devin has no switch: whether it reports is a setting of the account, and its reports go to the same address
+    /// as its model requests, so the silo cannot tell them apart either.
     public var reportingOffEnvironment: [String: String] {
         switch self {
         case .apple: [:]
@@ -40,13 +43,13 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
         case .grokBuild: ["DO_NOT_TRACK": "1", "DISABLE_TELEMETRY": "1", "DISABLE_ERROR_REPORTING": "1"]
         case .muse: ["DO_NOT_TRACK": "1", "TBH_DISABLE_TELEMETRY": "1"]
         case .copilot: ["DO_NOT_TRACK": "1", "COPILOT_TELEMETRY_DISABLED": "true"]
-        case .codex, .fx, .openCode, .antigravity: ["DO_NOT_TRACK": "1"]
+        case .codex, .fx, .openCode, .antigravity, .devin: ["DO_NOT_TRACK": "1"]
         }
     }
 
     /// The only addresses a siloed harness may open, through the Agent Host's proxy: its model services and the
     /// sign-in renewal it does itself. Telemetry, updaters, search and anything a tool asks for are refused. Claude
-    /// Code, Codex, Muse Code, Antigravity and Copilot were measured running a turn; Grok Build, FX and OpenCode are the
+    /// Code, Codex, Muse Code, Antigravity, Copilot and Devin were measured running a turn; Grok Build, FX and OpenCode are the
     /// services their executables name. OpenCode reaches every model provider it ships with, whichever its login
     /// uses. A star stands for part of one name label. Apple Intelligence reaches nothing; a remote model adds its
     /// provider in the host.
@@ -62,6 +65,8 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
         // Copilot looks its account up on GitHub, then sends requests to its plan's own service.
         case .copilot: hosts = ["api.github.com", "api.githubcopilot.com", "api.individual.githubcopilot.com",
                                 "api.business.githubcopilot.com", "api.enterprise.githubcopilot.com"]
+        // Devin runs without its feature flags, plugins, update check and the search tool it downloads.
+        case .devin: hosts = ["server.codeium.com"]
         case .fx: hosts = ["ai-gateway.vercel.sh", "api.vercel.com", "vercel.com", "api.typesafe.ai"]
         case .openCode: hosts = [
             "opencode.ai", "models.opencode.ai", "models.dev", "opencode.models.dev",
@@ -102,6 +107,7 @@ public enum HarnessProvider: String, Codable, CaseIterable, Hashable, Sendable, 
         case .openCode: return "OpenCode"
         case .antigravity: return "Antigravity"
         case .copilot: return "Copilot"
+        case .devin: return "Devin"
         }
     }
 
@@ -219,6 +225,7 @@ public struct HarnessDiscovery: Sendable {
     private let standaloneMuseURL: URL
     private let standaloneAntigravityURL: URL
     private let standaloneCopilotURL: URL
+    private let standaloneDevinURL: URL
     private let managedHarnesses: ManagedHarnessStore?
     /// Where each harness is, when someone said so; then nothing else is looked for.
     private var fixed: [HarnessProvider: String]?
@@ -249,6 +256,7 @@ public struct HarnessDiscovery: Sendable {
         self.standaloneMuseURL = homeDirectory.appendingPathComponent(".local/bin/muse")
         self.standaloneAntigravityURL = homeDirectory.appendingPathComponent(".local/bin/agy")
         self.standaloneCopilotURL = homeDirectory.appendingPathComponent(".local/bin/copilot")
+        self.standaloneDevinURL = homeDirectory.appendingPathComponent(".local/bin/devin")
         self.executableSearchDirectories = executableSearchDirectories ?? [
             homeDirectory.appendingPathComponent(".local/bin", isDirectory: true),
             URL(fileURLWithPath: "/opt/homebrew/bin", isDirectory: true),
@@ -329,7 +337,7 @@ public struct HarnessDiscovery: Sendable {
                 applicationsDirectory.appendingPathComponent("ChatGPT.app/Contents/Resources/codex"),
                 applicationsDirectory.appendingPathComponent("Codex.app/Contents/Resources/codex")
             ]
-        case .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot:
+        case .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot, .devin:
             return standaloneCandidates(for: provider)
         }
     }
@@ -350,6 +358,7 @@ public struct HarnessDiscovery: Sendable {
         case .openCode: return [standaloneOpenCodeURL]
         case .antigravity: return [standaloneAntigravityURL]
         case .copilot: return [standaloneCopilotURL]
+        case .devin: return [standaloneDevinURL]
         }
     }
 

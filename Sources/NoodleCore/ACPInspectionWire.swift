@@ -19,14 +19,18 @@ final class ACPInspectionWire: @unchecked Sendable {
         self.condition.broadcast()
     }
 
-    /// `command` is what the person types to run the harness in Terminal.
+    /// `command` is what the person types to run the harness in Terminal. Only a sign-in the
+    /// person started `opensPages`; every other exchange is kept away from the browser.
     init(name: String, command: String, executable: URL, arguments: [String], environment: [String: String],
-         requestTimeout: TimeInterval, terminationGrace: TimeInterval) throws {
+         requestTimeout: TimeInterval, terminationGrace: TimeInterval, opensPages: Bool = false) throws {
         self.name = name
         self.command = command
         self.requestTimeout = requestTimeout
         self.terminationGrace = terminationGrace
-        BrowserlessLaunch.configure(process, executable: executable, arguments: arguments)
+        if opensPages {
+            process.executableURL = executable
+            process.arguments = arguments
+        } else { BrowserlessLaunch.configure(process, executable: executable, arguments: arguments) }
         process.currentDirectoryURL = FileManager.default.temporaryDirectory
         process.environment = environment
         process.standardInput = input
@@ -70,6 +74,12 @@ final class ACPInspectionWire: @unchecked Sendable {
             throw HarnessSetupError("\(name) returned an invalid inspection response.")
         }
         return response
+    }
+
+    /// Ends a request still waiting, from another thread, and stops the harness.
+    func interrupt() {
+        condition.lock(); ended = true; condition.broadcast(); condition.unlock()
+        stop()
     }
 
     func stop() {

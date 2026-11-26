@@ -1,8 +1,8 @@
 # Harness setup
 
 A harness is the agent program behind each bot. Noodle supports Codex, Claude
-Code, Vercel FX, Grok Build, Muse Code, OpenCode v2, Google Antigravity, and
-GitHub Copilot, using your own account, plus the experimental Apple Intelligence harness,
+Code, Vercel FX, Grok Build, Muse Code, OpenCode v2, Google Antigravity,
+GitHub Copilot, and Devin, using your own account, plus the experimental Apple Intelligence harness,
 which comes with Noodle and runs on your Mac.
 
 Noodle keeps its own sign-in for each harness, separate from the one the
@@ -51,7 +51,7 @@ To install a harness yourself:
 
 | Harness | Sign in |
 | --- | --- |
-| Codex, Claude Code, FX, Grok Build, Muse Code, Copilot | **Sign In** in Noodle |
+| Codex, Claude Code, FX, Grok Build, Muse Code, Copilot, Devin | **Sign In** in Noodle |
 | OpenCode v2 | Works without an account on OpenCode's free models. For your own providers, **Sign In** shows a command to paste into Terminal. |
 | Antigravity | **Sign In** shows a command to paste into Terminal; follow its Google sign-in there. |
 | Apple Intelligence | Turn on Apple Intelligence in System Settings on a supported Mac running macOS 26 or later. No separate install or sign-in. |
@@ -74,11 +74,11 @@ explains what it covers.
 
 ## Profiles
 
-Claude Code, Codex, FX, Grok Build, Muse Code, OpenCode, Antigravity, and
-Copilot can each be signed in to several accounts at once. Under the harness in **Settings → Harness**,
+Claude Code, Codex, FX, Grok Build, Muse Code, OpenCode, Antigravity,
+Copilot, and Devin can each be signed in to several accounts at once. Under the harness in **Settings → Harness**,
 choose **Profiles**, then **Add Profile…**, name it, and choose **Sign In…**
 beside it. Noodle shows a sign-in code and a button for the sign-in page. Claude
-Code instead opens its sign-in page in your browser. For Antigravity, Noodle
+Code and Devin instead open their sign-in page in your browser. For Antigravity, Noodle
 shows a command to paste into Terminal; run it, then choose **Check Again**.
 
 Choose the profile for a bot in **Edit Bot → Harness → Profile**; the row appears
@@ -90,9 +90,9 @@ without deleting it.
 - Grok Build sign-ins expire after seven days; sign the profile in again from
   **Profiles**.
 - An unrestricted bot does not use your usual settings for its harness (in
-  `~/.claude`, `~/.codex`, `~/.grok`, `~/.config/muse`, `~/.gemini` or
-  `~/.copilot`), and does not continue conversations started there. An
-  unrestricted Antigravity or Copilot bot also does not see files in your home folder by their usual `~` paths,
+  `~/.claude`, `~/.codex`, `~/.grok`, `~/.config/muse`, `~/.gemini`,
+  `~/.copilot` or `~/.config/devin`), and does not continue conversations started there. An
+  unrestricted Antigravity, Copilot or Devin bot also does not see files in your home folder by their usual `~` paths,
   such as `~/.gitconfig` or `~/.ssh`.
 - A Codex or Claude Code conversation starts again when you change the bot's
   profile.
@@ -143,6 +143,20 @@ curl -fsSL https://gh.io/copilot-install | bash
 Copies installed with npm or Homebrew are not supported. **Sign In** shows a
 GitHub code and a button for GitHub's sign-in page. The models offered are the
 ones your Copilot plan includes; Copilot has no separate effort setting.
+
+## Devin
+
+Install Devin with [Cognition's installer](https://docs.devin.ai/cli):
+
+```sh
+curl -fsSL https://cli.devin.ai/install.sh | bash
+```
+
+Copies installed with Homebrew are not supported. **Sign In** opens Devin's
+sign-in page in your browser. The models offered are the ones your Devin
+account allows; each model's reasoning level is part of the model, so there is
+no separate effort setting. Devin has no setting to turn off the usage reports
+it sends to Cognition; whether it sends them is a setting of your Devin account.
 
 ## Harnesses installed by Noodle
 

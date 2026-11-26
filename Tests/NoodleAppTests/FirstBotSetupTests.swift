@@ -83,7 +83,7 @@ import XCTest
 
     func testSettingsListsHarnessesInTheWelcomeOrder() {
         XCTAssertEqual(controller.displayedInstallations.map(\.provider),
-                       FirstBotSetup.featured + [.fx, .openCode, .antigravity, .copilot, .apple])
+                       FirstBotSetup.featured + [.fx, .openCode, .antigravity, .copilot, .devin, .apple])
     }
 
     func testOnlyTheFourAccountsAreOffered() async throws {

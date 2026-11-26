@@ -21,6 +21,7 @@ public enum RestrictedAgentSandbox {
         case .openCode: name = ".local/share/opencode"
         case .antigravity: name = ".gemini/antigravity-cli"
         case .copilot: name = ".copilot"
+        case .devin: name = ".local/share/devin"
         default: throw HarnessSetupError("Unsupported restricted harness account.")
         }
         let directory = home.appendingPathComponent(name, isDirectory: true)
@@ -30,7 +31,7 @@ public enum RestrictedAgentSandbox {
         return directory
     }
 
-    /// `package` is code the executable runs from outside its own file: Copilot's unpacked package.
+    /// `package` is code the executable runs from outside its own file: Copilot's unpacked package, Devin's version folder.
     public static func profile(provider: HarnessProvider, workspace: URL, repository: URL, home: URL,
                                executable: URL, package: URL? = nil, application: URL, temporary: URL,
                                folders: [AgentFolder] = [], egressPort: UInt16? = nil) throws -> String {
@@ -116,6 +117,8 @@ public enum RestrictedAgentSandbox {
             return ["HOME": privateHome.path, "AGY_CLI_DISABLE_AUTO_UPDATE": "true"]
         case .copilot:
             return CopilotLaunch.environment.merging(["HOME": privateHome.path]) { _, home in home }
+        case .devin:
+            return ["HOME": privateHome.path]
         case .muse:
             let storage = workspace.appendingPathComponent(".noodle/muse")
             return ["HOME": privateHome.path, "XDG_CONFIG_HOME": privateHome.appendingPathComponent(".config").path,

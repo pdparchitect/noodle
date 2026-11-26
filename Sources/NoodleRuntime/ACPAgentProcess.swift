@@ -64,7 +64,7 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
         makeConnection: @escaping @MainActor () throws -> any HarnessRuntimeConnection = { try ExtendedAgentConnection() },
         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         remoteAccess: (@MainActor (RemoteModelID) throws -> RemoteModelAccess)? = nil) {
-        precondition([.apple, .fx, .grokBuild, .openCode, .copilot].contains(provider))
+        precondition([.apple, .fx, .grokBuild, .openCode, .copilot, .devin].contains(provider))
         self.provider = provider
         self.makeConnection = makeConnection
         self.sleep = sleep
@@ -320,6 +320,10 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
                 pause(CopilotProtocol.authenticationFailureDescription, failure: .authenticationRequired)
                 return
             }
+            if provider == .devin, DevinProtocol.authenticationRequired(error) {
+                pause(DevinProtocol.authenticationFailureDescription, failure: .authenticationRequired)
+                return
+            }
             if provider == .copilot, case .load = purpose, let sessionID, CopilotProtocol.missingSession(error, sessionID: sessionID) {
                 pause(CopilotProtocol.missingSessionDescription, event: .runtimeFailed, failure: .missingSession(sessionID))
                 return
@@ -379,12 +383,13 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
         case .create, .load:
             if let returned = result["sessionId"] as? String { sessionID = returned }
             sessionModel = configuration.modelIdentifier ?? (result["models"] as? [String: Any])?["currentModelId"] as? String
+                ?? (provider == .devin ? DevinProtocol.currentModel(fromSession: result) : nil)
             guard let sessionID, FxProtocol.validIdentifier(sessionID) else { terminated("\(name) did not identify its session"); return }
             do {
                 try FileManager.default.createDirectory(at: stateURL.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try state.save(to: stateURL)
             } catch { terminated("Could not save the \(name) session"); return }
-            if provider == .openCode || provider == .copilot, let model = configuration.modelIdentifier {
+            if [.openCode, .copilot, .devin].contains(provider), let model = configuration.modelIdentifier {
                 request(.model, method: "session/set_config_option", params: ["sessionId": sessionID, "configId": "model", "value": model])
             } else if provider == .apple, let model = configuration.modelIdentifier, let remote = RemoteModelID(model) {
                 // The key travels only in this request, to this bot's own harness process.

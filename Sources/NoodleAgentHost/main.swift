@@ -54,6 +54,7 @@ private enum HostPaths {
         case .openCode: return try OpenCodeExecutableTrust.executable(at: path, home: home)
         case .antigravity: return try AntigravityExecutableTrust.executable(at: path, home: home)
         case .copilot: return try CopilotExecutableTrust.executable(at: path, home: home)
+        case .devin: return try DevinExecutableTrust.executable(at: path, home: home)
         }
     }
 
@@ -205,6 +206,10 @@ if CommandLine.arguments.count == 13, CommandLine.arguments[1] == "--harness-chi
             // The model is chosen in the session, where Copilot refuses one its plan does not offer.
             guard effort == nil, model.map(FxProtocol.validIdentifier) ?? true else { throw HostError("Unsupported Copilot model or effort.") }
             strings = [executable.path, "--acp"]
+        case .devin:
+            // The model is chosen in the session, where Devin refuses one its account does not offer.
+            guard effort == nil, model.map(FxProtocol.validIdentifier) ?? true else { throw HostError("Unsupported Devin model or effort.") }
+            strings = [executable.path] + DevinLaunch.arguments
         case .antigravity:
             guard effort == nil else { throw HostError("Unsupported Antigravity effort.") }
             // Noodle updates the copy it installed; the CLI updating itself would replace it unverified.
@@ -255,11 +260,14 @@ if CommandLine.arguments.count == 13, CommandLine.arguments[1] == "--harness-chi
                 profile = RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
                     codexHome: codexHome, executableDirectory: executable.deletingLastPathComponent().deletingLastPathComponent(),
                     application: HostPaths.application, temporary: temporary, folders: folders, egressPort: egressPort)
-            case .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot:
-                // Copilot runs the package it unpacked once for every bot, which the bot may only read.
-                let package = provider != .copilot ? nil : try CopilotLaunch.package(executable: executable,
-                    cacheHome: CopilotLaunch.cacheHome(root: HostPaths.storage), environment: HostPaths.accountEnvironment)
-                if let package { setenv("COPILOT_CLI_DIST_DIR", package.path, 1) }
+            case .claudeCode, .fx, .grokBuild, .muse, .openCode, .antigravity, .copilot, .devin:
+                // Copilot runs the package it unpacked once for every bot, and Devin its version folder, which the bot may only read.
+                var package: URL?
+                if provider == .copilot {
+                    package = try CopilotLaunch.package(executable: executable,
+                        cacheHome: CopilotLaunch.cacheHome(root: HostPaths.storage), environment: HostPaths.accountEnvironment)
+                    if let package { setenv("COPILOT_CLI_DIST_DIR", package.path, 1) }
+                } else if provider == .devin { package = DevinLaunch.package(executable: executable) }
                 profile = try RestrictedAgentSandbox.profile(provider: provider, workspace: workspace, repository: repository,
                     home: HostPaths.home, executable: executable, package: package, application: HostPaths.application,
                     temporary: temporary, folders: folders, egressPort: egressPort)
@@ -307,6 +315,7 @@ private final class HostSession: NSObject, AgentHostService {
     private var audit: HarnessProcessAudit?
     private var egress: HarnessEgressProxy?
     private var accountProcess: Process?
+    private var devinSignIn: DevinSignIn?
     private var codexAccount: Task<Void, Never>?
     private var input: ProcessInputWriter?
     private var outputs: [FileHandle] = []
@@ -361,7 +370,7 @@ private final class HostSession: NSObject, AgentHostService {
     func startRestrictedACP(harnessIdentifier: String, agentID: String, executablePath: String,
                             modelIdentifier: String?, effortIdentifier: String?,
                             withReply reply: @escaping (Int32, String?) -> Void) {
-        guard let provider = HarnessProvider(rawValue: harnessIdentifier), [.fx, .grokBuild, .openCode, .copilot].contains(provider) else {
+        guard let provider = HarnessProvider(rawValue: harnessIdentifier), [.fx, .grokBuild, .openCode, .copilot, .devin].contains(provider) else {
             reply(0, "Unsupported restricted ACP harness.")
             return
         }
@@ -516,6 +525,8 @@ private final class HostSession: NSObject, AgentHostService {
             self.accountProcess?.terminationHandler = nil
             if self.accountProcess?.isRunning == true { self.accountProcess?.terminate() }
             self.accountProcess = nil
+            self.devinSignIn?.cancel()
+            self.devinSignIn = nil
             self.codexAccount?.cancel()
             self.codexAccount = nil
             self.loginOutput?.readabilityHandler = nil
@@ -613,6 +624,17 @@ private final class HostSession: NSObject, AgentHostService {
         }
     }
 
+    func inspectDevin(withReply reply: @escaping (Data?, String?) -> Void) {
+        queue.async {
+            do {
+                let result = try DevinInspection.inspect(home: HostPaths.home, environment: HostPaths.defaultEnvironment(.devin),
+                                                         managed: HostPaths.managedExecutable(.devin),
+                                                         prefersManaged: HostPaths.managedHarnesses.isPreferred(.devin))
+                reply(try JSONEncoder().encode(result), nil)
+            } catch { reply(nil, error.localizedDescription) }
+        }
+    }
+
     func inspectOpenCode(withReply reply: @escaping (Data?, String?) -> Void) {
         queue.async {
             do {
@@ -674,6 +696,10 @@ private final class HostSession: NSObject, AgentHostService {
                     return self.runLogin(executable: account.executable, arguments: ["auth", "login", "--claudeai"],
                                          environment: account.environment, provider: account.provider,
                                          challenge: nil, status: account.status, reply: reply)
+                }
+                if account.provider == .devin {
+                    // Devin signs in through the browser, over its ACP server.
+                    return self.runDevinSignIn(account, reply: reply)
                 }
                 if account.provider == .fx {
                     // FX signs in with Vercel.
@@ -753,7 +779,7 @@ private final class HostSession: NSObject, AgentHostService {
         let profiles = HostPaths.profiles
         let profile = try profiles.validated(id)
         let provider = profile.provider
-        guard HarnessProfileLogin.arguments(provider) != nil || [.antigravity, .claudeCode, .fx, .openCode].contains(provider) else {
+        guard HarnessProfileLogin.arguments(provider) != nil || [.antigravity, .claudeCode, .fx, .openCode, .devin].contains(provider) else {
             throw HostError("This harness does not support this sign-in flow.")
         }
         let executable = try HostPaths.executable(executablePath, provider: provider)
@@ -781,6 +807,10 @@ private final class HostSession: NSObject, AgentHostService {
                 return try CopilotInspection.inspect(home: HostPaths.home, environment: environment,
                                                      managed: HostPaths.managedExecutable(.copilot),
                                                      prefersManaged: HostPaths.managedHarnesses.isPreferred(.copilot)).authenticated
+            case .devin:
+                return try DevinInspection.inspect(home: HostPaths.home, environment: environment,
+                                                   managed: HostPaths.managedExecutable(.devin),
+                                                   prefersManaged: HostPaths.managedHarnesses.isPreferred(.devin)).authenticated
             default: throw HostError("This harness does not support this sign-in flow.")
             }
         }
@@ -841,6 +871,26 @@ private final class HostSession: NSObject, AgentHostService {
             try login.run()
             self.accountProcess = login
         } catch { reply(false, error.localizedDescription) }
+    }
+
+    /// Devin's sign-in waits on the person in the browser, so it runs off this session's queue,
+    /// where Stop can still reach it.
+    private func runDevinSignIn(_ account: ProfileAccount, reply: @escaping (Bool, String?) -> Void) {
+        let signIn = DevinSignIn(executable: account.executable, environment: account.environment)
+        devinSignIn = signIn
+        DispatchQueue.global().async { [weak self] in
+            let outcome = Result { try signIn.run() }
+            self?.queue.async {
+                guard let self, self.devinSignIn === signIn else { return }
+                self.devinSignIn = nil
+                do {
+                    try outcome.get()
+                    reply(try account.status(), nil)
+                } catch is CancellationError {
+                    reply(false, "Sign-in was cancelled.")
+                } catch { reply(false, error.localizedDescription) }
+            }
+        }
     }
 
     private var accountEnvironment: [String: String] { HostPaths.accountEnvironment }

@@ -120,6 +120,11 @@ public enum RestrictedHarnessStorage {
         case .copilot:
             // Out of reach of the Keychain, Copilot keeps the login in its configuration file.
             try share("config.json")
+        case .devin:
+            try share("credentials.toml")
+            // Only the switch Noodle sets, never the person's own configuration.
+            let configuration = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home/" + DevinLaunch.configurationPath, create: true)
+            if !configuration.contains("config.json") { try configuration.writeData(DevinLaunch.configuration, named: "config.json") }
         default: break
         }
         for name in loginNames(provider) {
@@ -441,6 +446,7 @@ public enum RestrictedHarnessStorage {
         case .muse: ".config/muse"
         case .antigravity: ".gemini/antigravity-cli"
         case .copilot: ".copilot"
+        case .devin: ".local/share/devin"
         default: nil
         }
     }
@@ -452,6 +458,7 @@ public enum RestrictedHarnessStorage {
         case .fx: ["chatgpt-auth.json", "grok-auth.json", "api-key", "auth.json"]
         case .antigravity: ["antigravity-oauth-token"]
         case .copilot: ["config.json"]
+        case .devin: ["credentials.toml"]
         default: []
         }
     }

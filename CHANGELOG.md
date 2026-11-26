@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Devin is a harness, off until turned on in **Settings → Harness**. Noodle can install it, signs in through Devin's page in your browser into a login of its own, offers the models your Devin account allows, and supports profiles and restricted bots like the other harnesses. Its self-updates are turned off; Devin has no setting to turn off its usage reports, which follow your Devin account's setting.
+
 ## [0.98.0] - 2026-11-26
 
 ### Added

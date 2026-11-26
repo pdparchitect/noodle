@@ -21,7 +21,7 @@ struct UsageMeter {
         switch provider {
         case .claudeCode: return claude(message, recorded: recorded)
         case .codex: return codex(message).map { [$0] } ?? []
-        case .fx, .grokBuild, .openCode, .copilot, .apple: return acp(message).map { [$0] } ?? []
+        case .fx, .grokBuild, .openCode, .copilot, .devin, .apple: return acp(message).map { [$0] } ?? []
         case .muse, .antigravity: return []
         }
     }

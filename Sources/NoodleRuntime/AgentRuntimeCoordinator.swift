@@ -52,7 +52,12 @@ public struct HarnessHostInspection {
             capabilityError: result.executablePath == nil ? "Copilot is not installed" : (result.authenticated ? nil : "Sign in to Copilot in Settings → Harness."))
     }
 
-    static let providers: [HarnessProvider] = [.openCode, .grokBuild, .muse, .antigravity, .copilot]
+    init(_ result: DevinInspectionResult) {
+        self.init(executablePath: result.executablePath, models: result.models,
+            capabilityError: result.executablePath == nil ? "Devin is not installed" : (result.authenticated ? nil : "Sign in to Devin in Settings → Harness."))
+    }
+
+    static let providers: [HarnessProvider] = [.openCode, .grokBuild, .muse, .antigravity, .copilot, .devin]
 
     @MainActor public static func load(_ provider: HarnessProvider) async throws -> HarnessHostInspection {
         switch provider {
@@ -61,6 +66,7 @@ public struct HarnessHostInspection {
         case .muse: return .init(try await MuseHostProbe.load())
         case .antigravity: return .init(try await AntigravityHostProbe.load())
         case .copilot: return .init(try await CopilotHostProbe.load())
+        case .devin: return .init(try await DevinHostProbe.load())
         default: throw HarnessSetupError("\(provider.displayName) is not inspected by the Agent Host.")
         }
     }

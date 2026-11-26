@@ -22,7 +22,7 @@ import XCTest
 }
 
 @MainActor final class RuntimeCoordinatorHostInspectionTests: XCTestCase {
-    private static let hostProviders: [HarnessProvider] = [.openCode, .grokBuild, .muse, .antigravity, .copilot]
+    private static let hostProviders: [HarnessProvider] = [.openCode, .grokBuild, .muse, .antigravity, .copilot, .devin]
 
     private func fixture(_ host: HostInspectionFixture) throws -> RuntimeCoordinatorFixture {
         let f = try RuntimeCoordinatorFixture(inspectHost: { try await host.inspect($0) })

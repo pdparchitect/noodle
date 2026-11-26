@@ -2,6 +2,7 @@ import Foundation
 import NoodleCore
 import XCTest
 @testable import Noodle
+@testable import NoodleRuntime
 
 @MainActor final class ACPRuntimeTests: XCTestCase {
     private func fixture() throws -> HarnessRuntimeFixture {
@@ -9,7 +10,7 @@ import XCTest
     }
 
     func testProvidersConfigureAccessModelEffortAndResumeSavedSessions() async throws {
-        for provider in [HarnessProvider.apple, .fx, .grokBuild, .openCode, .copilot] {
+        for provider in [HarnessProvider.apple, .fx, .grokBuild, .openCode, .copilot, .devin] {
             for extended in [false, true] {
                 let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: provider, extended: extended)
                 p.start(); try await f.openACP(wire, provider: provider)
@@ -106,6 +107,65 @@ import XCTest
         XCTAssertTrue(f.failures.isEmpty)
     }
 
+    /// Devin keeps no session it never ran a turn in, so one missing after a restart is replaced with a new one.
+    func testMissingDevinSessionStartsFresh() async throws {
+        let f = try fixture(), old = HarnessWire(), first = f.acp(old, provider: .devin)
+        first.start(); try await f.openACP(old, provider: .devin); first.stop { _ in }
+        let wire = HarnessWire(), p = f.acp(wire, provider: .devin)
+        p.start(); try await f.wait { wire.count("initialize") == 1 }
+        try wire.reply("initialize", result: ["protocolVersion": 1])
+        try await f.wait { wire.count("session/load") == 1 }
+        try wire.reply("session/load", error: ["code": -32016, "message": "Session not found",
+                                               "data": ["cognition.ai/errorKind": "session_not_found"]])
+        try await f.wait { wire.count("session/new") == 1 }
+        XCTAssertTrue(f.failures.isEmpty)
+    }
+
+    /// Signed out, Devin opens the session and refuses the prompt; a rejected login refuses the session.
+    /// Either way the bot waits for sign-in, keeping its unfinished turn, instead of restarting.
+    func testSignedOutDevinPausesForSignIn() async throws {
+        let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: .devin)
+        p.start(); try await f.openACP(wire, provider: .devin); p.notify()
+        try await f.wait { wire.count("session/prompt") == 1 }
+        try wire.reply("session/prompt", error: ["code": -32000, "message": "Please log in to use Devin. Use `/login` to authenticate again."])
+        try await f.wait { p.snapshot.phase == .failed }
+        XCTAssertEqual(p.snapshot.failure, .authenticationRequired)
+        XCTAssertFalse(p.snapshot.detail.contains("/login"))
+        XCTAssertTrue(f.recovery(.devin).hasUnfinishedTurn)
+        XCTAssertTrue(f.failures.isEmpty)
+
+        let g = try fixture(), next = HarnessWire(), q = g.acp(next, provider: .devin)
+        q.start(); try await g.wait { next.count("initialize") == 1 }
+        try next.reply("initialize", result: ["protocolVersion": 1])
+        try await g.wait { next.count("session/new") == 1 }
+        try next.reply("session/new", error: ["code": -32000, "message": "Authentication failed: that API key was rejected"])
+        try await g.wait { q.snapshot.phase == .failed }
+        XCTAssertEqual(q.snapshot.failure, .authenticationRequired)
+        XCTAssertTrue(g.failures.isEmpty)
+    }
+
+    /// Devin names the session's model in its model option, which usage records.
+    func testDevinUsageRecordsTheSessionsModel() async throws {
+        var activity: [[String: Any]] = []
+        let f = try fixture(), wire = HarnessWire()
+        let p = ACPAgentProcess(provider: .devin, agent: .init(displayName: "Fixture bot", harnessIdentifier: "devin"),
+            executableURL: f.root, workspaceURL: f.workspace, extendedAccess: true, recoverInterruptedWork: false,
+            onSnapshot: { _ in }, onHeartbeat: {}, onUnexpectedTermination: { _, _, _ in },
+            onActivity: { activity.append($0) }, makeConnection: { wire }, sleep: { [clock = f.clock] in try await clock.sleep($0) })
+        defer { p.stop { _ in } }
+        p.start(); try await f.wait { wire.count("initialize") == 1 }
+        try wire.reply("initialize", result: ["protocolVersion": 1])
+        try await f.wait { wire.count("session/new") == 1 }
+        try wire.reply("session/new", result: ["sessionId": "fixture-session", "configOptions": [
+            ["id": "model", "type": "select", "currentValue": "swe-2-high", "options": [["value": "swe-2-high", "name": "SWE-2"]]]]])
+        try await f.wait { p.canReceiveHeartbeat }
+        XCTAssertEqual(wire.count("session/set_config_option"), 0, "No model was chosen, so Devin keeps its own")
+        p.notify(); try await f.wait { wire.count("session/prompt") == 1 }
+        try wire.reply("session/prompt", result: ["stopReason": "end_turn", "usage": ["inputTokens": 10, "outputTokens": 2]])
+        try await f.wait { p.canReceiveHeartbeat }
+        XCTAssertEqual(activity.last?["model"] as? String, "swe-2-high")
+    }
+
     func testNonMissingLoadFailureRetainsSavedPointer() async throws {
         let f = try fixture(), old = HarnessWire(), first = f.acp(old)
         first.start(); try await f.openACP(old); first.stop { _ in }
@@ -122,7 +182,7 @@ import XCTest
     /// Cancelling would end the turn and any background work or sub-agents it runs, and ACP cannot add a message
     /// to a running prompt, so an urgent message waits for the turn to end.
     func testUrgentWakeWaitsForTheTurnInsteadOfCancellingIt() async throws {
-        for provider in [HarnessProvider.apple, .fx, .grokBuild, .openCode, .copilot] {
+        for provider in [HarnessProvider.apple, .fx, .grokBuild, .openCode, .copilot, .devin] {
             let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: provider)
             p.start(); try await f.openACP(wire, provider: provider); p.notify()
             let id = p.notify(immediately: true); p.promoteNotification(id)
@@ -261,7 +321,7 @@ import XCTest
 
     /// Stop cancels the running prompt once and drops the wake waiting behind it, so the bot goes idle.
     func testStopCancelsTheTurnOnceAndStartsNoOtherForWaitingMessages() async throws {
-        for provider in [HarnessProvider.apple, .fx, .grokBuild, .openCode, .copilot] {
+        for provider in [HarnessProvider.apple, .fx, .grokBuild, .openCode, .copilot, .devin] {
             let f = try fixture(), wire = HarnessWire(), p = f.acp(wire, provider: provider)
             p.start(); try await f.openACP(wire, provider: provider)
             XCTAssertFalse(p.cancelTurn(), "No turn to cancel")

@@ -294,6 +294,7 @@ extension HarnessDistribution {
         case .openCode: self = .openCode
         case .antigravity: self = .antigravity
         case .copilot: self = .copilot
+        case .devin: self = .devin
         case .apple: return nil
         }
     }

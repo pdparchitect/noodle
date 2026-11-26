@@ -119,7 +119,7 @@ chart breaks the period down by input, output and cached tokens. To see one bot,
 pick it from the **All Bots** menu in the toolbar, or open its profile and click **Usage**.
 
 History is kept across restarts and after a bot is deleted. Claude Code, Codex,
-Grok Build, FX, OpenCode and Copilot report tokens; only Claude Code reports cost. Muse,
+Grok Build, FX, OpenCode, Copilot and Devin report tokens; only Claude Code reports cost. Muse,
 Antigravity and Apple Intelligence are not counted yet.
 
 ## Messages and files
