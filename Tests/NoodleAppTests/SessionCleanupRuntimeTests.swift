@@ -121,13 +121,15 @@ import XCTest
         }
     }
 
-    /// The first cleanup comes a while after launch and then once a day: Claude Code and Grok Build files are swept
-    /// for every bot, and each running harness is asked once it is idle.
+    /// The first cleanup comes a while after launch and then once a day. A bot's running harness is asked once it
+    /// is idle, and what another harness left in its home is cleaned up too.
     func testCoordinatorCleansUpAfterLaunchThenDailyAndAsksBusyHarnessesAgain() async throws {
         let f = try RuntimeCoordinatorFixture(); addTeardownBlock { @MainActor in f.cleanUp() }
-        let agent = try f.agent(harness: .claudeCode)
+        let agent = try f.agent(harness: .codex)
         let process = try f.start(agent)
-        let transcript = f.repository.directory(forAgentID: agent.id)
+        let workspace = f.repository.directory(forAgentID: agent.id)
+        try FileManager.default.createDirectory(at: workspace.appendingPathComponent(".noodle/home/.codex"), withIntermediateDirectories: true)
+        let transcript = workspace
             .appendingPathComponent(".noodle/home/.claude/projects/-workspace/77777777-7777-4777-8777-777777777777.jsonl")
         try FileManager.default.createDirectory(at: transcript.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("x".utf8).write(to: transcript)
@@ -145,7 +147,8 @@ import XCTest
         try await f.clock.waitUntil { !FileManager.default.fileExists(atPath: transcript.path) }
         XCTAssertTrue(process.sessionCleanups.isEmpty, "Busy, so asked again later")
         process.cleansUpSessions = true
-        f.runtime.checkSessionCleanup(repository: f.repository)
+        // Checked each second, as the app does, until the busy harness is asked again.
+        try await f.clock.waitUntil { f.runtime.checkSessionCleanup(repository: f.repository); return !process.sessionCleanups.isEmpty }
         XCTAssertEqual(process.sessionCleanups, [f.clock.date.addingTimeInterval(-HarnessSessionCleanup.retention)])
 
         f.clock.date.addTimeInterval(60 * 60)

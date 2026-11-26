@@ -119,6 +119,10 @@ import XCTest
     let factory = RuntimeFactoryFixture()
     let clock = RuntimeClockFixture()
     let runtime: AgentRuntimeCoordinator
+    /// Harnesses started briefly outside a bot's runtime, such as to clean up its sessions, newest last.
+    var wires: [HarnessWire] = []
+    /// Set to make starting a harness outside a bot's runtime fail.
+    var connectFailure: Error?
 
     init(inspectHost: @escaping @MainActor (HarnessProvider) async throws -> HarnessHostInspection = { try await HarnessHostInspection.load($0) }) throws {
         defaults = UserDefaults(suiteName: suite)!
@@ -138,8 +142,16 @@ import XCTest
         discovery = HarnessDiscovery(homeDirectory: root, applicationsDirectory: root,
             executableSearchDirectories: [bin], applicationBundleURL: root, environment: [:])
         let factory = factory, clock = clock
+        var connect: (@MainActor () throws -> any HarnessRuntimeConnection)!
         runtime = AgentRuntimeCoordinator(discovery: discovery, defaults: defaults,
-            makeProcess: { factory.make($0) }, inspectHost: inspectHost, sleep: { try await clock.sleep($0) }, now: { clock.date })
+            makeProcess: { factory.make($0) }, connectHarness: { _, _ in try connect() },
+            inspectHost: inspectHost, sleep: { try await clock.sleep($0) }, now: { clock.date })
+        connect = { [unowned self] in
+            if let connectFailure { throw connectFailure }
+            let wire = HarnessWire()
+            wires.append(wire)
+            return wire
+        }
     }
     func agent(_ name: String = "Fixture bot", harness: HarnessProvider? = .codex) throws -> AgentRecord {
         try repository.createAgent(named: name, harnessIdentifier: harness?.rawValue).agent

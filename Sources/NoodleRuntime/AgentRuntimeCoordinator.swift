@@ -343,10 +343,15 @@ public final class AgentRuntimeCoordinator {
     private var runtimeIDs: [UUID: UUID] = [:]
     /// When old harness sessions are next cleaned up: first a while after launch, then once a day.
     @ObservationIgnored private var nextSessionCleanup: Date?
-    /// Bots whose harness was busy when its sessions were due, with the cutoff it is still owed.
-    @ObservationIgnored private var owedSessionCleanups: [UUID: Date] = [:]
-    /// Bots whose harness is deleting sessions now.
+    /// Bots whose running harness was busy when its sessions were due, with the cutoff it is still owed.
+    @ObservationIgnored private var owedSessionCleanups: [UUID: (agent: AgentRecord, cutoff: Date, providers: Set<HarnessProvider>)] = [:]
+    /// Bots whose sessions are being cleaned up now.
     @ObservationIgnored private var runningSessionCleanups: Set<UUID> = []
+    /// Bots held from starting while a harness runs for them outside their runtime, or its files are removed:
+    /// a start would stop that harness, as a harness left behind.
+    @ObservationIgnored private var cleaningAgents: Set<UUID> = []
+    /// Starts a harness for a bot outside its runtime, as the bots' own harnesses are started.
+    @ObservationIgnored private let connectHarness: @MainActor (UUID, URL) throws -> any HarnessRuntimeConnection
     private var capabilityProbe: CodexCapabilityProbe?
     private var fxCapabilityTask: Task<Void, Never>?
     /// The models of each FX profile other than Default: every login sends requests through its own
@@ -422,12 +427,14 @@ public final class AgentRuntimeCoordinator {
     public init(discovery: HarnessDiscovery = HarnessDiscovery(), defaults: UserDefaults = .standard,
          harnesses: HarnessSelection? = nil,
          makeProcess: @escaping @MainActor (AgentRuntimeLaunch) -> any AgentRuntimeProcess = { $0.makeProcess() },
+         connectHarness: @escaping @MainActor (UUID, URL) throws -> any HarnessRuntimeConnection = { _, _ in try ExtendedAgentConnection() },
          inspectHost: @escaping @MainActor (HarnessProvider) async throws -> HarnessHostInspection = { try await HarnessHostInspection.load($0) },
          sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
          now: @escaping @MainActor () -> Date = Date.init) {
         self.now = now
         self.sleep = sleep
         self.makeProcess = makeProcess
+        self.connectHarness = connectHarness
         self.inspectHost = inspectHost
         self.discovery = discovery
         self.defaults = defaults
@@ -641,34 +648,53 @@ public final class AgentRuntimeCoordinator {
         if date >= due {
             nextSessionCleanup = date.addingTimeInterval(24 * 60 * 60)
             Task { await cleanUpSessions(repository: repository) }
-        } else { askOwedSessionCleanups() }
+            return
+        }
+        for (id, owed) in owedSessionCleanups where !runningSessionCleanups.contains(id) {
+            owedSessionCleanups[id] = nil
+            // Owed only until the next daily round would ask again anyway.
+            guard date.timeIntervalSince(owed.cutoff) < HarnessSessionCleanup.retention + 24 * 60 * 60 else { continue }
+            Task { await cleanUpSessions(of: owed.agent, repository: repository, before: owed.cutoff, only: owed.providers) }
+        }
     }
 
-    /// Deletes every bot's harness sessions unused for `HarnessSessionCleanup.retention`; see there for which go.
-    /// Returns once Claude Code and Grok Build files are swept and each idle harness has finished, or after two
-    /// minutes; a busy harness cleans up once its turn is over.
+    /// Deletes every bot's harness sessions unused for `HarnessSessionCleanup.retention`: for each bot, each harness
+    /// whose sessions are in its home, whichever it uses now, cleans up its own way; see `HarnessSessionCleaners`.
+    /// Returns once every harness has finished, other than a running one that was busy, which is asked again.
     public func cleanUpSessions(repository: WorkspaceRepository) async {
         let cutoff = now().addingTimeInterval(-HarnessSessionCleanup.retention)
-        let bots = ((try? repository.loadAgents()) ?? []).map { (repository.directory(forAgentID: $0.id), repository.storage(for: $0.id).runtime) }
-        for id in processes.keys { owedSessionCleanups[id] = cutoff }
-        askOwedSessionCleanups()
-        await Task.detached(priority: .utility) {
-            for (workspace, runtime) in bots {
-                HarnessSessionCleanup.sweepFiles(workspace: workspace, keeping: HarnessSessionCleanup.keptSessions(runtime: runtime), before: cutoff)
-            }
-        }.value
-        let deadline = ContinuousClock.now.advanced(by: .seconds(120))
-        while !runningSessionCleanups.isEmpty, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(250)) }
+        for agent in (try? repository.loadAgents()) ?? [] {
+            await cleanUpSessions(of: agent, repository: repository, before: cutoff, only: nil)
+        }
     }
 
-    private func askOwedSessionCleanups() {
-        for (id, cutoff) in owedSessionCleanups {
-            guard let process = processes[id] else { owedSessionCleanups[id] = nil; continue }
-            runningSessionCleanups.insert(id)
-            if process.cleanUpSessions(before: cutoff, completion: { [weak self] in self?.runningSessionCleanups.remove(id) }) {
-                owedSessionCleanups[id] = nil
-            } else { runningSessionCleanups.remove(id) }
+    private func cleanUpSessions(of agent: AgentRecord, repository: WorkspaceRepository, before cutoff: Date,
+                                 only providers: Set<HarnessProvider>?) async {
+        guard runningSessionCleanups.insert(agent.id).inserted else { return }
+        defer { runningSessionCleanups.remove(agent.id) }
+        let workspace = repository.directory(forAgentID: agent.id), runtime = repository.storage(for: agent.id).runtime
+        let kept = await Task.detached(priority: .utility) { HarnessSessionCleanup.keptSessions(runtime: runtime) }.value
+        let context = HarnessSessionCleanupContext(
+            agentID: agent.id, workspace: workspace, cutoff: cutoff, kept: kept,
+            extendedAccess: accessConfiguration.isExtended(for: agent),
+            process: { [weak self] in self?.processes[agent.id] },
+            executable: { [weak self] provider in
+                guard let self, self.harnesses.isOn(provider) else { return nil }
+                return self.installations.first { $0.provider == provider && $0.isAvailable }?.executablePath.map(URL.init(fileURLWithPath:))
+            },
+            connect: { [connectHarness] in try connectHarness(agent.id, workspace) },
+            whileStopped: { [weak self] work in
+                guard let self, self.processes[agent.id] == nil, self.cleaningAgents.insert(agent.id).inserted else { return false }
+                defer { self.cleaningAgents.remove(agent.id) }
+                await work()
+                return true
+            })
+        var busy = Set<HarnessProvider>()
+        for cleaner in HarnessSessionCleaners.all where providers?.contains(cleaner.provider) ?? true {
+            guard cleaner.isPresent(in: workspace) else { continue }
+            if await cleaner.cleanUp(context) == .busy { busy.insert(cleaner.provider) }
         }
+        if !busy.isEmpty { owedSessionCleanups[agent.id] = (agent, cutoff, busy) }
     }
 
     public func refreshWakes(for agentID: UUID, repository: WorkspaceRepository) {
@@ -1040,7 +1066,7 @@ public final class AgentRuntimeCoordinator {
         // Whoever lets a held bot go starts it with its unread messages.
         if heldAgents[agent.id] != nil { quietStarts.remove(agent.id); hold(agent.id); return }
         guard !neverStarts(agent.id), processes[agent.id] == nil, !changingAccess.contains(agent.id), !blockedRestarts.contains(agent.id),
-              !blockedRecoveries.contains(agent.id) else { return }
+              !blockedRecoveries.contains(agent.id), !cleaningAgents.contains(agent.id) else { return }
         if HarnessProvider(rawValue: agent.harnessIdentifier ?? "")?.supportsRestrictedAccess == false,
            !accessConfiguration.isExtended(for: agent) {
             snapshots[agent.id] = .init(agentID: agent.id, phase: .failed,

@@ -7,7 +7,7 @@
 - Devin is a harness, off until turned on: the Hub can install it, signs in through Devin's page in the browser, offers the models the Devin account allows, shows the account it is signed in to and lends it like the other harnesses. It leaves out the plugins and MCP servers added to the Devin account, and its self-updates are turned off.
 - Settings shows the GitHub account Copilot is signed in to, for its own row and each profile, as it does for Codex and Claude Code.
 - Fastmail can be added as a tool.
-- Old bot sessions are cleaned up: once a day, the Hub deletes the Claude Code, Codex, Grok Build, OpenCode and Devin sessions a restricted bot has not used for a week, keeping the one it is in, and gives the space back to the disk. The Usage window's Disk measure has **Clean Up Sessions** to do it now. A bot's own files are never touched.
+- Old bot sessions are cleaned up: once a day, the Hub deletes the Claude Code, Codex, Grok Build, OpenCode and Devin sessions a bot has not used for a week, keeping the one it is in, and gives the space back to the disk; sessions left behind by a harness the bot used before go too. Codex, OpenCode and Devin delete their own, started briefly when nothing is running; Codex history they cannot delete goes once untouched for a week. The Usage window's Disk measure has **Clean Up Sessions** to do it now. A bot's own files are never touched.
 
 ## [0.61.0] - 2026-11-26
 

@@ -71,7 +71,7 @@ final class HarnessSessionCleanupTests: XCTestCase {
         try age(projects + stale + "/subagents", old); try age(projects + stale + "/tool-results", old)
         try age(projects + orphan + "/tool-results", old)
 
-        let removed = HarnessSessionCleanup.sweepFiles(workspace: workspace, keeping: [current], before: cutoff)
+        let removed = HarnessSessionCleanup.sweepClaude(workspace: workspace, keeping: [current], before: cutoff)
 
         XCTAssertEqual(removed, 2)
         XCTAssertFalse(exists(projects + stale + ".jsonl"))
@@ -99,7 +99,7 @@ final class HarnessSessionCleanupTests: XCTestCase {
         try file(sessions + "session_search.sqlite", modified: old)
         try file(folder + "not-a-session/events.jsonl", modified: old)
 
-        let removed = HarnessSessionCleanup.sweepFiles(workspace: workspace, keeping: [current, previous], before: cutoff)
+        let removed = HarnessSessionCleanup.sweepGrok(workspace: workspace, keeping: [current, previous], before: cutoff)
 
         XCTAssertEqual(removed, 1)
         XCTAssertFalse(exists(folder + stale))
@@ -125,7 +125,8 @@ final class HarnessSessionCleanupTests: XCTestCase {
         try FileManager.default.createDirectory(at: grok, withIntermediateDirectories: true)
         try FileManager.default.createSymbolicLink(at: grok.appendingPathComponent("sessions"), withDestinationURL: outside)
 
-        HarnessSessionCleanup.sweepFiles(workspace: workspace, keeping: [], before: cutoff)
+        HarnessSessionCleanup.sweepClaude(workspace: workspace, keeping: [], before: cutoff)
+        HarnessSessionCleanup.sweepGrok(workspace: workspace, keeping: [], before: cutoff)
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: outside.appendingPathComponent(id + ".jsonl").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: outside.appendingPathComponent(id + "/data.json").path))
@@ -145,7 +146,8 @@ final class HarnessSessionCleanupTests: XCTestCase {
     }
 
     /// Codex lists only threads whose rollout file remains, but deletes any thread its state database names,
-    /// so the old ones are read from the newest state database.
+    /// so the old ones are read from the newest state database, also once Codex has closed it and SQLite has
+    /// folded its write-ahead log back in, as it does when Codex stops.
     func testCodexThreadsLastUpdatedBeforeTheCutoffComeFromTheNewestStateDatabase() throws {
         let codex = workspace.appendingPathComponent(".noodle/home/.codex")
         try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
@@ -154,6 +156,7 @@ final class HarnessSessionCleanupTests: XCTestCase {
             var db: OpaquePointer?
             XCTAssertEqual(sqlite3_open(codex.appendingPathComponent(name).path, &db), SQLITE_OK)
             defer { sqlite3_close(db) }
+            XCTAssertEqual(sqlite3_exec(db, "PRAGMA journal_mode=WAL", nil, nil, nil), SQLITE_OK)
             XCTAssertEqual(sqlite3_exec(db, "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL, updated_at INTEGER NOT NULL)", nil, nil, nil), SQLITE_OK)
             for (id, date) in rows {
                 XCTAssertEqual(sqlite3_exec(db, "INSERT INTO threads VALUES ('\(id)', '', \(Int(date.timeIntervalSince1970)))", nil, nil, nil), SQLITE_OK)
@@ -161,9 +164,36 @@ final class HarnessSessionCleanupTests: XCTestCase {
         }
         try database("state_4.sqlite", [("superseded", old)])
         try database("state_5.sqlite", [("old-one", old), ("old-two", old), ("recent", recent)])
+        // As Codex's SQLite leaves it once closed; Apple's keeps the empty sidecars.
+        for suffix in ["-wal", "-shm"] { try? FileManager.default.removeItem(at: codex.appendingPathComponent("state_5.sqlite" + suffix)) }
         try Data().write(to: codex.appendingPathComponent("thread_history_1.sqlite"))
         try Data().write(to: codex.appendingPathComponent("thread_history_1.sqlite-wal"))
         XCTAssertEqual(Set(HarnessSessionCleanup.codexThreads(workspace: workspace, before: cutoff)), ["old-one", "old-two"])
         XCTAssertEqual(HarnessSessionCleanup.codexHistoryDatabases(workspace: workspace).map(\.lastPathComponent), ["thread_history_1.sqlite"])
+    }
+
+    /// When Codex cannot be started to delete its own threads, its history goes as whole files, never opened, once
+    /// nothing in it has changed for the retention period. Its login, settings and memories stay.
+    func testCodexHistoryFilesGoTogetherOnceAllAreUntouchedButLoginAndMemoriesStay() throws {
+        let codex = ".noodle/home/.codex/"
+        let history = ["sessions/2026/11/20/rollout.jsonl", "archived_sessions/rollout.jsonl", "thread_history_1.sqlite",
+                       "thread_history_1.sqlite-wal", "state_5.sqlite", "logs_2.sqlite", "logs_2.sqlite-shm", "session_index.jsonl",
+                       "cache/remote_plugin_catalog/catalog.json", "shell_snapshots/snapshot.sh"]
+        let kept = ["auth.json", "config.toml", "memories_1.sqlite", "goals_1.sqlite", "generated_images/image.png", "skills/skill/SKILL.md"]
+        for path in history + kept { try file(codex + path, modified: old) }
+        for folder in ["sessions/2026/11/20", "sessions/2026/11", "sessions/2026", "sessions", "archived_sessions",
+                       "cache/remote_plugin_catalog", "cache", "shell_snapshots"] { try age(codex + folder, old) }
+        try age(codex + "logs_2.sqlite", recent)
+
+        XCTAssertFalse(HarnessSessionCleanup.removeCodexHistory(workspace: workspace, before: cutoff), "Codex wrote its log this week")
+        for path in history + kept { XCTAssertTrue(exists(codex + path), path) }
+
+        try age(codex + "logs_2.sqlite", old)
+        XCTAssertTrue(HarnessSessionCleanup.removeCodexHistory(workspace: workspace, before: cutoff))
+        for path in ["sessions", "archived_sessions", "thread_history_1.sqlite", "thread_history_1.sqlite-wal", "state_5.sqlite",
+                     "logs_2.sqlite", "logs_2.sqlite-shm", "session_index.jsonl", "cache", "shell_snapshots"] {
+            XCTAssertFalse(exists(codex + path), path)
+        }
+        for path in kept { XCTAssertTrue(exists(codex + path), path) }
     }
 }

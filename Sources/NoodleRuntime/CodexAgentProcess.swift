@@ -22,16 +22,13 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
         case steerTurn(UUID, String)
         case startVoiceCall
         case voiceCall
-        case deleteThread
-        case vacuumHistory
+        case sessionCleanup(CodexThreadDeletion.Step)
     }
 
-    /// A cleanup of old threads running on one connection: threads still to delete, then history to vacuum.
+    /// A cleanup of old threads running on one connection.
     private struct SessionCleanup {
         let connection: UUID
-        var threads: [String]
-        var databases: [URL]
-        var deleted = 0
+        var deletion: CodexThreadDeletion
         let completion: @MainActor () -> Void
     }
 
@@ -276,39 +273,24 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
             stale.completion()
         }
         guard canReceiveHeartbeat, sessionCleanup == nil, let connectionID else { return false }
-        let threads = HarnessSessionCleanup.codexThreads(workspace: workspaceURL, before: cutoff).filter { $0 != threadID }
-        // Codex refuses to delete a thread while its archive folder is missing, as it is in a bot's home.
-        guard !threads.isEmpty,
-              (try? WorkspaceMailbox(workspace: workspaceURL, path: ".noodle/home/.codex/archived_sessions", create: true)) != nil
+        guard let deletion = CodexThreadDeletion(workspace: workspaceURL, before: cutoff, keeping: Set([threadID?.lowercased()].compactMap { $0 }))
         else { completion(); return true }
-        sessionCleanup = SessionCleanup(connection: connectionID, threads: threads,
-                                        databases: HarnessSessionCleanup.codexHistoryDatabases(workspace: workspaceURL), completion: completion)
+        sessionCleanup = SessionCleanup(connection: connectionID, deletion: deletion, completion: completion)
         continueSessionCleanup()
         return true
     }
 
-    /// Deletes the next thread, one at a time so a turn's own requests are not held up behind many.
-    private func continueSessionCleanup() {
+    private func continueSessionCleanup(after step: CodexThreadDeletion.Step? = nil, succeeded: Bool = false) {
         guard var cleanup = sessionCleanup else { return }
-        do {
-            if let thread = cleanup.threads.popLast() {
-                sessionCleanup = cleanup
-                try request(.deleteThread, method: "thread/delete", params: ["threadId": thread])
-            } else if cleanup.deleted > 0, let database = cleanup.databases.popLast() {
-                sessionCleanup = cleanup
-                // Deleted threads leave free pages that Codex never vacuums, so the file keeps its size. The
-                // vacuum is a write to the bot's database, so it runs as a command in the bot's own sandbox.
-                try request(.vacuumHistory, method: "command/exec", params: [
-                    "command": ["/usr/bin/sqlite3", database.path, "PRAGMA incremental_vacuum;"],
-                    "cwd": workspaceURL.path,
-                    "sandboxPolicy": ["type": "externalSandbox", "networkAccess": "restricted"],
-                    "timeoutMs": 600_000
-                ])
-            } else {
-                sessionCleanup = nil
-                cleanup.completion()
-            }
-        } catch {
+        if let step { cleanup.deletion.answered(step, succeeded: succeeded) }
+        guard let next = cleanup.deletion.next() else {
+            sessionCleanup = nil
+            cleanup.completion()
+            return
+        }
+        sessionCleanup = cleanup
+        do { try request(.sessionCleanup(next.step), method: next.method, params: next.params) }
+        catch {
             sessionCleanup = nil
             cleanup.completion()
         }
@@ -369,9 +351,8 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
                 case .startVoiceCall, .voiceCall:
                     endVoiceCallLocally(error["message"] as? String ?? "The call could not continue.")
                     return
-                case .deleteThread, .vacuumHistory:
-                    // A thread Codex will not delete, or a vacuum the sandbox refuses, leaves the bot as it was.
-                    continueSessionCleanup()
+                case .sessionCleanup(let step):
+                    continueSessionCleanup(after: step, succeeded: false)
                     return
                 default: break
                 }
@@ -425,11 +406,8 @@ public final class CodexAgentProcess: AgentRuntimeProcess {
                 sendPendingNotificationIfPossible()
             case .startVoiceCall, .voiceCall:
                 break
-            case .deleteThread:
-                sessionCleanup?.deleted += 1
-                continueSessionCleanup()
-            case .vacuumHistory:
-                continueSessionCleanup()
+            case .sessionCleanup(let step):
+                continueSessionCleanup(after: step, succeeded: true)
             case .steerTurn(let notificationID, let expectedTurnID):
                 steeringTimeout?.cancel()
                 steeringNotificationID = nil

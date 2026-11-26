@@ -5,12 +5,11 @@ import SQLite3
 import CSQLite
 #endif
 
-/// Deletes the sessions a bot's harnesses kept in its private home, `.noodle/home`, once they have gone unused
-/// for a week. Only sessions go: never the bot's own workspace files, which are the bot's to tidy, and never
-/// a session a runtime pointer still names. Harnesses that can delete their own sessions do it themselves,
-/// through their running connection; for Claude Code and Grok Build, whose folders are plain files with no
-/// delete call a bot's harness offers, the folders are removed here. Nothing outside that home is touched,
-/// so a bot with unrestricted access, whose harness keeps its sessions in the person's own home, keeps them.
+/// The file side of deleting the sessions a bot's harnesses kept in its private home, `.noodle/home`, once they
+/// have gone unused for a week. Each harness's cleaner decides how its own sessions go, and uses these where it
+/// has to touch files: only session files, never the bot's own workspace files, which are the bot's to tidy, and
+/// never a session a runtime pointer still names. Nothing outside that home is touched, so a bot with
+/// unrestricted access, whose harness keeps its sessions in the person's own home, keeps them.
 public enum HarnessSessionCleanup {
     public static let retention: TimeInterval = 7 * 24 * 60 * 60
 
@@ -30,15 +29,11 @@ public enum HarnessSessionCleanup {
         return kept
     }
 
-    /// Removes the Claude Code and Grok Build sessions last changed before `cutoff`; answers how many went.
+    /// Removes the Claude Code sessions last changed before `cutoff`, answering how many went. Claude Code keeps
+    /// each session as `<id>.jsonl` beside a folder `<id>` of its subagents and tool results, in a folder per
+    /// working directory. Anything else there, such as its `memory` folder, is not a session.
     @discardableResult
-    public static func sweepFiles(workspace: URL, keeping kept: Set<String>, before cutoff: Date) -> Int {
-        sweepClaude(workspace: workspace, keeping: kept, before: cutoff) + sweepGrok(workspace: workspace, keeping: kept, before: cutoff)
-    }
-
-    /// Claude Code keeps each session as `<id>.jsonl` beside a folder `<id>` of its subagents and tool results, in
-    /// a folder per working directory. Anything else there, such as its `memory` folder, is not a session.
-    private static func sweepClaude(workspace: URL, keeping kept: Set<String>, before cutoff: Date) -> Int {
+    public static func sweepClaude(workspace: URL, keeping kept: Set<String>, before cutoff: Date) -> Int {
         let path = ".noodle/home/.claude/projects"
         guard let projects = try? WorkspaceMailbox(workspace: workspace, path: path) else { return 0 }
         var removed = 0
@@ -61,9 +56,11 @@ public enum HarnessSessionCleanup {
         return removed
     }
 
-    /// Grok Build keeps each session as a folder named by its ID, in a folder per working directory, beside a
-    /// search index it rebuilds from the folders it finds.
-    private static func sweepGrok(workspace: URL, keeping kept: Set<String>, before cutoff: Date) -> Int {
+    /// Removes the Grok Build sessions last changed before `cutoff`, answering how many went. Grok Build keeps
+    /// each session as a folder named by its ID, in a folder per working directory, beside a search index it
+    /// rebuilds from the folders it finds.
+    @discardableResult
+    public static func sweepGrok(workspace: URL, keeping kept: Set<String>, before cutoff: Date) -> Int {
         let path = ".noodle/home/.grok/sessions"
         guard let sessions = try? WorkspaceMailbox(workspace: workspace, path: path) else { return 0 }
         var removed = 0
@@ -92,8 +89,16 @@ public enum HarnessSessionCleanup {
         // The folder's real path, since SQLite refuses a link anywhere in the path, as /var is on macOS.
         let path = String(cString: folder) + "/" + name
         free(folder)
+        // A closed database has no write-ahead log, which a read-only connection cannot make; nothing writes
+        // it then, so it is read as it stands.
+        let closed = !codex.contains(name + "-wal")
+        var components = URLComponents()
+        components.scheme = "file"
+        components.path = path
+        if closed { components.queryItems = [URLQueryItem(name: "immutable", value: "1")] }
+        guard let uri = components.string else { return [] }
         var db: OpaquePointer?
-        guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOFOLLOW, nil) == SQLITE_OK else {
+        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOFOLLOW | SQLITE_OPEN_URI, nil) == SQLITE_OK else {
             if let db { sqlite3_close(db) }
             return []
         }
@@ -112,6 +117,26 @@ public enum HarnessSessionCleanup {
             if isThreadID(id) { threads.append(id) }
         }
         return threads
+    }
+
+    /// Removes Codex's history as whole files, never opened, when Codex cannot delete its own threads, but only
+    /// once nothing in it has changed since `cutoff`: its rollouts, thread history, state and logs, with their
+    /// caches. Its login, settings, memories and anything else stay. Answers whether it went.
+    @discardableResult
+    public static func removeCodexHistory(workspace: URL, before cutoff: Date) -> Bool {
+        guard let codex = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/home/.codex") else { return false }
+        let history = ((try? codex.names(limit: 4096)) ?? []).filter { name in
+            ["sessions", "archived_sessions", "shell_snapshots", "cache", "session_index.jsonl"].contains(name)
+                || ["thread_history_", "state_", "logs_"].contains { prefix in
+                    guard name.hasPrefix(prefix) else { return false }
+                    let rest = name.dropFirst(prefix.count)
+                    guard let dot = rest.firstIndex(of: "."), Int(rest[..<dot]) != nil else { return false }
+                    return [".sqlite", ".sqlite-wal", ".sqlite-shm", ".sqlite-journal"].contains(String(rest[dot...]))
+                }
+        }
+        guard !history.isEmpty, history.allSatisfy({ (codex.latestModification($0) ?? .distantFuture) < cutoff }) else { return false }
+        history.forEach(codex.removeTree)
+        return true
     }
 
     /// Codex's thread history databases, whose freed pages only an incremental vacuum gives back to the disk.

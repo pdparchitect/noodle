@@ -124,12 +124,19 @@ Antigravity and Apple Intelligence are not counted yet.
 
 Switch the measure to **Disk** to see how much space Noodle takes, by kind or by
 bot. Once a day, Noodle deletes the sessions a bot's harness has not used for a
-week; click **Clean Up Sessions** to do it now. The session a bot is in stays,
-and so do the bot's own files: to have a bot tidy those, right-click its
-conversation in the sidebar and choose **Organize**. Sessions are cleaned up for Claude Code,
-Codex, Grok Build, OpenCode and Devin; other harnesses keep theirs. A bot with
-unrestricted access keeps its sessions in your own home folder, and those are
-left alone.
+week, including those left behind by a harness the bot used before; click
+**Clean Up Sessions** to do it now. The session a bot is in stays, and so do the
+bot's own files: to have a bot tidy those, right-click its conversation in the
+sidebar and choose **Organize**.
+
+Sessions are cleaned up for Claude Code, Codex, Grok Build, OpenCode and Devin;
+other harnesses keep theirs. For a bot that is not running, such as an archived
+one, Noodle starts its Codex, OpenCode or Devin for a moment to delete them.
+When Codex cannot be started for this, because the bot now runs another
+harness or Codex is missing, its saved conversations are deleted once nothing
+in them has changed for a week; a bot that goes back to Codex starts a new
+session from its conversation. A bot with unrestricted
+access keeps its sessions in your own home folder, and those are left alone.
 
 ## Messages and files
 

@@ -33,7 +33,7 @@ import NoodleRuntime
         runtime = AgentRuntimeCoordinator(discovery: HarnessDiscovery(fixed: configuration.harnesses), harnesses: HarnessSelection(),
                                           makeProcess: { [logins] launch in
             launch.makeProcess { SandboxedHarnessConnection(workspace: launch.workspaceURL, logins: logins, profileOverride: launch.profileOverride) }
-        })
+        }, connectHarness: { [logins] _, workspace in SandboxedHarnessConnection(workspace: workspace, logins: logins, profileOverride: nil) })
         #else
         runtime = AgentRuntimeCoordinator(discovery: HarnessDiscovery(fixed: configuration.harnesses), harnesses: HarnessSelection())
         #endif
