@@ -6,6 +6,10 @@
 
 - Noodle Terminal for Windows, on arm64 and x86_64: the same chats as on the Mac and Linux, in Windows Terminal. Download it as a ZIP holding `noodle.exe` with everything it needs, msquic and the Swift runtime included, linked from the Noodle README. Hubs are kept in your local app data, links and files open with the apps Windows chooses for them, and copying uses the terminal's own clipboard.
 
+### Changed
+
+- When a link or file opened from the command palette cannot be opened, the line at the bottom says why instead of nothing happening.
+
 ## [0.1.0] - 2026-11-11
 
 ### Security

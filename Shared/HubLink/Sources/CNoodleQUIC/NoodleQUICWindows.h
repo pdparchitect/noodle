@@ -49,9 +49,11 @@ static inline int pthread_cond_timedwait(pthread_cond_t *condition, pthread_mute
                                          const struct timespec *deadline) {
     struct timespec now;
     clock_gettime(CLOCK_REALTIME, &now);
-    long long remaining = (long long)(deadline->tv_sec - now.tv_sec) * 1000
-        + (deadline->tv_nsec - now.tv_nsec) / 1000000;
-    if (remaining <= 0) return ETIMEDOUT;
+    long long nanoseconds = (long long)(deadline->tv_sec - now.tv_sec) * 1000000000
+        + (deadline->tv_nsec - now.tv_nsec);
+    if (nanoseconds <= 0) return ETIMEDOUT;
+    // Rounded up, so a wait never ends before its deadline.
+    long long remaining = (nanoseconds + 999999) / 1000000;
     if (SleepConditionVariableCS(condition, lock, (DWORD)remaining)) return 0;
     return GetLastError() == ERROR_TIMEOUT ? ETIMEDOUT : EINVAL;
 }

@@ -1,9 +1,10 @@
-# Installs the swift.org toolchain for this machine's processor, checked against its pinned checksum, and
-# puts it on the PATH of a GitHub Actions job's later steps. The image's Visual Studio provides the Windows SDK.
+# Installs the swift.org toolchain for this machine's processor, checked against its pinned checksum. The
+# installer puts Swift on this user's PATH for new terminals; in a GitHub Actions job it also goes on the PATH
+# of the job's later steps. Visual Studio provides the Windows SDK.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . "$PSScriptRoot/windows-common.ps1"
-# The Swift 6.4 SwiftTUI needs.
+# Swift 6.4, which SwiftTUI needs.
 $version = '6.4.1'
 $installer = @{
     arm64 = @{ Suffix = '-arm64'; Sha256 = 'FAFF6A12CDAE099D76372CA971B0C83B13280AD704E1022FAA599DBE0B146E64' }
@@ -20,6 +21,10 @@ try {
     Remove-Item -Recurse -Force $work
 }
 
+if (-not $env:GITHUB_ACTIONS) {
+    Write-Output "Installed Swift $version. Open a new terminal to use it."
+    return
+}
 $swift = Join-Path $env:LOCALAPPDATA 'Programs/Swift'
 Add-Content $env:GITHUB_PATH (Join-Path $swift "Toolchains/$version+Asserts/usr/bin")
 Add-Content $env:GITHUB_PATH (Join-Path $swift "Runtimes/$version/usr/bin")

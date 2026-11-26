@@ -584,6 +584,12 @@ struct SharingView: View {
 import AppKit
 #endif
 
+/// Why the system could not open a link or file, as the notice line says it.
+struct DesktopError: LocalizedError {
+    let errorDescription: String?
+    init(_ description: String) { errorDescription = description }
+}
+
 /// What Terminal hands the system: a link or file to open, text to copy. On a Mac through AppKit;
 /// on Windows links and files open with the program Windows chooses for them, and on Linux with xdg-open;
 /// copies go through the terminal itself, which works over SSH too.
@@ -595,11 +601,13 @@ import AppKit
     static let computer = "this computer", Computer = "This computer"
     #endif
 
-    static func open(_ url: URL) {
+    static func open(_ url: URL) throws {
         #if canImport(AppKit)
-        NSWorkspace.shared.open(url)
+        guard NSWorkspace.shared.open(url) else {
+            throw DesktopError("\(Computer) could not open \(url.isFileURL ? url.lastPathComponent : url.absoluteString).")
+        }
         #elseif os(Windows)
-        shellOpen(url)
+        try shellOpen(url)
         #else
         let opener = Process()
         opener.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -607,7 +615,7 @@ import AppKit
         opener.standardInput = FileHandle.nullDevice
         opener.standardOutput = FileHandle.nullDevice
         opener.standardError = FileHandle.nullDevice
-        try? opener.run()
+        try opener.run()
         #endif
     }
 

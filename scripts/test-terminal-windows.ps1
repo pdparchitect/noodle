@@ -5,13 +5,6 @@ Set-StrictMode -Version Latest
 . "$PSScriptRoot/windows-common.ps1"
 $root = Split-Path -Parent $PSScriptRoot
 
-# Swift's warnings on standard error are not failures; its exit code says whether it built and passed.
-function Invoke-Swift {
-    $ErrorActionPreference = 'Continue'
-    & swift @args
-    if ($LASTEXITCODE -ne 0) { throw "swift $($args -join ' ') failed." }
-}
-
 foreach ($package in @(@{ Path = 'Shared/HubLink'; Scratch = 'windows-hub-link' }, @{ Path = 'Terminal'; Scratch = 'terminal-windows' })) {
     $options = @('--package-path', "$root/$($package.Path)", '--scratch-path', "$root/.build/$($package.Scratch)") + $SwiftWindowsFlags
     Invoke-Swift build --build-tests @options

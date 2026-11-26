@@ -52,7 +52,13 @@ static void load(void) {
     // turn comes from beside it and from System32, never the current folder.
     wchar_t path[MAX_PATH + 16];
     DWORD length = GetModuleFileNameW(NULL, path, MAX_PATH);
-    wchar_t *separator = length > 0 && length < MAX_PATH ? wcsrchr(path, L'\\') : NULL;
+    if (length >= MAX_PATH) {
+        // Windows loads a DLL only from a path shorter than MAX_PATH, as long-path support needs a manifest.
+        snprintf(load_error, sizeof load_error, "This program is in a folder too deep for Windows to load msquic.dll "
+                 "beside it. Move it to a shorter folder.");
+        return;
+    }
+    wchar_t *separator = length > 0 ? wcsrchr(path, L'\\') : NULL;
     HMODULE library = NULL;
     if (separator && wcscpy_s(separator + 1, MAX_PATH + 16 - (size_t)(separator + 1 - path), L"msquic.dll") == 0) {
         library = LoadLibraryExW(path, NULL, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
