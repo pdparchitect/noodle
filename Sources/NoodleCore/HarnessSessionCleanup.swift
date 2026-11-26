@@ -76,7 +76,30 @@ public enum HarnessSessionCleanup {
         return removed
     }
 
+    /// Removes the FX sessions last changed before `cutoff`, answering how many went. FX keeps each session as a
+    /// folder named by its ID beside an index it repairs itself: a session whose folder is gone is no longer
+    /// listed, and FX records it deleted.
+    @discardableResult
+    public static func sweepFX(workspace: URL, keeping kept: Set<String>, before cutoff: Date) -> Int {
+        guard let folder = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/home/.fx/sessions/v2") else { return 0 }
+        var removed = 0
+        for name in (try? folder.names(limit: .max)) ?? []
+        where isFXSessionID(name) && !kept.contains(name.lowercased()) && folder.isDirectory(name) {
+            guard let date = folder.latestModification(name), date < cutoff else { continue }
+            folder.removeTree(name)
+            removed += 1
+        }
+        return removed
+    }
+
     private static func isSessionID(_ name: String) -> Bool { UUID(uuidString: name) != nil }
+
+    /// FX names a session with letters, digits, `-` and `_`; its own folders, such as `.tmp`, start with a dot.
+    private static func isFXSessionID(_ name: String) -> Bool {
+        (8...64).contains(name.utf8.count) && name.unicodeScalars.allSatisfy {
+            $0.isASCII && (CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_")
+        }
+    }
 
     /// The threads Codex last updated before `cutoff`, from its newest state database. That database names every
     /// thread Codex can delete, including those whose rollout file is gone, which its thread list leaves out.

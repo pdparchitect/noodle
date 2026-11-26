@@ -129,8 +129,8 @@ week, including those left behind by a harness the bot used before; click
 bot's own files: to have a bot tidy those, right-click its conversation in the
 sidebar and choose **Organize**.
 
-Sessions are cleaned up for Claude Code, Codex, Grok Build, OpenCode and Devin;
-other harnesses keep theirs. For a bot that is not running, such as an archived
+Sessions are cleaned up for Claude Code, Codex, Grok Build, FX, OpenCode and
+Devin; other harnesses keep theirs. For a bot that is not running, such as an archived
 one, Noodle starts its Codex, OpenCode or Devin for a moment to delete them.
 When Codex cannot be started for this, because the bot now runs another
 harness or Codex is missing, its saved conversations are deleted once nothing

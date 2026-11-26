@@ -253,4 +253,22 @@ final class HarnessSessionCleanupTests: XCTestCase {
             XCTAssertEqual(settings["disableClaudeAiConnectors"] as? Bool, !apps)
         }
     }
+
+    /// FX keeps each session as a folder named by its ID beside an index it repairs itself: once a folder is gone, it
+    /// lists the session no more and records it deleted.
+    func testFXSessionFoldersOlderThanTheCutoffGoUnlessKept() throws {
+        let sessions = ".noodle/home/.fx/sessions/v2/"
+        for id in ["u0tI_G7qmV7o", "Hy0mdVYh8PQg"] {
+            try file(sessions + id + "/log.jsonl", modified: old)
+            try file(sessions + id + "/blobs/blob", modified: old)
+            try age(sessions + id + "/blobs", old); try age(sessions + id, old)
+        }
+        try file(sessions + "8K6hW_nVwUfz/log.jsonl", modified: recent)
+        try file(sessions + ".tmp/partial", modified: old)
+        try file(sessions + "index.jsonl", modified: old)
+        let removed = HarnessSessionCleanup.sweepFX(workspace: workspace, keeping: ["hy0mdvyh8pqg"], before: cutoff)
+        XCTAssertEqual(removed, 1)
+        XCTAssertFalse(exists(sessions + "u0tI_G7qmV7o"))
+        for kept in ["Hy0mdVYh8PQg", "8K6hW_nVwUfz", ".tmp", "index.jsonl"] { XCTAssertTrue(exists(sessions + kept), kept) }
+    }
 }

@@ -153,4 +153,14 @@ import XCTest
         await f.runtime.cleanUpSessions(repository: f.repository)
         XCTAssertFalse(FileManager.default.fileExists(atPath: home(f, agent).appendingPathComponent(".claude/skills/synced").path))
     }
+
+    func testFXSessionsLeftInABotsHomeAreSwept() async throws {
+        let f = try fixture(), agent = try f.agent(harness: .claudeCode)
+        let log = home(f, agent).appendingPathComponent(".fx/sessions/v2/u0tI_G7qmV7o/log.jsonl")
+        try FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: log)
+        for url in [log, log.deletingLastPathComponent()] { try aged(url, f.clock.date.addingTimeInterval(-8 * 86_400)) }
+        await f.runtime.cleanUpSessions(repository: f.repository)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: log.deletingLastPathComponent().path))
+    }
 }

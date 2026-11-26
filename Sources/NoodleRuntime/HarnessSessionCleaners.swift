@@ -32,10 +32,17 @@ public enum SessionCleanupOutcome: Sendable { case done, busy }
 }
 
 @MainActor enum HarnessSessionCleaners {
-    /// Copilot, Antigravity, Muse and FX are not listed: none offers a way to delete a session.
+    // TODO: Copilot keeps its sessions under `.copilot` (`chats/<id>` in a person's own home) and lists them over ACP
+    // without deleting; check its layout in a bot's home, and whether it copes with a folder removed, before a sweep.
+    // TODO: Antigravity keeps `conversations` beside a `conversation_summaries.db` index and a `brain` folder under
+    // `.gemini/antigravity-cli`, and lists over ACP without deleting; removing files would leave its index stale, so
+    // check how it copes, with a bot on it, before a sweep.
+    // TODO: Muse keeps a `session-index.db` under `.local/share/muse`, with no delete command or ACP; find where its
+    // sessions live and how its index copes, with a bot on it, before a sweep.
     static let all: [any HarnessSessionCleaner] = [
         CodexSessionCleaner(), ACPSessionCleaner(provider: .openCode, folder: ".local/share/opencode"),
-        ACPSessionCleaner(provider: .devin, folder: ".local/share/devin"), ClaudeSessionCleaner(), GrokSessionCleaner()
+        ACPSessionCleaner(provider: .devin, folder: ".local/share/devin"), ClaudeSessionCleaner(), GrokSessionCleaner(),
+        FXSessionCleaner()
     ]
 
     static func folderExists(_ path: String, in workspace: URL) -> Bool {
@@ -93,6 +100,18 @@ struct GrokSessionCleaner: HarnessSessionCleaner {
     func cleanUp(_ context: HarnessSessionCleanupContext) async -> SessionCleanupOutcome {
         let (workspace, kept, cutoff) = (context.workspace, context.kept, context.cutoff)
         await Task.detached(priority: .utility) { HarnessSessionCleanup.sweepGrok(workspace: workspace, keeping: kept, before: cutoff) }.value
+        return .done
+    }
+}
+
+/// FX offers no way to delete a session over ACP, so its folders go as files; it lists the rest and records the
+/// removed ones deleted in its own index.
+struct FXSessionCleaner: HarnessSessionCleaner {
+    let provider = HarnessProvider.fx
+    func isPresent(in workspace: URL) -> Bool { HarnessSessionCleaners.folderExists(".fx/sessions/v2", in: workspace) }
+    func cleanUp(_ context: HarnessSessionCleanupContext) async -> SessionCleanupOutcome {
+        let (workspace, kept, cutoff) = (context.workspace, context.kept, context.cutoff)
+        await Task.detached(priority: .utility) { HarnessSessionCleanup.sweepFX(workspace: workspace, keeping: kept, before: cutoff) }.value
         return .done
     }
 }
