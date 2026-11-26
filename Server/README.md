@@ -1,6 +1,6 @@
 # Noodle Server
 
-[![Linux arm64](https://img.shields.io/badge/Linux-arm64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-arm64.tar.gz) [![Linux x86_64](https://img.shields.io/badge/Linux-x86__64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-x86_64.tar.gz) [![macOS Apple silicon](https://img.shields.io/badge/macOS-Apple%20silicon-000000?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-macos-arm64.zip)
+[![macOS 26 ZIP](https://img.shields.io/badge/macOS_26-ZIP-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-macos-arm64.zip) [![Linux arm64](https://img.shields.io/badge/Linux-arm64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-arm64.tar.gz) [![Linux x86_64](https://img.shields.io/badge/Linux-x86__64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-x86_64.tar.gz)
 
 A Noodle Hub for Linux and the Mac. It runs bots for the people you list in one file, on the
 Claude Code and Codex you install, with your sign-ins kept on the server. Each bot works in a
