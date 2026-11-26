@@ -251,6 +251,27 @@ final class CopilotTests: XCTestCase {
         XCTAssertThrowsError(try CopilotLaunch.package(executable: executable(unpacks: false), cacheHome: cache, environment: [:]))
     }
 
+    /// Copilot keeps the signed-in GitHub login in its configuration file, which starts with comments.
+    func testAccountNameIsTheSignedInLogin() {
+        let config = """
+        // User settings belong in settings.json.
+        // This file is managed automatically.
+        {
+          "loggedInUsers": [{"host": "https://github.com", "login": "older", "kind": "githubDotCom"},
+                            {"host": "https://github.com", "login": "fixture", "kind": "githubDotCom"}],
+          "lastLoggedInUser": {"host": "https://github.com", "login": "fixture"},
+          "authTokens": {"https://github.com:fixture": "fixture-secret"}
+        }
+        """
+        XCTAssertEqual(CopilotProtocol.accountName(fromConfig: Data(config.utf8)), "fixture")
+        let enterprise = #"{"lastLoggedInUser": {"host": "https://acme.ghe.com", "login": "fixture"}}"#
+        XCTAssertEqual(CopilotProtocol.accountName(fromConfig: Data(enterprise.utf8)), "fixture on acme.ghe.com")
+        let first = #"{"loggedInUsers": [{"host": "https://github.com", "login": "only"}]}"#
+        XCTAssertEqual(CopilotProtocol.accountName(fromConfig: Data(first.utf8)), "only")
+        XCTAssertNil(CopilotProtocol.accountName(fromConfig: Data(#"{"firstLaunchAt": "2026-07-24"}"#.utf8)))
+        XCTAssertNil(CopilotProtocol.accountName(fromConfig: Data("not json".utf8)))
+    }
+
     private func inspect(_ fixture: InspectionProcessFixture) throws -> CopilotInspectionResult {
         try CopilotInspection.inspect(executable: fixture.executable, installationPath: "/reported/copilot",
                                       environment: fixture.environment, requestTimeout: 3, terminationGrace: 0.2)

@@ -83,8 +83,8 @@ shows a command to paste into Terminal; run it, then choose **Check Again**.
 
 Choose the profile for a bot in **Edit Bot → Harness → Profile**; the row appears
 once that harness has a profile. **Default** is the sign-in in the harness's own
-row in **Settings → Harness**, shown with the Codex or Claude Code account it is
-signed in to. Click a profile's sign-in status in **Profiles** to sign it out
+row in **Settings → Harness**, shown with the Codex, Claude Code, Copilot or Devin
+account it is signed in to. Click a profile's sign-in status in **Profiles** to sign it out
 without deleting it.
 
 - Grok Build sign-ins expire after seven days; sign the profile in again from
@@ -157,6 +157,9 @@ sign-in page in your browser. The models offered are the ones your Devin
 account allows; each model's reasoning level is part of the model, so there is
 no separate effort setting. Devin has no setting to turn off the usage reports
 it sends to Cognition; whether it sends them is a setting of your Devin account.
+Bots don't load the plugins and MCP servers you added to your Devin account.
+Playbooks your account or organization requires still load into every Devin
+bot; remove them in Devin's web app if your bots should not use them.
 
 ## Harnesses installed by Noodle
 

@@ -4,7 +4,8 @@
 
 ### Added
 
-- Devin is a harness, off until turned on in **Settings › Harness**, with its self-updates turned off.
+- Devin is a harness, off until turned on in **Settings › Harness**, leaving out the plugins and MCP servers added to the Devin account, with its self-updates turned off.
+- **Settings › Harness** shows the GitHub account Copilot is signed in to.
 
 ## [0.15.0] - 2026-11-26
 

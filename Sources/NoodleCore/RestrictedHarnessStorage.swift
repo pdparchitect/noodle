@@ -122,9 +122,10 @@ public enum RestrictedHarnessStorage {
             try share("config.json")
         case .devin:
             try share("credentials.toml")
-            // Only the switch Noodle sets, never the person's own configuration.
+            // Only the settings Noodle sets, never the person's own configuration, put back at every start.
             let configuration = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home/" + DevinLaunch.configurationPath, create: true)
-            if !configuration.contains("config.json") { try configuration.writeData(DevinLaunch.configuration, named: "config.json") }
+            let existing = configuration.contains("config.json") ? try? configuration.read("config.json", limit: 1_048_576) : nil
+            try configuration.writeData(DevinLaunch.configuration(over: existing), named: "config.json")
         default: break
         }
         for name in loginNames(provider) {

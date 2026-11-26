@@ -65,6 +65,18 @@ public enum CopilotProtocol {
         return formatter.date(from: String(failure[match].dropFirst("reset on ".count)))
     }
 
+    /// The GitHub login Copilot signed in last, from its configuration file, which starts with comments.
+    /// Named with its server when that is not github.com. Nothing else in the file is read.
+    public static func accountName(fromConfig data: Data) -> String? {
+        let text = String(decoding: data.prefix(1_048_576), as: UTF8.self).components(separatedBy: .newlines)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }.joined(separator: "\n")
+        guard let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+              let user = object["lastLoggedInUser"] as? [String: Any] ?? (object["loggedInUsers"] as? [[String: Any]])?.first,
+              let login = HarnessAccountName.from(user["login"]) else { return nil }
+        guard let host = (user["host"] as? String).flatMap(URL.init(string:))?.host, host != "github.com" else { return login }
+        return HarnessAccountName.from("\(login) on \(host)")
+    }
+
     /// `copilot login --device-code` prints the page and the code on one line.
     /// A streaming read can end midway through a line; only whole lines count.
     public static func loginChallenge(_ text: String) -> HarnessSignInChallenge? {

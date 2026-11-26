@@ -30,6 +30,16 @@ public enum DevinProtocol {
         return message.hasPrefix("Please log in") || message.hasPrefix("Authentication failed")
     }
 
+    /// The account `devin auth status` names: its email, or its name without one. Nothing else it prints is read.
+    public static func accountName(fromStatus text: String) -> String? {
+        let lines = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
+        guard lines.first(where: { !$0.isEmpty })?.hasPrefix("Logged in") == true else { return nil }
+        func value(_ label: String) -> String? {
+            lines.first { $0.hasPrefix(label + ":") }.flatMap { HarnessAccountName.from(String($0.dropFirst(label.count + 1))) }
+        }
+        return value("Email") ?? value("Name")
+    }
+
     public static let authenticationFailureDescription = "Devin needs you to sign in again. Choose Kick for sign-in options. Your session and unfinished work are preserved."
 }
 
@@ -38,16 +48,27 @@ public enum DevinLaunch {
     /// by every `devin` command, outside the bot's process group and sandbox.
     public static let arguments = ["acp", "--process-model", "in-process"]
 
-    /// Its configuration file, relative to a home Noodle keeps for it. Devin otherwise
-    /// downloads newer versions of itself into that home.
+    /// Its configuration folder, relative to a home Noodle keeps for it.
     static let configurationPath = ".config/devin"
-    static let configuration = Data(#"{"auto_update": false}"#.utf8 + [10])
 
-    /// Writes the configuration into a home Noodle keeps for Devin, which adds its own settings beside it.
+    /// Noodle's settings over what `existing` holds, which keeps the rest Devin wrote. Devin otherwise
+    /// downloads newer versions of itself into the home, and loads the plugins and MCP servers kept with
+    /// the person's Devin account into every bot. Plugins the account or its organization requires still load.
+    static func configuration(over existing: Data?) -> Data {
+        var settings = existing.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+        settings["auto_update"] = false
+        var imports = settings["read_config_from"] as? [String: Any] ?? [:]
+        imports["cloud"] = false
+        settings["read_config_from"] = imports
+        return (try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])) ?? Data()
+    }
+
+    /// Writes Noodle's settings into a home Noodle keeps for Devin.
     static func prepareConfiguration(home: URL) throws {
         let folder = home.appendingPathComponent(configurationPath, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        try AtomicFile.write(configuration, to: folder.appendingPathComponent("config.json"))
+        let file = folder.appendingPathComponent("config.json")
+        try AtomicFile.write(configuration(over: try? Data(contentsOf: file)), to: file)
     }
 
     /// The version folder the executable runs from, with the tools beside it.
@@ -91,6 +112,31 @@ public enum DevinInspection {
         // Signed out, the session offers no models.
         let models = DevinProtocol.models(fromSession: session?["result"] as? [String: Any] ?? [:])
         return .init(executablePath: installationPath, authenticated: !models.isEmpty, models: models)
+    }
+}
+
+extension DevinInspection {
+    /// The signed-in account, for Settings. Called by the signed host with a verified executable.
+    public static func accountName(executable: URL, environment: [String: String]) throws -> String? {
+        let process = Process(), output = Pipe(), finished = DispatchSemaphore(value: 0)
+        BrowserlessLaunch.configure(process, executable: executable, arguments: ["auth", "status", "--process-model", "in-process"])
+        process.currentDirectoryURL = FileManager.default.temporaryDirectory
+        process.environment = environment
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        process.terminationHandler = { _ in finished.signal() }
+        try process.run()
+        // Read as it arrives, so a long answer cannot fill the pipe and stall Devin, and a stalled Devin cannot stall the read.
+        let read = DispatchSemaphore(value: 0)
+        nonisolated(unsafe) var data = Data()
+        DispatchQueue.global().async { data = output.fileHandleForReading.readDataToEndOfFile(); read.signal() }
+        guard finished.wait(timeout: .now() + 20) == .success else {
+            process.terminate()
+            return nil
+        }
+        read.wait()
+        return DevinProtocol.accountName(fromStatus: String(decoding: data.prefix(65_536), as: UTF8.self))
     }
 }
 

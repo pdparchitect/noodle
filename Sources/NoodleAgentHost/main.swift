@@ -804,13 +804,23 @@ private final class HostSession: NSObject, AgentHostService {
             case .openCode:
                 return try profiles.openCodeSignedIn(profile)
             case .copilot:
-                return try CopilotInspection.inspect(home: HostPaths.home, environment: environment,
-                                                     managed: HostPaths.managedExecutable(.copilot),
-                                                     prefersManaged: HostPaths.managedHarnesses.isPreferred(.copilot)).authenticated
+                let signedIn = try CopilotInspection.inspect(home: HostPaths.home, environment: environment,
+                                                             managed: HostPaths.managedExecutable(.copilot),
+                                                             prefersManaged: HostPaths.managedHarnesses.isPreferred(.copilot)).authenticated
+                // Only the GitHub login crosses, never the configuration file or its tokens.
+                if signedIn, let files = try? WorkspaceMailbox(workspace: profiles.accountHome(profile), path: ""),
+                   files.contains("config.json"), let data = try? files.read("config.json", limit: 1_048_576),
+                   let name = CopilotProtocol.accountName(fromConfig: data) { self.client?.accountName(name) }
+                return signedIn
             case .devin:
-                return try DevinInspection.inspect(home: HostPaths.home, environment: environment,
-                                                   managed: HostPaths.managedExecutable(.devin),
-                                                   prefersManaged: HostPaths.managedHarnesses.isPreferred(.devin)).authenticated
+                let signedIn = try DevinInspection.inspect(home: HostPaths.home, environment: environment,
+                                                           managed: HostPaths.managedExecutable(.devin),
+                                                           prefersManaged: HostPaths.managedHarnesses.isPreferred(.devin)).authenticated
+                // Only the account's email crosses.
+                if signedIn, let name = try? DevinInspection.accountName(executable: executable, environment: environment) {
+                    self.client?.accountName(name)
+                }
+                return signedIn
             default: throw HostError("This harness does not support this sign-in flow.")
             }
         }

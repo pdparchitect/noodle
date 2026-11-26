@@ -197,8 +197,9 @@ final class DevinTests: XCTestCase {
         XCTAssertFalse(devin.allows(URL(string: "https://github.com/x")!))
     }
 
-    /// Each profile keeps its own login and sessions in its own home, and never updates Devin into it.
-    func testProfileKeepsItsOwnLoginWithUpdatesOff() throws {
+    /// Each profile keeps its own login and sessions in its own home, never updates Devin into it,
+    /// and leaves out the plugins and MCP servers kept with the person's Devin account.
+    func testProfileKeepsItsOwnLoginWithUpdatesAndAccountPluginsOff() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("devin-profiles-\(UUID())").resolvingSymlinksInPath()
         defer { try? FileManager.default.removeItem(at: root) }
         let store = HarnessProfileStore(root: root)
@@ -207,16 +208,19 @@ final class DevinTests: XCTestCase {
         XCTAssertEqual(store.environment(work)["HOME"], store.loginHome(work).path)
         XCTAssertNotEqual(store.environment(work)["HOME"], store.environment(personal)["HOME"])
         XCTAssertEqual(store.accountHome(work), store.loginHome(work).appendingPathComponent(".local/share/devin", isDirectory: true))
-        func updates(_ profile: HarnessProfile) throws -> Bool? {
+        func configuration(_ profile: HarnessProfile) throws -> [String: Any] {
             let data = try Data(contentsOf: store.loginHome(profile).appendingPathComponent(".config/devin/config.json"))
-            return (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["auto_update"] as? Bool
+            return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         }
-        XCTAssertEqual(try updates(work), false, "Devin would otherwise download a copy of itself into every login")
+        XCTAssertEqual(try configuration(work)["auto_update"] as? Bool, false, "Devin would otherwise download a copy of itself into every login")
+        XCTAssertEqual((try configuration(work)["read_config_from"] as? [String: Any])?["cloud"] as? Bool, false)
         try store.signOut(work, deleteSecret: { _, _ in })
-        XCTAssertEqual(try updates(work), false, "Signing out leaves the profile ready to sign in again")
+        XCTAssertEqual(try configuration(work)["auto_update"] as? Bool, false, "Signing out leaves the profile ready to sign in again")
+        XCTAssertEqual((try configuration(work)["read_config_from"] as? [String: Any])?["cloud"] as? Bool, false)
     }
 
-    /// A restricted bot gets a copy of the login and its own home, with updates off, never the shared one.
+    /// A restricted bot gets a copy of the login and its own home, with updates and account plugins off, never the shared one.
+    /// Noodle's settings are put back at every start, keeping what Devin wrote beside them.
     func testRestrictedBotGetsACopyOfTheLoginInItsOwnHome() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("devin-restricted-\(UUID())").resolvingSymlinksInPath()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -233,8 +237,16 @@ final class DevinTests: XCTestCase {
                                              secret: { _, _ in nil })
         let privateHome = RestrictedHarnessStorage.home(workspace: workspace)
         XCTAssertEqual(try Data(contentsOf: privateHome.appendingPathComponent(".local/share/devin/credentials.toml")), login)
-        let configuration = try Data(contentsOf: privateHome.appendingPathComponent(".config/devin/config.json"))
-        XCTAssertEqual((try JSONSerialization.jsonObject(with: configuration) as? [String: Any])?["auto_update"] as? Bool, false)
+        let file = privateHome.appendingPathComponent(".config/devin/config.json")
+        func configuration() throws -> [String: Any] { try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]) }
+        XCTAssertEqual(try configuration()["auto_update"] as? Bool, false)
+        XCTAssertEqual((try configuration()["read_config_from"] as? [String: Any])?["cloud"] as? Bool, false)
+        try Data(#"{"version": 1, "auto_update": true, "read_config_from": {"cloud": true, "claude": false}}"#.utf8).write(to: file)
+        try RestrictedHarnessStorage.prepare(provider: .devin, workspace: workspace, loginHome: store.loginHome(profile),
+                                             secret: { _, _ in nil })
+        XCTAssertEqual(try configuration()["auto_update"] as? Bool, false)
+        XCTAssertEqual(try configuration()["version"] as? Int, 1)
+        XCTAssertEqual(try configuration()["read_config_from"] as? [String: Bool], ["cloud": false, "claude": false])
         let environment = try RestrictedAgentSandbox.environment(provider: .devin, home: root, workspace: workspace)
         XCTAssertEqual(environment["HOME"], privateHome.path)
     }
@@ -256,6 +268,34 @@ final class DevinTests: XCTestCase {
         let writes = try XCTUnwrap(policy.range(of: "(allow file-write*"))
         XCTAssertLessThan(try XCTUnwrap(policy.range(of: quoted)).lowerBound, writes.lowerBound)
         XCTAssertFalse(policy.contains("com.apple.SecurityServer"))
+    }
+
+    /// As `devin auth status` 3000.15.14 prints it: the email names the account, and nothing else crosses.
+    func testAccountNameIsTheEmailDevinReports() throws {
+        let signedIn = """
+        Logged in (via Devin).
+
+        Credentials:
+          File:              /fixture/.local/share/devin/credentials.toml
+          API server:        https://server.codeium.com
+
+        User:
+          Name:              Fixture Person
+          Email:             person@example.com
+          User ID:           google-oauth2|fixture-secret
+
+        Account:
+          Tier:              Devin Pro
+        """
+        XCTAssertEqual(DevinProtocol.accountName(fromStatus: signedIn), "person@example.com")
+        XCTAssertEqual(DevinProtocol.accountName(fromStatus: signedIn.replacingOccurrences(of: "  Email:             person@example.com\n", with: "")),
+                       "Fixture Person", "Without an email, the name")
+        XCTAssertNil(DevinProtocol.accountName(fromStatus: "Not logged in.\n  Credentials path: /fixture\nRun `devin auth login` to authenticate.\n"))
+        XCTAssertNil(DevinProtocol.accountName(fromStatus: "Logged in (via Devin).\n"))
+
+        let fixture = try InspectionProcessFixture(script: "printf '%s\\n' 'Logged in (via Devin).' '' 'User:' '  Email:             person@example.com'")
+        XCTAssertEqual(try DevinInspection.accountName(executable: fixture.executable, environment: fixture.environment), "person@example.com")
+        XCTAssertEqual(try fixture.arguments, ["auth", "status", "--process-model", "in-process"])
     }
 
     private func inspect(_ fixture: InspectionProcessFixture) throws -> DevinInspectionResult {
