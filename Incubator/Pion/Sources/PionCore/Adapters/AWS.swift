@@ -59,10 +59,11 @@ public enum AWS {
     static let setup = [
         "In the **IAM Identity Center** console, open **Permission sets** and create one from the AWS managed policy **SecurityAudit**, AWS's read-only policy for security reviews, named such as `SecurityAudit`. Set its session duration to an hour or so.",
         "On that permission set, add this inline policy, for reads SecurityAudit may leave out: Logs Insights queries, IAM's policy simulator, so iam-access and check-access can tell what a role could do, AWS Config's history, S3's bucket settings, IAM Identity Center's assignments, and Inspector's and Macie's findings. It allows no change: `\(compact(auditPolicy))`",
-        "Under **AWS accounts**, assign the permission set to whoever signs in to Pion, in every account to investigate; select them all to cover the organisation. The alert watch reads up to \(watchAccounts) of them, the lowest account IDs first, so put your security tooling and log archive accounts among them.",
+        "Under **Users**, add an Identity Center user for AWS Detection alone, such as `pion-detection`, with MFA, and in no group that holds a permission set. Identity Center gives a sign-in keys for every permission set its user holds, so a user that also holds AWS Containment's, or any other, would let AWS Detection change things.",
+        "Under **AWS accounts**, assign that user this permission set and no other, in every account to investigate; select them all to cover the organisation. The alert watch reads up to \(watchAccounts) of them, the lowest account IDs first, so put your security tooling and log archive accounts among them.",
         "For the watch, turn on **GuardDuty** and **Security Hub** in the default region of every account, ideally with a delegated administrator and Security Hub's cross-region aggregation in that region, and keep a CloudTrail trail logging. check-access says what is off.",
         "Enter the **AWS access portal URL** from the Identity Center dashboard, and the permission set's name as the role. For the default region, choose the one most activity is in; agents can name any other, and any account.",
-        "Choose **Add & Connect**. Your organisation's sign-in page opens with a code: check it matches the one Pion shows, and approve it. Pion stays signed in for as long as your organisation lets a session last, then asks again. Then ask an agent to run check-access.",
+        "Choose **Add & Connect**. Your organisation's sign-in page opens with a code: check it matches the one Pion shows, and approve it signed in as AWS Detection's own user. Pion stays signed in for as long as your organisation lets a session last, then asks again. Then ask an agent to run check-access, which warns when the sign-in may take any role besides this one.",
     ]
 
     /// The detection permission set's inline policy: reads that SecurityAudit may not hold, and nothing that changes anything.
@@ -172,6 +173,20 @@ public enum AWS {
         // AWS says why it turns a request down, such as Security Hub not being enabled or the role lacking a permission.
         ServiceClient(base: service.base, access: try await service.access.access(asAWSAccount: account.id), settings: service.settings,
                       explainsRefusals: true, account: service.account)
+    }
+
+    /// Whether the sign-in may take any role in `account` besides the connection's own. Identity Center gives keys for
+    /// every role the signed-in person holds, so one who also holds another tool's permission set, or an administrator's,
+    /// signs this tool in with all of it.
+    static func otherRoles(_ account: AWSAccount, tool: String, on service: ServiceClient) async -> String {
+        let own = (try? service.setting("role")) ?? "?"
+        do {
+            let others = Set(try await service.access.awsRoles(inAWSAccount: account.id)).subtracting([own]).sorted()
+            guard !others.isEmpty else { return "✓ The sign-in may take only the \(own) role in this account." }
+            return "⚠ The sign-in may also take \(others.joined(separator: ", ")) in this account, besides \(own). Identity Center gives keys for any role the signed-in person holds, so this sign-in can do whatever those allow. Sign \(tool) in as an Identity Center user assigned only \(tool)'s permission set, \(own), and no other."
+        } catch {
+            return "· Which roles the sign-in may take in this account: not read (\(error.localizedDescription))."
+        }
     }
 
     static func listing(_ accounts: [AWSAccount]) -> String {
@@ -1008,7 +1023,7 @@ extension AWS {
         struct Input: Decodable, Sendable { let account: String? }
         static let name = "check-access"
         static let jobs: Set<ToolJob> = [.detection, .audit]
-        static let summary = "Tries each thing this tool reads once, in one account or the first five covered, IAM Identity Center, AWS Config's history, S3's bucket settings, Inspector and Macie included, and says what works and, for what does not, exactly which permission to add; whether GuardDuty, Security Hub (with its administrator and cross-region aggregation), AWS Config and an external access analyzer are on and CloudTrail trails are logging, as the watch relies on them; which regions are on; whether the role could change anything; and which of the organisation's accounts the sign-in does not cover. It changes nothing."
+        static let summary = "Says whether the sign-in may take any role besides this tool's own, which would let it change things; tries each thing this tool reads once, in one account or the first five covered, IAM Identity Center, AWS Config's history, S3's bucket settings, Inspector and Macie included, and says what works and, for what does not, exactly which permission to add; whether GuardDuty, Security Hub (with its administrator and cross-region aggregation), AWS Config and an external access analyzer are on and CloudTrail trails are logging, as the watch relies on them; which regions are on; whether the role could change anything; and which of the organisation's accounts the sign-in does not cover. It changes nothing."
         static let input = JSONSchema.object(["account": .string("Only this account, by its ID or name. The first \(AWS.checkAccounts) the sign-in covers when left out.")])
 
         /// Changes the role should never be able to make, simulated against its own policies.
@@ -1038,7 +1053,8 @@ extension AWS {
             do {
                 base = Target(client: try await AWS.signed(account, on: service), account: account, region: region, service: .sts)
             } catch {
-                return ["✗ Signing in as the role: \(error.localizedDescription) Assign the permission set to this account in IAM Identity Center."]
+                return ["✗ Signing in as the role: \(error.localizedDescription) Assign the permission set to this account in IAM Identity Center.",
+                        await AWS.otherRoles(account, tool: "AWS Detection", on: service)]
             }
             func probe(_ title: String, _ actions: [String], _ body: () async throws -> Void) async -> String {
                 do { try await body(); return "✓ \(title)" }
@@ -1054,6 +1070,7 @@ extension AWS {
             } catch {
                 lines.append("✗ Who the role is: \(error.localizedDescription)")
             }
+            lines.append(await AWS.otherRoles(account, tool: "AWS Detection", on: service))
             lines.append(await probe("CloudTrail event history", ["cloudtrail:LookupEvents"]) {
                 _ = try await AWS.send(try base.at(.cloudtrail), operation: AWS.lookupEvents, body: ["MaxResults": 1])
             })

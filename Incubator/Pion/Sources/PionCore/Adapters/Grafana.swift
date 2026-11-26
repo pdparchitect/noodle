@@ -36,7 +36,8 @@ public enum Grafana {
 
     static let token = [
         "Choose **Add service account token**, give it an expiry date, then copy the token and paste it here; it is shown only once.",
-        "Viewer reads dashboards, alerts and annotations and queries data sources. If agents cannot list data sources, they find each one's UID in dashboards' panels. Then ask an agent to run check-access.",
+        "Viewer reads dashboards, alerts and annotations and queries data sources. If agents cannot list data sources, they find each one's UID in dashboards' panels.",
+        "A query runs as each data source's own database user, not as the service account, so make sure every data source agents may query connects as a user that can only read, such as one granted only SELECT. Pion refuses SQL, InfluxQL and Flux that could write, and data sources of kinds it cannot check, but only a read-only database user keeps a query from changing anything. Then ask an agent to run check-access.",
     ]
 
     static let cloudSetup = [
@@ -180,10 +181,10 @@ extension Grafana {
         struct Input: Decodable, Sendable { let datasource: String, query: String, from: String?, to: String? }
         static let name = "query"
         static let jobs: Set<ToolJob> = [.detection]
-        static let summary = "Run one query over a data source and time range and return its results as rows. Read-only."
+        static let summary = "Run one query over a data source and time range and return its results as rows. Read-only: SQL, InfluxQL and Flux that could change anything are refused, as are data sources of a kind Pion cannot check."
         static let input = JSONSchema.object([
             "datasource": .string("The data source's UID, from data-sources or a dashboard's panel."),
-            "query": .string(#"The query in the data source's own form, as JSON, such as {"expr":"sum(rate(http_requests_total{code=~\"5..\"}[5m]))"} for Prometheus or Loki, or {"rawSql":"SELECT …","format":"table"} for SQL."#),
+            "query": .string(#"The query in the data source's own form, as JSON, such as {"expr":"sum(rate(http_requests_total{code=~\"5..\"}[5m]))"} for Prometheus or Loki, {"rawSql":"SELECT …","format":"table"} for SQL, or {"query":"SELECT …"} for InfluxDB."#),
             "from": .string("The start: now-1h, now-7d or ISO 8601. The last hour when left out."),
             "to": .string("The end, in the same forms. Now when left out."),
         ], required: ["datasource", "query"])
@@ -193,16 +194,9 @@ extension Grafana {
             guard let model = try? JSONSerialization.jsonObject(with: Data(try ServiceInput.query(input.query).utf8)) as? [String: Any] else {
                 throw ServiceError.input(#"Give the query as a JSON object, such as {"expr":"up"}."#)
             }
-            // SQL reaches its database with whatever rights Grafana's user there has, so only statements that read go.
-            if let sql = model["rawSql"] as? String {
-                var statement = sql.trimmingCharacters(in: .whitespacesAndNewlines)
-                if statement.hasSuffix(";") { statement.removeLast() }
-                let first = statement.split(whereSeparator: { $0.isWhitespace || $0 == "(" }).first?.lowercased()
-                guard let first, ["select", "with", "show", "explain"].contains(first), !statement.contains(";") else {
-                    throw ServiceError.input("SQL here only reads: one SELECT, WITH, SHOW or EXPLAIN statement.")
-                }
-            }
-            var query = model
+            // A query reaches its database with whatever rights Grafana's user there has, so only what Pion can tell reads
+            // goes, by the kind of data source it is: the read-only database user Setup Steps ask for is the real guard.
+            var query = try Grafana.readOnly(model, on: try await Grafana.kind(of: uid, on: service))
             query["refId"] = "A"
             query["datasource"] = ["uid": uid]
             query["maxDataPoints"] = query["maxDataPoints"] ?? 500
@@ -328,6 +322,236 @@ extension Grafana {
         }
         if labelled { columns.insert("series", at: 0) }
         return ServiceTable(columns: columns, rows: rows.map { row in columns.map { row[$0] ?? .none } })
+    }
+}
+
+// MARK: Keeping queries to reading
+
+extension Grafana {
+    /// The kind of a data source: its type, whether Grafana gave its settings, and for InfluxDB the query language they
+    /// name. Settings that name none mean InfluxQL; no settings at all leave the language unknown.
+    struct Kind: Equatable, Sendable {
+        let type: String
+        let settings: Bool
+        let version: String?
+    }
+
+    /// Data sources whose query languages only read: their queries go as they are.
+    static let readOnlyTypes: Set<String> = [
+        "prometheus", "loki", "tempo", "jaeger", "zipkin", "elasticsearch", "grafana-opensearch-datasource", "graphite", "cloudwatch",
+        "stackdriver", "grafana-azure-monitor-datasource", "grafana-pyroscope-datasource",
+    ]
+    /// SQL data sources, whose rawSql Pion checks, and each one's dialect.
+    static let sqlTypes: [String: SQLDialect] = [
+        "postgres": .postgres, "grafana-postgresql-datasource": .postgres, "mysql": .mysql, "mssql": .mssql,
+        "grafana-clickhouse-datasource": .clickhouse,
+    ]
+    static let influxType = "influxdb"
+
+    /// What a data source is, as Grafana says: from the data source itself, or where the service account may not read
+    /// it, from the settings Grafana gives its own pages, which list the data sources the account may query.
+    static func kind(of uid: String, on service: ServiceClient) async throws -> Kind {
+        struct Settings: Decodable { let version: String? }
+        struct Source: Decodable { let uid: String?; let type: String?; let jsonData: Settings? }
+        struct Frontend: Decodable { let datasources: [String: Source]? }
+        func kind(_ source: Source?) -> Kind? {
+            guard let type = source?.type?.lowercased(), !type.isEmpty else { return nil }
+            return Kind(type: type, settings: source?.jsonData != nil, version: source?.jsonData?.version)
+        }
+        do {
+            if let found = kind(try await service.get(["datasources", "uid", uid], as: Source.self)) { return found }
+        } catch ServiceError.forbidden, ServiceError.notFound, ServiceError.unreadable {}
+        do {
+            let listed = try await service.get(["frontend", "settings"], as: Frontend.self).datasources ?? [:]
+            if let found = kind(listed.values.first { $0.uid == uid }) { return found }
+        } catch ServiceError.forbidden, ServiceError.notFound, ServiceError.unreadable {}
+        throw ServiceError.input("Grafana did not say what kind of data source \(uid) is, so Pion cannot check that a query over it only reads and sends none. Check its UID with data-sources or a dashboard's panel.")
+    }
+
+    /// The query to send, when Pion can tell it only reads over a data source of `kind`; otherwise why not.
+    static func readOnly(_ model: [String: Any], on kind: Kind) throws -> [String: Any] {
+        var model = model
+        if readOnlyTypes.contains(kind.type) { return model }
+        if let dialect = sqlTypes[kind.type] {
+            guard let sql = model["rawSql"] as? String else { throw ServiceError.input(#"Give the SQL as rawSql, such as {"rawSql":"SELECT …","format":"table"}."#) }
+            if let refusal = sqlRefusal(sql, dialects: [dialect]) { throw ServiceError.input(refusal) }
+            return model
+        }
+        if kind.type == influxType {
+            let version = kind.settings ? (kind.version ?? "InfluxQL") : nil
+            if version?.caseInsensitiveCompare("SQL") == .orderedSame {
+                let texts = ["rawSql", "query"].compactMap { model[$0] as? String }
+                guard !texts.isEmpty else { throw ServiceError.input(#"Give the SQL as rawSql, such as {"rawSql":"SELECT …"}."#) }
+                if let refusal = texts.lazy.compactMap({ sqlRefusal($0, dialects: SQLDialect.allCases) }).first { throw ServiceError.input(refusal) }
+                return model
+            }
+            guard let text = model["query"] as? String else { throw ServiceError.input(#"Give the query as text in query, such as {"query":"SELECT mean(\"value\") FROM \"cpu\""}."#) }
+            // Never a query Grafana would build from parts, which Pion has not read: only the text it checked goes.
+            model["rawQuery"] = true
+            if version == nil || version?.caseInsensitiveCompare("Flux") == .orderedSame, let refusal = fluxRefusal(text) { throw ServiceError.input(refusal) }
+            if version == nil || version?.caseInsensitiveCompare("Flux") != .orderedSame, let refusal = influxQLRefusal(text) { throw ServiceError.input(refusal) }
+            return model
+        }
+        throw ServiceError.input("This is a \(kind.type) data source, which Pion cannot check only reads, so it sends no query to it. Pion queries Prometheus, Loki, Tempo, Jaeger, Zipkin, Elasticsearch, OpenSearch, Graphite, CloudWatch, Google Cloud Monitoring, Azure Monitor and Pyroscope as they are, and PostgreSQL, MySQL, Microsoft SQL Server, ClickHouse and InfluxDB once it has checked the query only reads.")
+    }
+
+    /// How a SQL database quotes text and names, and comments.
+    enum SQLDialect: CaseIterable, Sendable {
+        case postgres, mysql, mssql, clickhouse
+
+        /// Each way the dialect may quote, by the character that opens it and the one that closes it.
+        var quotes: [Character: Character] {
+            switch self {
+            case .postgres: ["'": "'", "\"": "\""]
+            case .mysql, .clickhouse: ["'": "'", "\"": "\"", "`": "`"]
+            case .mssql: ["'": "'", "\"": "\"", "[": "]"]
+            }
+        }
+        /// Whether # starts a comment.
+        var hashComments: Bool { self == .mysql || self == .clickhouse }
+    }
+
+    /// Words that change data, rights or the database, or run other statements, refused anywhere outside quoted text, as
+    /// a statement that starts by reading can still hold one, such as a WITH that deletes, a SELECT … INTO, or, in SQL
+    /// Server, a second statement with no semicolon. Also functions known to change something or run text as SQL.
+    static let sqlWrites: Set<String> = [
+        "insert", "update", "delete", "merge", "upsert", "replace", "create", "alter", "drop", "truncate", "grant", "revoke", "deny", "copy",
+        "call", "exec", "execute", "into", "lock", "vacuum", "set", "do", "load", "attach", "pragma", "kill", "shutdown", "backup", "restore",
+        "dbcc", "reconfigure", "writetext", "updatetext", "receive", "enable", "disable", "outfile", "dumpfile", "infile",
+        "openquery", "openrowset", "opendatasource", "xp_cmdshell", "sp_executesql", "dblink", "dblink_exec", "query_to_xml",
+        "query_to_xml_and_xmlschema", "cursor_to_xml", "pg_terminate_backend", "pg_cancel_backend", "pg_reload_conf", "lo_import",
+        "lo_export", "lo_unlink", "lo_put", "lo_from_bytea", "set_config", "setval", "nextval", "pg_notify", "pg_file_write",
+        "pg_logical_emit_message", "pg_advisory_lock", "pg_advisory_xact_lock", "get_lock", "sys_exec", "sys_eval",
+    ]
+    /// Of those, the ones that are also functions that only read, such as REPLACE(text, from, to), when called as one.
+    static let sqlReadingFunctions: Set<String> = ["replace", "merge"]
+
+    /// Why SQL may not go, or nil when it only reads: one SELECT, WITH, SHOW or EXPLAIN statement, with no comment, no
+    /// second statement and none of `sqlWrites` outside quoted text. Databases differ in how a backslash and some quotes
+    /// work, so it is read every way any of `dialects` might, with a backslash escaping a quote and without, and must pass
+    /// each; quoting with dollar signs, which a reading of quotes could miss, is refused.
+    static func sqlRefusal(_ sql: String, dialects: [SQLDialect]) -> String? {
+        let refusal = "SQL here only reads, so Pion does not send this"
+        for dialect in dialects {
+            for backslash in [true, false] {
+                guard var code = unquoted(sql, quotes: dialect.quotes, backslash: backslash) else {
+                    return "\(refusal): it has a quote that is not closed."
+                }
+                code = code.trimmingCharacters(in: .whitespacesAndNewlines)
+                if code.hasSuffix(";") { code.removeLast() }
+                if code.contains("--") || code.contains("/*") || (dialect.hashComments && code.contains("#")) {
+                    return "\(refusal): it has a comment, which could hide a change. Send it without comments."
+                }
+                if code.contains(";") { return "\(refusal): it has more than one statement. Send one SELECT, WITH, SHOW or EXPLAIN statement." }
+                if code.range(of: #"\$[A-Za-z0-9_]*\$"#, options: .regularExpression) != nil {
+                    return "\(refusal): it quotes with dollar signs. Quote text with single quotes."
+                }
+                let first = code.split(whereSeparator: { $0.isWhitespace || $0 == "(" }).first?.lowercased()
+                guard let first, ["select", "with", "show", "explain"].contains(first) else {
+                    return "\(refusal): it must be one SELECT, WITH, SHOW or EXPLAIN statement."
+                }
+                if let word = writingWord(in: code, words: sqlWrites, functions: sqlReadingFunctions) {
+                    return "\(refusal): it holds \(word.uppercased()) outside quoted text, which can change data, rights or the database."
+                }
+            }
+        }
+        return nil
+    }
+
+    /// InfluxQL's words that write or change the database: SELECT … INTO writes, and the rest manage it.
+    static let influxQLWrites: Set<String> = ["into", "drop", "delete", "create", "alter", "grant", "revoke", "kill", "set"]
+
+    /// Why InfluxQL may not go, or nil when it only reads: none of `influxQLWrites` outside quoted text, and no comment.
+    static func influxQLRefusal(_ query: String) -> String? {
+        let refusal = "InfluxQL here only reads, so Pion does not send this"
+        for backslash in [true, false] {
+            guard let code = unquoted(query, quotes: ["'": "'", "\"": "\""], backslash: backslash) else {
+                return "\(refusal): it has a quote that is not closed."
+            }
+            if code.contains("--") || code.contains("/*") { return "\(refusal): it has a comment, which could hide a change. Send it without comments." }
+            if let word = writingWord(in: code, words: influxQLWrites, functions: []) {
+                return "\(refusal): it holds \(word.uppercased()) outside quoted text, which writes or changes the database."
+            }
+        }
+        return nil
+    }
+
+    /// The Flux packages a query may import: those that only work on the data read, never one that writes, sends or
+    /// reaches anything else, such as experimental, sql, http or influxdata/influxdb.
+    static let fluxPackages: Set<String> = [
+        "strings", "math", "date", "regexp", "array", "dict", "join", "interpolate", "types", "timezone",
+        "influxdata/influxdb/schema", "influxdata/influxdb/v1",
+    ]
+
+    /// Why Flux may not go, or nil when it only reads: no to() or wideTo(), which write, wherever they appear, even in a
+    /// string, and no import beyond `fluxPackages`, as every other function that writes or sends lives in a package.
+    static func fluxRefusal(_ query: String) -> String? {
+        let refusal = "Flux here only reads, so Pion does not send this"
+        if let found = query.range(of: #"(?<![A-Za-z0-9_])(to|wideTo)\s*\("#, options: .regularExpression) {
+            return "\(refusal): it calls \(query[found].filter { $0 != "(" && !$0.isWhitespace })(), which writes."
+        }
+        func matches(_ pattern: String) -> [NSTextCheckingResult] {
+            (try? NSRegularExpression(pattern: pattern))?.matches(in: query, range: NSRange(query.startIndex..., in: query)) ?? []
+        }
+        let imports = matches(#"(?<![A-Za-z0-9_])import(?![A-Za-z0-9_])"#)
+        let named = matches(#"(?<![A-Za-z0-9_])import\s+(?:[A-Za-z_][A-Za-z0-9_]*\s+)?"([^"]*)""#)
+        guard imports.count == named.count else { return "\(refusal): give each import as import \"package\"." }
+        for match in named {
+            guard let range = Range(match.range(at: 1), in: query) else { return "\(refusal): give each import as import \"package\"." }
+            let package = String(query[range])
+            guard fluxPackages.contains(package) else {
+                return "\(refusal): it imports \(package), which Pion cannot check only reads. It may import \(fluxPackages.sorted().joined(separator: ", "))."
+            }
+        }
+        return nil
+    }
+
+    /// `text` with what its quotes hold taken out, each quoted part standing as one space, or nil when a quote is not
+    /// closed. A closing quote given twice is part of the text; with `backslash`, so is any character after a backslash.
+    static func unquoted(_ text: String, quotes: [Character: Character], backslash: Bool) -> String? {
+        let characters = Array(text)
+        var code = "", index = 0
+        while index < characters.count {
+            let character = characters[index]
+            guard let close = quotes[character] else { code.append(character); index += 1; continue }
+            code.append(" ")
+            index += 1
+            var closed = false
+            while index < characters.count {
+                if backslash, characters[index] == "\\" { index += 2; continue }
+                if characters[index] == close {
+                    if index + 1 < characters.count, characters[index + 1] == close { index += 2; continue }
+                    closed = true
+                    index += 1
+                    break
+                }
+                index += 1
+            }
+            guard closed else { return nil }
+        }
+        return code
+    }
+
+    /// The first of `words` in `code`, as a whole word in any case, but for one of `functions` called as a function.
+    static func writingWord(in code: String, words: Set<String>, functions: Set<String>) -> String? {
+        let characters = Array(code)
+        var index = 0
+        func isWord(_ character: Character) -> Bool { character.isASCII && (character.isLetter || character.isNumber || character == "_") }
+        while index < characters.count {
+            guard isWord(characters[index]) else { index += 1; continue }
+            let start = index
+            while index < characters.count, isWord(characters[index]) || characters[index] == "$" { index += 1 }
+            // Even after a dot, as a function a schema names, such as pg_catalog.setval, is still that function.
+            let word = String(characters[start..<index]).lowercased()
+            guard !characters[start].isNumber, words.contains(word) else { continue }
+            if functions.contains(word) {
+                var next = index
+                while next < characters.count, characters[next].isWhitespace { next += 1 }
+                if next < characters.count, characters[next] == "(" { continue }
+            }
+            return word
+        }
+        return nil
     }
 }
 

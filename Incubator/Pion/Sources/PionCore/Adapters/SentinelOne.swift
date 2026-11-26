@@ -54,7 +54,7 @@ public enum SentinelOne {
 
     static let setup = [
         "In the SentinelOne console, open **Settings › Users › Service Users** and choose **Actions › Create New Service User**. Name it Pion Detection, kept for this tool alone, and give it an expiration date.",
-        "Give it the **Viewer** role, which only reads, at the scope agents should see: the account, or only the sites to investigate. Nothing else: Audit sends no change, and check-access warns of any role but Viewer.",
+        "Give it the **Viewer** role, which only reads, at the scope agents should see: the account, or only the sites to investigate. Nothing else: Detection sends no change, and check-access warns of any role but Viewer.",
         "Copy the **API token** it shows and give it here; SentinelOne shows it only once. Pion sends it as `Authorization: ApiToken <token>`. The token ends on the date set: make a new one for the same user before then.",
         consoleStep,
     ]

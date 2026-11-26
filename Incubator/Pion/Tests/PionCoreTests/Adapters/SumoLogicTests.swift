@@ -28,6 +28,14 @@ final class SumoLogicTests: XCTestCase {
         XCTAssertNotNil(PionAdapters.all["sumologic"])
     }
 
+    func testASearchThatSavesToALookupIsRefusedBeforeAnythingIsSent() async throws {
+        let service = FakeService()
+        let saved = try await callTool(SumoLogic.adapter, "search", #"{"query":"_sourceCategory=auth | count by user | SAVE /shared/lookups/users"}"#, on: service, in: sumo)
+        XCTAssertTrue(saved.isError, saved.text)
+        XCTAssertTrue(saved.text.contains("save operator"), saved.text)
+        XCTAssertTrue(service.requests.isEmpty)
+    }
+
     func testCheckAccessStartsOneSearchOverTheLastMinuteAndRemovesIt() async throws {
         let service = FakeService()
         service.answers["/api/v1/search/jobs"] = (202, #"{"id":"6F1B2C3D","link":{"rel":"self","href":"https://api.eu.sumologic.com/api/v1/search/jobs/6F1B2C3D"}}"#)
@@ -49,7 +57,16 @@ final class SumoLogicTests: XCTestCase {
         service.answers["/api/v1/search/jobs"] = (403, #"{"status":403,"code":"forbidden","message":"Forbidden"}"#)
         let plan = try await callTool(SumoLogic.adapter, "check-access", "{}", on: service, in: sumo)
         XCTAssertTrue(plan.text.contains("✗ Search jobs: Sumo Logic refused searching through the API"), plan.text)
+        XCTAssertTrue(plan.text.contains("Custom scope includes Run Log Search") && plan.text.contains("never Manage Access Keys"), plan.text)
         XCTAssertTrue(plan.text.contains("Enterprise"), plan.text)
         XCTAssertEqual(service.requests.count, 2, "nothing to remove when no job started")
+    }
+
+    /// The role makes only its user's own keys: Manage Access Keys would manage every user's keys in the organisation.
+    func testSetupGivesTheRoleOnlyCreateAccessKeysAndTheKeyOnlyRunLogSearch() {
+        let steps = SumoLogic.setup.joined(separator: "\n")
+        XCTAssertTrue(steps.contains("the **Create Access Keys** capability"), steps)
+        XCTAssertTrue(steps.contains("not **Manage Access Keys**"), steps)
+        XCTAssertTrue(steps.contains("only **Run Log Search**") && steps.contains("**search filter**"), steps)
     }
 }

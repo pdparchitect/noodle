@@ -32,11 +32,18 @@ final class SplunkTests: XCTestCase {
 
     func testSearchesThatWouldChangeDataAreRefused() async throws {
         let service = FakeService()
-        for query in ["index=main | delete", "| outputlookup bad.csv", "index=x | sendemail to=a@b.c", "index=x |collect index=y", ""] {
+        for query in ["index=main | delete", "| outputlookup bad.csv", "index=x | sendemail to=a@b.c", "index=x |collect index=y", "",
+                      "index=x | summaryindex index=y", "| runshellscript evil.sh", "| dbxquery connection=db query=\\\"DELETE FROM t\\\"",
+                      "index=x | dbxoutput output=out", "index=x | outputcsv x.csv", "index=x | tscollect", "index=x | mcollect index=m",
+                      "index=x | meventcollect index=m", "index=x | script python x", "index=x | sendalert hook", "index=x | MCOLLECT index=m",
+                      "index=x `wipe_everything`", "index=x [| inputlookup a.csv | outputlookup b.csv]", "index=x [outputlookup b.csv]",
+                      "| makeresults | eval s=\\\"x\\\" | map search=\\\"$s$\\\"", "| savedsearch nightly_cleanup"] {
             let result = try await callTool(Splunk.adapter, "search", #"{"query":"\#(query)"}"#, on: service, in: splunk)
             XCTAssertTrue(result.isError, query)
         }
         XCTAssertTrue(service.requests.isEmpty)
+        XCTAssertTrue(Splunk.refusal("index=x `get_admins`")?.contains("Macros are refused") == true)
+        XCTAssertNil(Splunk.refusal("index=auth action=failure | stats count by src_ip | sort -count | head 10"))
     }
 
     func testCheckAccessSaysWhoseTokenItIsAndWhichIndexesItMaySearch() async throws {
@@ -64,10 +71,10 @@ final class SplunkTests: XCTestCase {
         XCTAssertTrue(wrong.text.contains("Settings › Tools"), wrong.text)
         XCTAssertEqual(service.requests.count, 1)
 
-        service.answers["/services/authentication/current-context"] = (200, #"{"entry":[{"content":{"username":"pion","roles":["user"],"capabilities":["edit_user","list_inputs"]}}]}"#)
+        service.answers["/services/authentication/current-context"] = (200, #"{"entry":[{"content":{"username":"pion","roles":["user"],"capabilities":["edit_user","list_inputs","run_collect","edit_search_schedule_window"]}}]}"#)
         let role = try await callTool(Splunk.adapter, "check-access", "{}", on: service, in: splunk)
         XCTAssertTrue(role.text.contains("✗ Searches: the user's roles lack the search capability"), role.text)
-        XCTAssertTrue(role.text.contains("capabilities that change Splunk, which searching never needs: edit_user"), role.text)
+        XCTAssertTrue(role.text.contains("capabilities that change Splunk, which searching never needs: edit_search_schedule_window, edit_user, run_collect"), role.text)
         XCTAssertEqual(service.requests.count, 2, "a role that may not search is not tried")
     }
 }

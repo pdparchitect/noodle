@@ -343,7 +343,6 @@ extension Duo {
             lines.append(await Duo.check(.logs) { _ = try await Duo.exchange(service, ["admin", "v2", "logs", "authentication"], query: window) })
             lines.append(await Duo.check(.resources) { _ = try await Duo.exchange(service, ["admin", "v1", "users"], query: ["limit": "1"]) })
             lines.append(await Duo.check(.admins) { _ = try await Duo.exchange(service, ["admin", "v1", "admins"], query: ["limit": "1"]) })
-            lines.append(await Duo.check(.settings) { _ = try await Duo.exchange(service, ["admin", "v1", "settings"]) })
             var trust = await Duo.check(.trustMonitor) { _ = try await Duo.exchange(service, ["admin", "v1", "trust_monitor", "events"], query: window) }
             if trust.hasPrefix("✗"), lines.first?.hasPrefix("✓") == true {
                 trust = "· Trust Monitor: Duo refused it though the logs read, so this edition most likely lacks Trust Monitor, part of Duo Premier and Duo Advantage; security-events reads the logs without it."
@@ -360,7 +359,7 @@ extension Duo {
                 .filter({ $0.type == "adminapi" && $0.canChangeDuo }) {
                 lines.append(writers.isEmpty ? "· No Admin API application can change users, admins, applications or settings."
                     : "· Admin API applications that can change Duo: " + writers.map { "\($0.name ?? "?") (\($0.grants.joined(separator: ", ")))" }.joined(separator: "; ")
-                        + ". If this tool's own application is among them, untick its write permissions: Duo Detection only reads.")
+                        + ". If this tool's own application is among them, untick those permissions, Grant settings included: Duo Detection only reads.")
             }
             lines.append("· Pion cannot see which application this connection's keys belong to; its permissions are those ticked on it in the Duo Admin Panel.")
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])

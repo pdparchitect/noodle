@@ -3,7 +3,7 @@ import NoodleCore
 import NoodleToolConnections
 
 /// A Duo account's authentication, administrator and telephony logs, its users with their phones, tokens and security
-/// keys, its admins, applications, phones, policies, bypass codes and global settings, read through Duo's Admin API.
+/// keys, its admins, applications, phones, policies and bypass codes, read through Duo's Admin API.
 /// Duo Detection only reads; Duo Containment, a tool of its own with keys of its own, acts.
 ///
 /// Duo's Admin API has no OAuth. Each tool uses an Admin API application's integration key and secret key, kept in
@@ -14,7 +14,7 @@ import NoodleToolConnections
 public enum Duo {
     public static let preset = ToolDefinition(
         id: "a36b202b-569a-4959-8dd0-7ba241963902", name: "Duo Detection",
-        summary: "Authentication, administrator and telephony logs, users with their devices, admins, applications, phones, policies, bypass codes and settings of a Duo account, read-only.",
+        summary: "Authentication, administrator and telephony logs, users with their devices, admins, applications, phones, policies and bypass codes of a Duo account, read-only.",
         defaultInstructions: """
         Use Duo Detection to learn what happened to an identity behind Duo: auth-logs reads the authentication log by \
         user, result (success, denied or fraud), reason, factor, application and time, with where each attempt came from \
@@ -23,9 +23,10 @@ public enum Duo {
         telephony-logs the SMS and calls Duo sent. To audit the account, users leads with users in bypass status, not \
         enrolled or locked out, admins with owners and admins who sign in without a hardware token or security key, \
         integrations with the applications Duo protects and the Admin API applications that can change Duo, phones \
-        with tampered, unencrypted or unlocked devices, and policies, settings and bypass-codes with what they let \
+        with tampered, unencrypted or unlocked devices, and policies and bypass-codes with what they let \
         through, such as SMS or phone calls allowed, new users let in without enrolling, long remembered devices, \
-        networks that skip Duo, and bypass codes that never expire. The alert watch checks every five minutes and wakes \
+        networks that skip Duo, and bypass codes that never expire. Global settings are not read, as Duo lets them be read \
+        only with the right to change them: ask the champion to check them in the Duo Admin Panel. The alert watch checks every five minutes and wakes \
         you with a note naming security-events, which reads what it reads for the note's window: fraud users reported, \
         attempts Duo denied from anonymous networks, restricted locations or denied networks, bypass codes created or \
         viewed, users or groups set to bypass, admins added or changed, Admin API applications made or their secret \
@@ -55,12 +56,12 @@ public enum Duo {
 
     static let keysStep = "Give the **API hostname**, such as `api-xxxxxxxx.duosecurity.com`, and the application's **Integration key** and **Secret key**, then choose **Add & Connect** and ask an agent to run check-access. Duo's Admin API has no OAuth, so these keys are a long-lived secret: Pion keeps them in this Mac's Keychain and uses them only to sign each request, never sending the secret key. Delete the application in Duo to revoke them."
 
-    static let setup = applicationSteps("Pion Detection", permissions: "tick only **Grant read log** and **Grant resource - Read**, which read the logs, users, phones, policies, bypass codes and applications. Add **Grant administrators - Read** to audit admins and **Grant read information** for the account summary check-access shows. **Grant settings** lets agents read the global settings, but Duo has no read-only setting for it: it also lets these keys change them, though Pion only reads, so leave it off unless you want settings audited. Leave every write permission off.") + [keysStep]
+    static let setup = applicationSteps("Pion Detection", permissions: "tick only **Grant read log** and **Grant resource - Read**, which read the logs, users, phones, policies, bypass codes and applications. Add **Grant administrators - Read** to audit admins and **Grant read information** for the account summary check-access shows. Leave every other permission off, **Grant settings** included: Duo offers no read-only access to its global settings, so Pion does not read them.") + [keysStep]
 
     /// Every operation of both tools, each naming the jobs it serves; each tool offers those of its own job.
     static let operations: [any ServiceOperation] = [
         AuthLogs(), AdminLogs(), TelephonyLogs(), UserDetails(), SecurityEvents(), CheckAccess(),
-        Users(), Admins(), Integrations(), Phones(), Settings(), Policies(), BypassCodes(),
+        Users(), Admins(), Integrations(), Phones(), Policies(), BypassCodes(),
         DisableUser(), EnableUser(), ClearBypass(), DeleteBypassCodes(), RemovePhone(), RemoveToken(), RemoveSecurityKey(),
         SendEnrollment(), SendActivation(), ContainmentCheckAccess(),
     ]
@@ -296,8 +297,6 @@ public enum Duo {
         static let resources = Need(title: "Users, phones, policies and applications", permission: "Grant resource - Read")
         static let admins = Need(title: "Administrators", permission: "Grant administrators - Read",
                                  note: "Duo also needs Grant resource - Read for it, and does not offer its Administrators API to accounts set up through Cisco Security Cloud Control after May 11, 2026.")
-        static let settings = Need(title: "Global settings", permission: "Grant settings",
-                                   note: "Duo has no read-only form of it: it also lets these keys change the settings.")
         static let information = Need(title: "Account summary", permission: "Grant read information")
         static let trustMonitor = Need(title: "Trust Monitor", permission: "Grant read log",
                                        note: "Trust Monitor is part of Duo Premier and Duo Advantage; on other editions Duo refuses it whatever the permissions.")

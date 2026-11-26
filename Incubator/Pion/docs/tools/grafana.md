@@ -45,11 +45,36 @@ data sources too, give the service account a role that adds
 `datasources:read`, where your Grafana has custom roles.
 
 **What a query reaches.** A query runs with the data source's own connection,
-not the service account's, so it reaches whatever that data source may. Pion
-lets only reading SQL through, one `SELECT`, `WITH`, `SHOW` or `EXPLAIN`
-statement, but the safest SQL data source connects as a database user that can
-only read. Grafana Cloud and Grafana Enterprise can also keep a service
-account out of a data source with data source permissions.
+not the service account's, so it reaches whatever that data source's database
+user may, and Viewer does not limit it. **The real guard is a read-only
+database user**: make sure every data source agents may query connects as a
+user that can only read, such as one granted only `SELECT` on what it needs.
+Grafana Cloud and Grafana Enterprise can also keep the service account out of
+a data source with data source permissions.
+
+Pion checks each query before sending it, as a second guard behind that user:
+
+- **SQL** (PostgreSQL, MySQL, Microsoft SQL Server, ClickHouse): one
+  `SELECT`, `WITH`, `SHOW` or `EXPLAIN` statement, with no comment and no
+  second statement. It refuses one holding, anywhere outside quoted text, a
+  word that changes data, rights or the database, such as `INSERT`, `UPDATE`,
+  `DELETE`, `MERGE`, `CREATE`, `DROP`, `GRANT`, `COPY`, `CALL`, `EXEC`,
+  `INTO` (as in `SELECT … INTO`), `LOCK`, `SET` or `LOAD`, or a function known
+  to change something or run text as SQL, such as `setval` or `dblink_exec`.
+  So a `WITH` whose first part deletes is refused too. It cannot know every
+  function a database has, which is why the read-only user matters.
+- **InfluxQL**: no `INTO`, `DROP`, `DELETE`, `CREATE`, `ALTER`, `GRANT`,
+  `REVOKE`, `KILL` or `SET`, and no comment.
+- **Flux**: no `to()` or `wideTo()`, which write, and no import but packages
+  that only work on what was read, such as `strings`, `math` or `date`, so
+  nothing like `experimental.to`, `sql.to` or `http.post` is reached.
+- **Prometheus, Loki, Tempo, Jaeger, Zipkin, Elasticsearch, OpenSearch,
+  Graphite, CloudWatch, Google Cloud Monitoring, Azure Monitor and
+  Pyroscope**: their query languages only read, so queries go as they are.
+- **Any other kind of data source** is refused, as Pion cannot tell whether
+  its queries only read. So is a data source whose kind Grafana does not say.
+
+Pion learns a data source's kind from Grafana before each query.
 
 **The address.** Grafana Cloud is always `https`. A Self-Hosted Grafana is
 reached at the address you open it at, with any path it is served under, such
@@ -63,7 +88,9 @@ or the local network, so a token never crosses the internet in the clear.
    give it the **Viewer** role.
 2. **Add a token.** Choose **Add service account token**, give it an expiry
    date, and copy it; it is shown only once.
-3. **Add the tool** with the token and the stack's host, or your Grafana's
+3. **Check each data source's database user.** Every data source agents may
+   query should connect as a user that can only read.
+4. **Add the tool** with the token and the stack's host, or your Grafana's
    address.
 
 Then ask an agent to run **check-access**.
@@ -75,7 +102,9 @@ Then ask an agent to run **check-access**.
 - `data-sources` lists data sources with their UIDs and types, where the role
   allows it.
 - `query` runs one query over a data source and a time range, in the data
-  source's own language, such as PromQL or LogQL, and returns rows.
+  source's own language, such as PromQL or LogQL, and returns rows. It refuses
+  a query that could write, and data sources of a kind it cannot check, as
+  above.
 - `alerts` lists the alerts Grafana is firing now, and `annotations` the
   annotations over a time range.
 - `check-access` tries each read once; see below.
@@ -108,4 +137,7 @@ These follow Grafana's documentation, but were tested only against stand-ins:
 - that Viewer is refused the list of data sources on your Grafana's version,
   and still queries a data source by its UID;
 - that the current organisation reads with a service account token, as
-  check-access's first line does.
+  check-access's first line does;
+- that a service account refused a data source's own settings still learns its
+  kind from the settings Grafana gives its pages, and an InfluxDB data source's
+  query language, InfluxQL, Flux or SQL, with it.

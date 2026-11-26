@@ -10,8 +10,8 @@ Pion has two Duo tools, each added per Duo account with keys of its own:
   authentication log, with where each attempt came from and the device that
   approved it; what administrators changed; the SMS and calls Duo sent; one
   user's status, devices and bypass codes; and, to audit how the account is
-  set up, its users, administrators, applications, phones, policies, bypass
-  codes and global settings. It wakes the agents it is assigned to when users
+  set up, its users, administrators, applications, phones, policies and bypass
+  codes. It wakes the agents it is assigned to when users
   report fraud, Duo denies attempts from where it should not be reached, or
   administrators open a way around Duo. It only reads.
 - **Duo Containment** acts on the same account to contain an identity: it
@@ -52,12 +52,14 @@ What an application may do is set by the **permissions** ticked on it:
 | Grant resource - Read | Read users, their devices and bypass codes, phones, applications and policies | Yes | Yes |
 | Grant administrators - Read | Read administrators and their roles | For `admins` | No |
 | Grant read information | Read the account's edition and size | For check-access | No |
-| Grant settings | Read **and change** the global settings | Only for `settings` | No |
+| Grant settings | Read **and change** the global settings | No | No |
 | Grant resource - Write | Change and delete users, devices and bypass codes | No | Yes |
 
-Duo has **no read-only form of Grant settings**: it also lets the keys change
-the global settings. Duo Detection only reads them, but leave it off unless you
-want the settings audited. Leave every other permission off, above all
+Duo offers **no read-only access to its global settings**: Grant settings,
+the only permission that reads them, also lets the keys change them. So Pion
+does not read them, and neither tool asks for it: check the global settings
+yourself in the Admin Panel under **Settings**. Leave every other permission
+off too, above all
 **Grant applications**, **Grant administrators - Write** and **Grant set Admin
 API permissions**, which would let the keys make new keys or change
 administrators.
@@ -76,10 +78,9 @@ Federal) before sending anything.
    **+ Add**. Name it **Pion Detection**, kept for this tool alone.
 2. **Set its permissions.** Tick only **Grant read log** and **Grant resource -
    Read**. Add **Grant administrators - Read** to audit administrators and
-   **Grant read information** for the account summary. Add **Grant settings**
-   only if you want the global settings audited, knowing it can change them.
-   Under **Networks for API access** you can limit the application to the
-   networks this Mac uses. Save.
+   **Grant read information** for the account summary. Leave **Grant
+   settings** and every write permission off. Under **Networks for API
+   access** you can limit the application to the networks this Mac uses. Save.
 3. **Add the tool** with the **API hostname**, the **Integration key** and the
    **Secret key**, and choose **Add & Connect**.
 4. **For Duo Containment**, make a second Admin API application, such as
@@ -154,10 +155,6 @@ Then ask an agent to run **check-access** on each.
   acted on.
 - `bypass-codes`: who holds bypass codes, led by codes that never expire or can
   be used without limit.
-- `settings`: the global settings, led by gaps such as a high lockout threshold
-  or automatic unlock, no fraud alert email, Help Desk or User Manager
-  administrators able to bypass users, users not told when a device is added,
-  and users who never enroll never locked out.
 - `security-events`: what the alert watch wakes for, for a window. When no
   window is given, the last 24 hours.
 - **check-access**: see [When something does not work](#when-something-does-not-work).

@@ -3,7 +3,8 @@ import NoodleCore
 import NoodleToolConnections
 
 /// Duo Detection's reads for an audit: what exists, its users, admins, applications and phones; and what is
-/// allowed, its global settings, policies and bypass codes. Each leads with the gaps an audit asks about.
+/// allowed, its policies and bypass codes. Not its global settings: Duo lets them be read only with the right to change
+/// them. Each leads with the gaps an audit asks about.
 extension Duo {
     /// Lines for a result, at most `most`, saying how many more the structured result keeps.
     static func capped(_ lines: [String], _ most: Int) -> [String] {
@@ -207,51 +208,6 @@ extension Duo {
             struct Kept: Encodable { let phones: [Phone]; let concerning: [String]; let complete: Bool }
             return try ServiceResult(text: lines.joined(separator: "\n") + Duo.stopped(listing, "phones"),
                                      structured: Kept(phones: phones, concerning: concerning.compactMap(\.phone_id), complete: listing.complete))
-        }
-    }
-
-    // MARK: Settings
-
-    struct Settings: ServiceOperation {
-        struct Input: Decodable, Sendable {}
-        static let name = "settings"
-        static let jobs: Set<ToolJob> = [.audit]
-        static let summary = "Duo's global settings, led by the gaps an audit asks about: lockout threshold and automatic unlock, fraud alert emails, who may give bypass codes or bypass status and for how long, device change notifications, inactive and unenrolled users, telephony limits, log retention and admin password rules. Needs Grant settings, which Duo gives only with the right to change them."
-        static let input = JSONSchema.object([:])
-
-        func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
-            let settings = try await Duo.read(.settings) { try await Duo.get(service, ["admin", "v1", "settings"], as: [String: Loose].self).value }
-            func text(_ key: String) -> String? { settings[key]?.text?.nilIfEmpty }
-            func number(_ key: String) -> Int? { text(key).flatMap { Int($0) } }
-            func flag(_ key: String) -> Bool? { text(key).map { $0 == "true" || $0 == "1" } }
-            var gaps: [String] = []
-            if let threshold = number("lockout_threshold") {
-                if threshold == 0 || threshold > 10 { gaps.append("Users are locked out only after \(threshold == 0 ? "no number of" : String(threshold)) failed attempts (lockout_threshold \(threshold)).") }
-            }
-            if let minutes = number("lockout_expire_duration"), minutes > 0 { gaps.append("A locked-out user is unlocked by itself after \(minutes) minutes (lockout_expire_duration), so guessing can resume.") }
-            if flag("fraud_email_enabled") == false { gaps.append("No email is sent when a user reports fraud or is locked out (fraud_email_enabled off).") }
-            if text("helpdesk_bypass") == "allow", number("helpdesk_bypass_expiration") == nil { gaps.append("Help Desk administrators may make bypass codes, with an expiration they choose (helpdesk_bypass allow, no default expiration).") }
-            if flag("user_managers_can_put_users_in_bypass") == true { gaps.append("User Manager administrators may put users in bypass status.") }
-            if flag("email_activity_notification_enabled") == false, flag("push_activity_notification_enabled") == false {
-                gaps.append("Users are not told when a device is added to or removed from their account (email and push activity notifications off).")
-            }
-            if (number("unenrolled_user_lockout_threshold") ?? 0) == 0 { gaps.append("Users who never enroll are never locked out (unenrolled_user_lockout_threshold 0).") }
-            if (number("inactive_user_expiration") ?? 0) == 0 { gaps.append("Inactive users are never removed (inactive_user_expiration not set).") }
-            if (number("inactive_admin_expiration") ?? 0) == 0 { gaps.append("Inactive administrators never expire (inactive_admin_expiration 0).") }
-            if let length = number("minimum_password_length"), length < 12 { gaps.append("Admin Panel passwords need only \(length) characters.") }
-            if let cost = number("user_telephony_cost_max"), cost > 20 { gaps.append("One authentication may spend up to \(cost) telephony credits.") }
-            if let days = number("log_retention_days") { gaps.append("Logs are purged after \(days) days (log_retention_days).") }
-            let shown = ["lockout_threshold", "lockout_expire_duration", "fraud_email_enabled", "fraud_email", "helpdesk_bypass", "helpdesk_bypass_expiration",
-                         "helpdesk_can_send_enroll_email", "user_managers_can_put_users_in_bypass", "email_activity_notification_enabled",
-                         "push_activity_notification_enabled", "unenrolled_user_lockout_threshold", "inactive_user_expiration", "inactive_admin_expiration",
-                         "pending_deletion_days", "sms_batch", "sms_expiration", "sms_refresh", "user_telephony_cost_max", "telephony_warning_min",
-                         "duo_mobile_otp_type", "muted_push_enabled", "instant_restore_enabled", "minimum_password_length", "log_retention_days"]
-            let values = shown.compactMap { key in text(key).map { "\(key) \($0)" } }
-            var lines = [gaps.isEmpty ? "No gaps found in the global settings Pion checks." : "Gaps (\(gaps.count)):"] + gaps.map { "- " + $0 }
-            lines.append("Settings: " + values.joined(separator: ", ") + ".")
-            lines.append("Which methods users may sign in with, and what new users and remembered devices may do, are set in policies, which the policies tool reads.")
-            struct Kept: Encodable { let gaps: [String]; let settings: [String: Loose] }
-            return try ServiceResult(text: lines.joined(separator: "\n"), structured: Kept(gaps: gaps, settings: settings.filter { shown.contains($0.key) || $0.key == "name" }))
         }
     }
 

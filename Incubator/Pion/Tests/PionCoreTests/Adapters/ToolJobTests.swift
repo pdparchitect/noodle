@@ -93,7 +93,7 @@ final class ToolJobTests: XCTestCase {
                 detectionRequests: 4, containmentRequests: 2),
         Service(name: "Duo", operations: Duo.operations, detection: Duo.adapter, containment: Duo.containmentAdapter,
                 detectionTools: ["auth-logs", "admin-logs", "telephony-logs", "user", "security-events", "check-access", "users", "admins",
-                                 "integrations", "phones", "settings", "policies", "bypass-codes"],
+                                 "integrations", "phones", "policies", "bypass-codes"],
                 containmentTools: ["user", "disable-user", "enable-user", "clear-bypass", "delete-bypass-codes", "remove-phone", "remove-token",
                                    "remove-security-key", "send-enrollment", "send-activation", "check-access"],
                 detectionRequests: 2, containmentRequests: 2),

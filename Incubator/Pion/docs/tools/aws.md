@@ -65,6 +65,17 @@ request: the permission set is all it can do.
   take, with IAM attachments limited to AWS's deny-all policies, and nothing on
   Identity Center's own roles. Leave out any statement you do not want agents
   to have.
+- **Each tool signs in as an Identity Center user of its own.** A sign-in can
+  get keys for every permission set its user holds, in every account, not only
+  the one entered as the role, and the role is a field anyone who edits the
+  connection can change. So AWS Detection is read-only only when its user holds
+  the Detection permission set and nothing else: if it also held AWS
+  Containment's, or an administrator's, AWS Detection's sign-in could change
+  things. Give AWS Detection a user that holds only its permission set, and AWS
+  Containment another that holds only its own, neither in a group that holds a
+  permission set. Each tool's **check-access** lists the roles its sign-in may
+  take in each account it checks and warns, naming them, when there is any
+  besides its own.
 
 Both reach only AWS: Identity Center's sign-in at `oidc.REGION.amazonaws.com`,
 `portal.sso.REGION.amazonaws.com` and your portal on `awsapps.com`, and then
@@ -107,20 +118,23 @@ sending anything.
    management account or Identity Center's delegated administrator, so the
    permission set must be assigned there for `identity-center-assignments`.
 
-3. **Assign it** to whoever signs in to Pion, in every account to investigate.
-   Select them all to cover the organisation.
-4. **Turn on what the watch reads**: GuardDuty and Security Hub in each
+3. **Add a user for AWS Detection alone** under **Users** in Identity
+   Center, such as `pion-detection`, with MFA, in no group that holds a
+   permission set.
+4. **Assign that user this permission set and no other**, in every account to
+   investigate. Select them all to cover the organisation.
+5. **Turn on what the watch reads**: GuardDuty and Security Hub in each
    account's default region, ideally for the whole organisation from a
    delegated administrator, with Security Hub's
    [cross-region aggregation](https://docs.aws.amazon.com/securityhub/latest/userguide/finding-aggregation.html)
    into that region, and a CloudTrail trail logging every region.
-5. **Add the account** with the **AWS access portal URL**, the permission set's
+6. **Add the account** with the **AWS access portal URL**, the permission set's
    name as the role, and the region most activity is in. Agents can name any
    other region, and any account.
 
 Then choose **Add & Connect**, check that the code on your organisation's
-sign-in page matches the one Pion shows, approve it, and ask an agent to run
-**check-access**.
+sign-in page matches the one Pion shows, approve it signed in as AWS
+Detection's own user, and ask an agent to run **check-access**.
 
 ## Coverage you should know
 
@@ -304,6 +318,8 @@ more changes than a check reads is said, and `security-events` or
 Ask an agent to run **check-access**, for one account or the first five. It
 changes nothing, and tries once each:
 
+- which roles the sign-in may take in the account, warning when there is any
+  besides AWS Detection's own, as the sign-in could then change things;
 - who the role is, CloudTrail's event history, IAM, EC2 and CloudWatch Logs;
 - whether a CloudTrail trail is logging, for every region and the
   organisation, and to CloudWatch Logs;
@@ -373,13 +389,16 @@ detection role stays read-only.
    {"Sid":"RevokeSessions","Effect":"Allow","Resource":"arn:aws:iam::*:role/*","Action":["iam:PutRolePolicy","iam:DeleteRolePolicy"]}
    ```
 
-3. **Assign it** only to a responder user or group, only in the accounts where
-   containment is wanted, and not in the management account. Require MFA for
-   them at your identity provider.
+3. **Add a user for AWS Containment alone**, such as `pion-containment`,
+   apart from AWS Detection's, with MFA, in no group that holds a permission
+   set, and **assign it this permission set and no other**, only in the
+   accounts where containment is wanted, and not in the management account.
 4. Add the account with the same portal URL and the permission set's name as
-   the role, and ask an agent to run its **check-access**, which simulates each
-   operation's actions against the permission set's policies and says which it
-   lacks and what to add, warning when it allows far more.
+   the role, approve the code signed in as AWS Containment's own user, and ask
+   an agent to run its **check-access**, which warns when the sign-in may take
+   any role besides its own, simulates each operation's actions against the
+   permission set's policies and says which it lacks and what to add, warning
+   when it allows far more.
 
 What agents can do, each by the user's or role's ARN, the instance's ID, the
 bucket's name, the trail's ARN or the findings' IDs, with the account:

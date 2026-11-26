@@ -13,7 +13,7 @@ public enum Splunk {
         Use Splunk to search the logs and events it holds with SPL. Name the index, keep a time range and end with a \
         head, stats or table to keep results small. Record each search and what it returned as evidence, with the search \
         itself as the method. Searches only read: commands that write or send, such as delete, outputlookup, collect or \
-        sendemail, are refused. When a search is refused, run check-access and tell the champion exactly what it says to \
+        sendemail, and macros, which can hide them, are refused: write out what a macro does instead. When a search is refused, run check-access and tell the champion exactly what it says to \
         change.
         """,
         iconName: "splunk",
@@ -24,16 +24,29 @@ public enum Splunk {
 
     static let setup = [
         "On Splunk Cloud, let this Mac reach the REST API on port 8089: add its public IP address to the `search-api` allow list with the Admin Config Service, or ask Splunk Support. Free trials have no REST access.",
-        "Under **Settings › Roles**, make a role that can search only the indexes agents should read, and a user for Pion with that role.",
+        "Under **Settings › Roles**, make a role that can search only the indexes agents should read, with the `search` capability and nothing that writes, such as `delete_by_keyword`, `run_collect`, `run_mcollect`, `run_sendalert`, `run_dump`, `run_custom_command`, `schedule_search` or any `edit_` capability, and a user for Pion with that role alone. The role is what keeps searches to reading: Pion also refuses commands that write, but cannot know every command your apps add.",
         "Under **Settings › Tokens**, turn on token authentication if it is off, then choose **New Token** for that user, with an expiry date.",
         "Copy the token and paste it here. For the address, give the host only, such as `acme.splunkcloud.com`. Then ask an agent to run check-access.",
     ]
 
     public static let adapter = OperationAdapter(operations: [Search(), CheckAccess()])
 
-    /// SPL commands that change data or reach out, which a read-only search never needs.
-    static let writing: Set = ["delete", "outputlookup", "outputcsv", "outputtext", "collect", "mcollect", "meventcollect", "tscollect",
-                               "sendemail", "sendalert", "script", "run", "dump"]
+    /// SPL commands that change data or reach out, which a read-only search never needs: summaryindex is collect by
+    /// another name, DB Connect's dbxquery can run any SQL and dbxoutput writes, map and savedsearch run searches Pion
+    /// cannot read first, and fit saves a model.
+    static let writing: Set = ["delete", "outputlookup", "outputcsv", "outputtext", "collect", "summaryindex", "mcollect", "meventcollect",
+                               "tscollect", "sendemail", "sendalert", "script", "run", "runshellscript", "dump", "dbxquery", "dbxoutput",
+                               "dbxlookup", "map", "savedsearch", "fit"]
+
+    /// Why a search may not go, or nil when it only reads: no macro, which can expand to any command, and none of
+    /// `writing` as the first word after a pipe or a subsearch's bracket, wherever it is, even in quotes.
+    static func refusal(_ query: String) -> String? {
+        if query.contains("`") {
+            return "Macros are refused, as they can expand to commands that change data or send it; searches here only read. Write out the search the macro stands for."
+        }
+        let commands = query.split(whereSeparator: { $0 == "|" || $0 == "[" }).compactMap { $0.split(whereSeparator: \.isWhitespace).first?.lowercased() }
+        return commands.first(where: writing.contains).map { "\($0) changes data, sends it or runs a search Pion cannot check; searches here only read." }
+    }
 }
 
 extension Splunk {
@@ -51,11 +64,8 @@ extension Splunk {
 
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             var query = try ServiceInput.query(input.query)
-            // Every command after a pipe, and a search that starts with one, is checked against those that write.
-            let commands = query.split(separator: "|").compactMap { $0.split(whereSeparator: \.isWhitespace).first?.lowercased() }
-            if let command = commands.first(where: Splunk.writing.contains) {
-                throw ServiceError.input("\(command) changes data or sends it; searches here only read.")
-            }
+            // Every command after a pipe or a subsearch's bracket, and a search that starts with one, is checked.
+            if let refusal = Splunk.refusal(query) { throw ServiceError.input(refusal) }
             if !query.hasPrefix("|"), !query.lowercased().hasPrefix("search ") { query = "search " + query }
             func time(_ value: String?, _ fallback: String) throws -> String {
                 guard let value = value?.trimmingCharacters(in: .whitespaces), !value.isEmpty else { return fallback }
@@ -86,9 +96,12 @@ extension Splunk {
         rateLimited: "Splunk is turning searches away: the user's role has reached its limit of searches at once. Wait, or raise the role's search limits.",
         unreachable: "Pion could not reach the REST API on port 8089. On Splunk Cloud, add this Mac's public IP address to the search-api allow list with the Admin Config Service, or ask Splunk Support; free trials have no REST access. Otherwise check the address in Settings › Tools.")
 
-    /// Capabilities that change Splunk or its users, which a role made for searching never needs.
-    static let changing: Set = ["admin_all_objects", "delete_by_keyword", "edit_user", "edit_roles", "edit_tokens_all", "edit_tokens_settings",
-                                "change_authentication", "edit_indexes"]
+    /// Capabilities that change Splunk, its data or its users, or let a search write or run custom commands, which a role
+    /// made for searching never needs; every edit_ capability too.
+    static let changing: Set = ["admin_all_objects", "delete_by_keyword", "change_authentication", "run_collect", "run_mcollect", "run_sendalert",
+                                "run_dump", "run_custom_command", "schedule_search", "schedule_rtsearch", "indexes_edit"]
+
+    static func changes(_ capability: String) -> Bool { changing.contains(capability) || capability.hasPrefix("edit_") }
 
     /// Reads whose token it is, with its roles and capabilities, then lists the indexes it may search with one search of
     /// index metadata, which reads no events.
@@ -131,9 +144,9 @@ extension Splunk {
                     return "the role may search \(AccessCheck.count(indexes.count, "index", "indexes")): \(indexes.prefix(30).joined(separator: ", "))\(indexes.count > 30 ? ", …" : "")"
                 }
             }
-            let extra = capabilities.intersection(Splunk.changing).sorted()
+            let extra = capabilities.filter(Splunk.changes).sorted()
             if !extra.isEmpty {
-                check.note("The role also holds capabilities that change Splunk, which searching never needs: \(extra.joined(separator: ", ")). Searches here only read, but a role with only search is safer.")
+                check.note("The role also holds capabilities that change Splunk, which searching never needs: \(extra.joined(separator: ", ")). Pion refuses the commands it knows write, but the role is what keeps searches to reading: give it only search.")
             }
             return try check.result()
         }

@@ -519,12 +519,14 @@ final class AWSContainmentTests: XCTestCase {
 
     func testCheckAccessSimulatesEachOperationAndWarnsWhenItAllowsFarMore() async throws {
         let service = FakeService()
+        service.awsRolesHeld = ["PionContainment", "SecurityAudit"]
         service.answers["action:GetCallerIdentity"] = (200, "<R><GetCallerIdentityResult><Arn>arn:aws:sts::111111111111:assumed-role/AWSReservedSSO_PionContainment_abc/pdp</Arn></GetCallerIdentityResult></R>")
         service.answers["action:GetRole"] = (200, "<R><GetRoleResult><Role><Arn>arn:aws:iam::111111111111:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_PionContainment_abc</Arn></Role></GetRoleResult></R>")
         final class Simulator: ServiceAccess, @unchecked Sendable {
             let inner: FakeService
             init(_ inner: FakeService) { self.inner = inner }
             func awsAccounts() async throws -> [AWSAccount] { try await inner.awsAccounts() }
+            func awsRoles(inAWSAccount id: String) async throws -> [String] { try await inner.awsRoles(inAWSAccount: id) }
             func access(asAWSAccount id: String) async throws -> any ServiceAccess { self }
             func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
                 let query = queryItems(request)
@@ -547,6 +549,10 @@ final class AWSContainmentTests: XCTestCase {
         XCTAssertTrue(check.text.contains("Who the role is could not be read"), check.text)
         let data = try await AWS.containmentAdapter.run("check-access", arguments: Data("{}".utf8), connection: containment, access: Simulator(service))
         let text = ((try JSONSerialization.jsonObject(with: data) as? [String: Any])?["content"] as? [[String: Any]])?.first?["text"] as? String ?? ""
+        XCTAssertTrue(text.contains("⚠ The sign-in may also take SecurityAudit in this account, besides PionContainment."), text)
+        service.awsRolesHeld = ["PionContainment"]
+        let alone = try await AWS.containmentAdapter.run("check-access", arguments: Data("{}".utf8), connection: containment, access: Simulator(service))
+        XCTAssertTrue(String(decoding: alone, as: UTF8.self).contains("✓ The sign-in may take only the PionContainment role in this account."))
         for said in ["✓ deactivate-access-key and reactivate-access-key", "✓ quarantine-principal and release-principal, for roles",
                      "· revoke-role-sessions and remove-session-revocation: off, as the permission set lacks iam:PutRolePolicy, iam:DeleteRolePolicy",
                      "✗ stop-instance: add ec2:StopInstances", "⚠ The permission set allows far more than containment: s3:DeleteBucket",

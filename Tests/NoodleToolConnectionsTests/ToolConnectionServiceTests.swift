@@ -50,16 +50,20 @@ private final class LookupAdapter: ToolConnectionAdapter, @unchecked Sendable {
     }
 }
 
-/// An app's AWS adapter: it lists the organisation's accounts and reaches two AWS services as the role in one of them,
-/// then tries a request that names no account, an account without the role, and a host outside AWS.
+/// An app's AWS adapter: it lists the organisation's accounts and the roles the sign-in may take in one, and reaches two
+/// AWS services as the role in one of them, then tries a request that names no account, an account without the role,
+/// and a host outside AWS.
 private final class CloudAdapter: ToolConnectionAdapter, @unchecked Sendable {
     let lock = NSLock()
     var accounts: [AWSAccount] = []
+    var roles: [String] = []
     var refusals: [String] = []
     func tools(for connection: ToolConnection) async throws -> Data { Data(#"{"tools":[]}"#.utf8) }
     func call(_ tool: String, arguments: Data, connection: ToolConnection, access: ToolConnectionAccess) async throws -> Data {
         let listed = try await access.awsAccounts()
-        lock.withLock { accounts = listed }
+        let held = try await access.awsRoles("111111111111")
+        lock.withLock { accounts = listed; roles = held }
+        do { _ = try await access.awsRoles("../111111111111") } catch { lock.withLock { refusals.append("bad account") } }
         let account = try await access.awsAccount("111111111111")
         var trail = URLRequest(url: URL(string: "https://cloudtrail.eu-west-1.amazonaws.com/aws")!)
         trail.httpMethod = "POST"
@@ -1392,6 +1396,7 @@ final class ToolConnectionServiceTests: XCTestCase {
         _ = try await client.perform(call, connection: record)
         XCTAssertEqual(adapter.accounts.map(\.id), ["111111111111", "222222222222", "333333333333"], "every page of accounts")
         XCTAssertEqual(adapter.accounts.first?.name, "Production")
+        XCTAssertEqual(adapter.roles, ["ReadOnlyAccess", "Billing"], "every role the sign-in may take, not only the connection's")
         let requests = state.awsRequests
         XCTAssertEqual(requests.map(\.host), ["cloudtrail.eu-west-1.amazonaws.com", "iam.amazonaws.com"])
         XCTAssertTrue(requests[0].headers["Authorization"]?.hasPrefix("AWS4-HMAC-SHA256 Credential=ASIAEXAMPLE/") == true)
@@ -1400,7 +1405,8 @@ final class ToolConnectionServiceTests: XCTestCase {
         XCTAssertTrue(requests[1].headers["Authorization"]?.contains("/us-east-1/iam/aws4_request") == true)
         XCTAssertFalse(requests.contains { $0.headers.values.contains { $0.contains("role/secret+value") || $0.contains("sso-access") } },
                        "a secret or the sign-in's token reached a service")
-        XCTAssertEqual(adapter.refusals.first, "no account", "a request naming no account was sent")
+        XCTAssertEqual(adapter.refusals.first, "bad account", "roles were listed for an account that is no 12-digit ID")
+        XCTAssertEqual(adapter.refusals.dropFirst().first, "no account", "a request naming no account was sent")
         XCTAssertTrue(adapter.refusals.contains { $0.contains("no SecurityAudit role in account 222222222222") && $0.contains("Billing, ReadOnlyAccess") },
                       "\(adapter.refusals)")
         XCTAssertEqual(adapter.refusals.last, "elsewhere", "a role's keys reached a host outside AWS")

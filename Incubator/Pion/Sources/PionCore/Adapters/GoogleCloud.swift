@@ -80,9 +80,10 @@ public enum GoogleCloud {
                      ToolField(key: "id", title: "Organization, folder or project ID", placeholder: "123456789012", kind: .identifier),
                      ToolField(key: "clientID", title: "Client ID", placeholder: "1234-abc.apps.googleusercontent.com", kind: .identifier)],
             // The narrowest each API takes: Logging's read-only scope, and Cloud Asset's and Security Command Center's own,
-            // as neither has a read-only one. Google lets both change things too, such as Cloud Asset's feeds and SCC's
-            // mutes, so the signer's viewer roles are what keep them to reading; Pion only reads with them. Never all of
-            // Google Cloud, which Cloud Asset's searches would need; its list and analysis stand in for them.
+            // as neither has a read-only one and none of their methods takes Google Cloud's read-only scope, by each API's
+            // discovery document. Google lets both change things too, such as Cloud Asset's feeds and SCC's mutes, so the
+            // signer's viewer roles are what keep them to reading; Pion only reads with them. Never all of Google Cloud,
+            // which Cloud Asset's searches would need; its list and analysis stand in for them.
             oauth: .google(scopes: [logsScope, assetsScope, findingsScope], clients: []),
             oauthClientField: "clientID", adapter: "google-cloud")),
         setup: setup)
@@ -95,7 +96,7 @@ public enum GoogleCloud {
         "In the [Google Cloud console](https://console.cloud.google.com), pick or create a project in your organisation and enable the [Cloud Logging API](https://console.cloud.google.com/apis/library/logging.googleapis.com), the [Security Command Center API](https://console.cloud.google.com/apis/library/securitycenter.googleapis.com) and the [Cloud Asset API](https://console.cloud.google.com/apis/library/cloudasset.googleapis.com) in it. Pion's requests count against this project.",
         "Set up [Google Auth Platform](https://console.cloud.google.com/auth/overview) with the audience **Internal**, and under [Data Access](https://console.cloud.google.com/auth/scopes) add the scopes `https://www.googleapis.com/auth/logging.read`, `https://www.googleapis.com/auth/cloudasset` and `https://www.googleapis.com/auth/securitycenter`. Data Access offers an API's scopes only once that API is enabled in the project. The same client can serve both Google Workspace tools too.",
         "Under [Clients](https://console.cloud.google.com/auth/clients), choose **Create client** of the type **iOS** with the bundle ID `com.pdparchitect.pion` (`com.pdparchitect.pion.local` for Pion Dev), and copy its **Client ID** here.",
-        "Whoever signs in acts with their own access, so sign in with an account kept for Pion that holds only viewer roles. In [IAM](https://console.cloud.google.com/iam-admin/iam), on the organisation, folder or project to investigate, it needs **Logs Viewer** and **Private Logs Viewer** for the audit logs, Data Access logs included, **Security Center Findings Viewer** for findings, **Cloud Asset Viewer** for access, resources, keys, organisation policies and audit configuration, and **Role Viewer** so access through custom roles is analysed. If your organisation routes audit logs to a log bucket of its own, give it **Logs View Accessor** on that bucket's project too, or on the view alone with an IAM condition, so audit-logs can search the view named in logViews. For access through groups, give it **Groups Reader** in the [Admin console](https://admin.google.com/ac/roles) too. Never sign in with an account that can change findings, such as an Owner, Security Center Admin, Findings Editor or Findings Mute Setter: Security Command Center has no read-only scope, so Pion's sign-in could do whatever the account can. check-access warns when it can.",
+        "Whoever signs in acts with their own access, so sign in with an account kept for Pion that holds only viewer roles. In [IAM](https://console.cloud.google.com/iam-admin/iam), on the organisation, folder or project to investigate, it needs **Logs Viewer** and **Private Logs Viewer** for the audit logs, Data Access logs included, **Security Center Findings Viewer** for findings, **Cloud Asset Viewer** for access, resources, keys, organisation policies and audit configuration, and **Role Viewer** so access through custom roles is analysed. If your organisation routes audit logs to a log bucket of its own, give it **Logs View Accessor** on that bucket's project too, or on the view alone with an IAM condition, so audit-logs can search the view named in logViews. For access through groups, give it **Groups Reader** in the [Admin console](https://admin.google.com/ac/roles) too. Neither Cloud Asset nor Security Command Center offers a read-only scope, so these viewer roles are what keep Pion's sign-in to reading: it could do whatever the account can there. Never sign in with an account that can change anything, such as an Owner, Editor, Security Center Admin, Findings Editor, Findings Mute Setter or Cloud Asset Owner. check-access warns when it can change findings.",
         "Turn on Data Access audit logs, at least Data Read, for the services that hold sensitive data, such as Cloud Storage, in [Audit Logs](https://console.cloud.google.com/iam-admin/audit): they are off by default for every service but BigQuery, and without them nobody's reads are recorded. Findings need [Security Command Center](https://console.cloud.google.com/security/command-center) activated: Standard and Enterprise only for a whole organisation, Premium for an organisation or a project, and only Premium and Enterprise detect threats.",
         "Set Scope and its ID to where they have that access: the organisation's or folder's number, or the project's ID. Then choose **Add & Connect**, sign in, and ask an agent to run check-access.",
     ]
@@ -1150,6 +1151,9 @@ extension GoogleCloud {
         static let summary = "Tries each thing this tool reads once and says what works and, for what does not, exactly what to change: a scope, an API, a role or Security Command Center's activation; whether Data Access logs can be read; which Security Command Center services report here; and whether the account signed in could change findings. It changes nothing; its IAM check counts as one of the organisation's daily analyses. Run it when a tool is refused."
         static let input = JSONSchema.object([:])
 
+        /// Why the sign-in only reads: Google's scopes for the two APIs do not keep it to reading, the account's roles do.
+        static let readOnlyByRoles = "· Cloud Asset Inventory and Security Command Center offer no read-only scope, so only the account's viewer roles keep this sign-in to reading: an account that could also make, change or delete Cloud Asset feeds, or mute or change findings, would let this sign-in do the same. Keep the account to the viewer roles in Setup Steps. This check cannot ask Google about Cloud Asset's permissions."
+
         /// The permissions that change findings, which no viewer role holds.
         static let writes = ["securitycenter.findings.setMute", "securitycenter.findings.bulkMuteUpdate", "securitycenter.findings.setState",
                              "securitycenter.findings.update", "securitycenter.muteconfigs.create", "securitycenter.findingsecuritymarks.update"]
@@ -1253,6 +1257,7 @@ extension GoogleCloud {
                 lines.append("· Security Command Center services and whether the account can change findings: not checked: "
                              + (GoogleCloud.fix(for: error, .findings, on: own) ?? error.localizedDescription))
             }
+            lines.append(Self.readOnlyByRoles)
             return try ServiceResult(text: lines.joined(separator: "\n"), structured: ["checks": lines])
         }
     }

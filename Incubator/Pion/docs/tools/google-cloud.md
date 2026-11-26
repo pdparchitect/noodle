@@ -2,7 +2,7 @@
 guides: [setup]
 ---
 
-# Google Cloud Detection
+# Google Cloud
 
 **Google Cloud Detection** reads a Google Cloud organisation, folder or project the
 way a defender does: who did what in the
@@ -57,18 +57,20 @@ all of Google Cloud:
 - `logging.read`, to read the audit logs. It only reads.
 - `cloudasset`, Cloud Asset Inventory's own, to list resources, keys, policies
   and their history, and to analyse who has access. Pion only reads with it,
-  though Google describes it as seeing, editing and deleting your Cloud Asset
-  data.
-- `securitycenter`, Security Command Center's own, to read findings. Security
-  Command Center has no read-only scope, so this one could also mute or change
-  findings if the account's role allows it.
+  but it also lets an account whose role allows it make, change and delete
+  Cloud Asset's feeds and saved queries.
+- `securitycenter`, Security Command Center's own, to read findings. It also
+  lets an account whose role allows it mute or change findings.
 
-What Pion can do is only what both allow. Pion only ever reads, but the roles
-are what really limit a sign-in, should anything go wrong. So sign in with an
-account kept for Pion that holds only viewer roles, and never with one that can
-change findings, such as an Owner, Security Center Admin, Findings Editor or
-Findings Mute Setter. A lost sign-in of such an account could hide findings an
-attacker set off. **check-access** says when the account signed in could.
+Neither Cloud Asset Inventory nor Security Command Center has a read-only
+scope, and Google's read-only scope for all of Google Cloud is not one their
+methods accept, so the scopes alone cannot keep Google Cloud Detection to
+reading. **The account's viewer roles are what keep it read-only.** Sign in
+with an account kept for Pion that holds only the viewer roles below, and never
+with one that can change anything, such as an Owner, Editor, Security Center
+Admin, Findings Editor, Findings Mute Setter or Cloud Asset Owner. A lost
+sign-in of such an account could hide findings an attacker set off.
+**check-access** says when the account signed in could change findings.
 
 The consent screen describes the Cloud Asset and Security Command Center scopes
 as seeing, editing and deleting data. That is how Google describes the scopes;
@@ -308,6 +310,11 @@ Ask an agent to run **check-access**. It changes nothing, and tries once each:
   organisation's sources. It warns when it can. A role given on one project
   alone does not show there.
 
+It also reminds you that only the account's viewer roles keep the sign-in to
+reading. Its scopes give it no way to ask which Cloud Asset permissions the
+account holds, such as making feeds, so check the account's roles in IAM
+yourself.
+
 For what does not work, it says exactly what to change, and any refused call
 says the same, so an agent can tell you without running the check:
 
@@ -344,6 +351,19 @@ says the same, so an agent can tell you without running the check:
   and access through groups or custom roles is analysed only with Groups
   Reader and Role Viewer; the answer says when either is missing.
 - **Muted findings are left out** unless agents ask for them.
+
+## What to check on a live account
+
+These follow Google's documentation, but were not tried against a live
+organisation:
+
+- that Cloud Asset Inventory's and Security Command Center's reads refuse a
+  sign-in holding only Google Cloud's read-only scope,
+  `https://www.googleapis.com/auth/cloud-platform.read-only`, as their API
+  references list only their own scope and all of Google Cloud for every
+  method Pion calls. Should they take it, Google Cloud Detection could ask for
+  it in place of `cloudasset` and `securitycenter`, and its sign-in would then
+  only read whatever the account's roles.
 
 ## Containing an incident
 

@@ -452,6 +452,7 @@ final class AWSTests: XCTestCase {
     func testCheckAccessSaysWhatWorksWhatIsOffAndWhatToChange() async throws {
         let service = FakeService()
         service.awsAccountList = [AWSAccount(id: "111111111111", name: "Production", email: nil)]
+        service.awsRolesHeld = ["SecurityAudit", "PionContainment", "AdministratorAccess"]
         service.answers["action:GetCallerIdentity"] = (200, "<GetCallerIdentityResponse><GetCallerIdentityResult><Arn>arn:aws:sts::111111111111:assumed-role/AWSReservedSSO_SecurityAudit_abc/pdp</Arn></GetCallerIdentityResult></GetCallerIdentityResponse>")
         service.answers["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.LookupEvents"] = (200, #"{"Events":[]}"#)
         service.answers["com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101.DescribeTrails"] = (200, #"{"trailList":[{"Name":"org","TrailARN":"arn:aws:cloudtrail:us-east-1:999999999999:trail/org","IsMultiRegionTrail":true,"IsOrganizationTrail":true,"CloudWatchLogsLogGroupArn":"arn:aws:logs:x"}]}"#)
@@ -473,9 +474,15 @@ final class AWSTests: XCTestCase {
                      "⚠ Security Hub is off in eu-west-1", "✓ AWS Config is recording.", "✗ IAM Access Analyzer: the role may not do this: add access-analyzer:ListAnalyzers",
                      "✓ IAM", "✓ EC2", "✓ CloudWatch Logs", "⚠ The role can change the account: its policies allow s3:PutBucketPolicy",
                      "⚠ The sign-in does not cover 1 of the organisation's 2 accounts, so nothing in them is read or watched: Shadow IT (444444444444)",
-                     "· Logs Insights is not tried"] {
+                     "· Logs Insights is not tried",
+                     "⚠ The sign-in may also take AdministratorAccess, PionContainment in this account, besides SecurityAudit.",
+                     "Sign AWS Detection in as an Identity Center user assigned only AWS Detection's permission set, SecurityAudit, and no other."] {
             XCTAssertTrue(check.text.contains(said), "\(said):\n\(check.text)")
         }
+        service.awsRolesHeld = ["SecurityAudit"]
+        let alone = try await callTool(AWS.adapter, "check-access", "{}", on: service, in: aws)
+        XCTAssertTrue(alone.text.contains("✓ The sign-in may take only the SecurityAudit role in this account."), alone.text)
+        XCTAssertFalse(alone.text.contains("may also take"), alone.text)
         let simulated = try XCTUnwrap(service.requests.first { queryItems($0)["Action"] == "SimulatePrincipalPolicy" })
         XCTAssertEqual(queryItems(simulated)["PolicySourceArn"], "arn:aws:iam::111111111111:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_SecurityAudit_abc")
         XCTAssertEqual(queryItems(service.requests.first { queryItems($0)["Action"] == "GetRole" })["RoleName"], "AWSReservedSSO_SecurityAudit_abc")

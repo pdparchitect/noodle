@@ -78,6 +78,13 @@ public struct ToolConnectionAccess: Sendable {
                                     gate: gate, pause: pause, configuration: configuration)
     }
 
+    /// For an AWS connection signed in through IAM Identity Center: every role its sign-in may take in one of its
+    /// accounts, the connection's own and any other, as Identity Center would give keys for each.
+    public func awsRoles(_ account: String) async throws -> [String] {
+        guard case .awsOrganisation(let organisation)? = authorization else { throw Self.notIdentityCenter }
+        return try await organisation.roles(account)
+    }
+
     private static let notIdentityCenter = ToolConnectionError.message("This connection does not sign in through AWS IAM Identity Center.")
 
     public func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
@@ -260,13 +267,15 @@ public struct AWSAccount: Equatable, Sendable {
     public init(id: String, name: String, email: String?) { self.id = id; self.name = name; self.email = email }
 }
 
-/// What an AWS connection signed in through Identity Center reaches: the accounts its sign-in covers, and keys for the
-/// connection's role in one of them, got when first asked for.
+/// What an AWS connection signed in through Identity Center reaches: the accounts its sign-in covers, the roles it may
+/// take in each, and keys for the connection's role in one of them, got when first asked for.
 struct AWSOrganisation: Sendable {
     /// Where requests go unless they name another region.
     let region: String
     let accounts: @Sendable () async throws -> [AWSAccount]
     let keys: @Sendable (String) async throws -> ConnectionAWSKey
+    /// Every role the sign-in may take in one account.
+    let roles: @Sendable (String) async throws -> [String]
 }
 
 /// How a request proves who its connection is: a header, or for a service that takes its key only there, a

@@ -10,10 +10,13 @@ public protocol ServiceAccess: Sendable {
     func awsAccounts() async throws -> [AWSAccount]
     /// The same access, signing as the connection's role in one of those accounts.
     func access(asAWSAccount id: String) async throws -> any ServiceAccess
+    /// Every role the sign-in may take in one of those accounts, the connection's own and any other.
+    func awsRoles(inAWSAccount id: String) async throws -> [String]
 }
 
 extension ServiceAccess {
     public func awsAccounts() async throws -> [AWSAccount] { throw ServiceError.input("This connection does not sign in to AWS.") }
+    public func awsRoles(inAWSAccount id: String) async throws -> [String] { throw ServiceError.input("This connection does not sign in to AWS.") }
     public func access(asAWSAccount id: String) async throws -> any ServiceAccess {
         throw ServiceError.input("This connection does not sign in to AWS.")
     }
@@ -21,6 +24,7 @@ extension ServiceAccess {
 
 extension ToolConnectionAccess: ServiceAccess {
     public func access(asAWSAccount id: String) async throws -> any ServiceAccess { try await awsAccount(id) }
+    public func awsRoles(inAWSAccount id: String) async throws -> [String] { try await awsRoles(id) }
 }
 
 /// A tool's input, described in code; bots see it as JSON Schema.

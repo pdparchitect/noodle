@@ -7,6 +7,16 @@ import NoodleToolConnections
 ///
 /// The tool's guide is Incubator/Pion/docs/tools/sumo-logic.md. Change it with the setup steps or operations here.
 public enum SumoLogic {
+    /// The query, unless an operator after a pipe writes: save stores results in a lookup table. Refused even inside
+    /// quoted text, as a refusal is the safe mistake.
+    static func readOnly(_ query: String) throws -> String {
+        if query.range(of: #"\|\s*save\b"#, options: [.regularExpression, .caseInsensitive]) != nil {
+            throw ServiceError.input("Sumo Logic's save operator writes to a lookup table, and searches here only read: take it out of the query.")
+        }
+        return query
+    }
+
+
     static let deployments = [("api.sumologic.com", "US1"), ("api.us2.sumologic.com", "US2"), ("api.eu.sumologic.com", "EU"),
                               ("api.de.sumologic.com", "DE"), ("api.au.sumologic.com", "AU"), ("api.jp.sumologic.com", "JP"),
                               ("api.ca.sumologic.com", "CA"), ("api.in.sumologic.com", "IN"), ("api.fed.sumologic.com", "FED")]
@@ -28,8 +38,8 @@ public enum SumoLogic {
         setup: setup)
 
     static let setup = [
-        "Use a Sumo Logic user for Pion whose role has the **Manage Access Keys** capability, and make the access key as that user; where Sumo Logic offers key scopes, give the key only **Run Log Search**. Searching through the API needs an Enterprise account.",
-        "Signed in as that user, open **Preferences › My Access Keys** and choose **Add Access Key**. Copy its **Access ID** and **Access Key** here; the key is shown only once.",
+        "Under **Administration › Users and Roles › Roles**, make a role for Pion with the **Create Access Keys** capability, which makes only the user's own keys, and nothing else: not **Manage Access Keys**, which manages every user's keys across the organisation. Give it a **search filter** that limits it to the logs agents should read, such as `_sourceCategory=prod/auth*`; without one it searches every log. Make a Sumo Logic user for Pion with that role alone. Searching through the API needs an Enterprise account.",
+        "Signed in as that user, open **Preferences › My Access Keys** and choose **Add Access Key**. Under **Scopes** choose **Custom** and give the key only **Run Log Search**, where Sumo Logic offers scopes. Copy its **Access ID** and **Access Key** here; the key is shown only once.",
         "For the deployment, choose the one your Sumo Logic address names: `service.eu.sumologic.com` is EU, and `service.sumologic.com` is US1. Then ask an agent to run check-access.",
     ]
 
@@ -61,7 +71,7 @@ extension SumoLogic {
         func run(_ input: Input, on service: ServiceClient) async throws -> ServiceResult {
             struct Start: Encodable { let query: String, from: String, to: String, timeZone: String }
             struct Started: Decodable { let id: String }
-            let body = Start(query: try ServiceInput.query(input.query), from: try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(1),
+            let body = Start(query: try SumoLogic.readOnly(try ServiceInput.query(input.query)), from: try input.since.map(ServiceInput.time) ?? ServiceInput.daysAgo(1),
                              to: try input.until.map(ServiceInput.time) ?? ISO8601DateFormatter().string(from: Date()), timeZone: "UTC")
             let started = try await service.exchange(["search", "jobs"], method: "POST", body: try JSONEncoder().encode(body))
             guard let job = try? JSONDecoder().decode(Started.self, from: started.data).id else { throw ServiceError.unreadable }
@@ -105,7 +115,7 @@ extension SumoLogic {
 extension SumoLogic {
     static let fixes = AccessCheck.Fixes(
         rejected: "Sumo Logic did not accept the access ID and key: they are wrong, the key was deleted or turned off, or it belongs to another deployment. Check the deployment, or make a new access key and enter both again in Settings › Tools.",
-        forbidden: "Sumo Logic refused searching through the API: check that the account's plan includes the Search Job API, which needs an Enterprise account, that the user's role may search, and that an access key with scopes includes Run Log Search.",
+        forbidden: "Sumo Logic refused searching through the API: check that the account's plan includes the Search Job API, which needs an Enterprise account, that the user's role may search, and that the key's Custom scope includes Run Log Search. The role needs only Create Access Keys, never Manage Access Keys.",
         rateLimited: "Sumo Logic is limiting this key, to 4 requests a second and 10 at once, or the organisation to 200 searches running at once: wait before trying again.")
 
     /// Starts one search job over the last minute, the only part the tool uses, and removes it at once without reading it.

@@ -26,18 +26,25 @@ everything the admin can. Give Pion a user of its own with a role made for it:
 
 | Role setting | What to give |
 | --- | --- |
-| **Capabilities** | `search` only. Leave out everything that changes Splunk or its users, such as `delete_by_keyword`, `edit_user`, `edit_roles` and `admin_all_objects`. |
+| **Capabilities** | `search` only. Leave out everything that writes or changes Splunk or its users: `delete_by_keyword`, `run_collect`, `run_mcollect`, `run_sendalert`, `run_dump`, `run_custom_command`, `schedule_search`, `admin_all_objects`, `change_authentication` and every `edit_` capability, such as `edit_user` and `edit_roles`. |
 | **Indexes** | only the indexes agents should read, such as `auth` or `firewall`. Don't give it **All non-internal indexes** or `*`. |
 | **Inheritance** | none, or a role that adds nothing beyond the above. |
 | **Resources** | keep the role's limits on searches at once and on search time low; a role made for Pion can keep them as Splunk's `user` role has them. |
 
 Give the token an **expiry date**, and make a new one before it ends.
 
-Pion also refuses, before sending anything, a search that uses a command that
-writes or sends data: `delete`, `outputlookup`, `outputcsv`, `outputtext`,
-`collect`, `mcollect`, `meventcollect`, `tscollect`, `sendemail`,
-`sendalert`, `script`, `run` and `dump`. The role is the stronger guard: a role
-without those capabilities cannot run them anyway.
+**The role is what keeps searches to reading.** Pion also refuses, before
+sending anything, a search that uses a command that writes or sends data, or
+runs a search Pion cannot read first: `delete`, `outputlookup`, `outputcsv`,
+`outputtext`, `collect` and `summaryindex`, `mcollect`, `meventcollect`,
+`tscollect`, `sendemail`, `sendalert`, `script`, `run`, `runshellscript`,
+`dump`, DB Connect's `dbxquery`, `dbxoutput` and `dbxlookup`, which can run
+any SQL on a database, `map`, `savedsearch` and `fit`. It refuses every
+**macro**, written between backticks, as a macro can expand to any of these:
+agents write out the search a macro stands for instead. But apps can add
+commands of their own that write or reach out, which Pion cannot know, so a
+role without the capabilities above, `run_custom_command` among them, is the
+guard that holds.
 
 **Splunk Cloud Platform.** Its REST API is closed until you open it: add this
 Mac's public IP address to the `search-api` allow list with the Admin Config
@@ -75,7 +82,9 @@ Ask an agent to run **check-access**. It sends two reads and says, a line each:
 - whether Splunk takes the token, whose it is and the user's roles;
 - whether the roles may search, and which indexes, from one search of index
   metadata that reads no events;
-- capabilities the roles hold that change Splunk, which searching never needs.
+- capabilities the roles hold that write or change Splunk, which searching
+  never needs, such as `run_collect`, `run_custom_command` or any `edit_`
+  capability.
 
 What its lines mean:
 

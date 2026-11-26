@@ -332,6 +332,17 @@ public actor ToolConnectionService {
         }
     }
 
+    /// Every role the sign-in may take in `account`, whatever the connection's own role is.
+    private func awsRoles(_ connection: ToolConnection, account: String, epoch: Int, deadline: Date) async throws -> [String] {
+        guard account.count == 12, account.allSatisfy({ $0.isASCII && $0.isNumber }) else {
+            throw ToolConnectionError.message("Name the AWS account by its 12-digit ID.")
+        }
+        let (session, token) = try await awsSession(connection, epoch: epoch, deadline: deadline)
+        let roles = try await identityCenter.roles(region: session.region, accessToken: token, account: account)
+        try checkActive(connection.id, epoch: epoch, deadline: deadline)
+        return roles
+    }
+
     /// Keeps the client ID and secret a connection exchanges for access tokens, in place of signing in.
     /// A new pair starts afresh: no token got with the old one is used again.
     public func saveClientCredentials(clientID: String, secret: String, for connection: ToolConnection) throws {
@@ -618,7 +629,8 @@ public actor ToolConnectionService {
             _ = try await awsSession(connection, epoch: epoch, deadline: deadline)
             return .awsOrganisation(AWSOrganisation(region: center.region,
                 accounts: { try await self.awsAccounts(connection, epoch: epoch, deadline: deadline) },
-                keys: { try await self.awsKeys(connection, account: $0, epoch: epoch, deadline: deadline) }))
+                keys: { try await self.awsKeys(connection, account: $0, epoch: epoch, deadline: deadline) },
+                roles: { try await self.awsRoles(connection, account: $0, epoch: epoch, deadline: deadline) }))
         }
         if let parameter = connection.tokenParameter {
             guard let token = try tokens.load(connection.id), token.endpoint == connection.endpoint,

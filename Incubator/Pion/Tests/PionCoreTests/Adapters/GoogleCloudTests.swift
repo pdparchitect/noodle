@@ -351,6 +351,7 @@ final class GoogleCloudTests: XCTestCase {
         XCTAssertTrue(check.text.contains("services reporting here: Security Health Analytics") && check.text.contains("Event Threat Detection is not among them"), check.text)
         XCTAssertTrue(check.text.contains("⚠ The account signed in can change findings: on organizations/123456789/sources/1 it holds securitycenter.findings.setMute"), check.text)
         XCTAssertEqual(try json(service.requests.last)["permissions"] as? [String], GoogleCloud.CheckAccess.writes)
+        XCTAssertTrue(check.text.contains("offer no read-only scope, so only the account's viewer roles keep this sign-in to reading"), check.text)
         // Only reads: GETs, Logging's search, and asking which permissions the sign-in holds.
         for request in service.requests where request.httpMethod != "GET" {
             let path = request.url?.path ?? ""

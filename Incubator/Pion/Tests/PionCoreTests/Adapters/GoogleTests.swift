@@ -1040,8 +1040,8 @@ final class GoogleTests: XCTestCase {
         "https://www.googleapis.com/auth/admin.directory.user.security": "on Google's scope list",
         "https://www.googleapis.com/auth/admin.directory.device.mobile.action": "on Google's scope list; mobiledevices.list, get and action each accept it",
         "https://www.googleapis.com/auth/logging.read": "on Google's scope list; live on the champion's tenant",
-        "https://www.googleapis.com/auth/cloudasset": "not on Google's scope list, which gives only cloud-platform for Cloud Asset; taken by the champion's live sign-in",
-        "https://www.googleapis.com/auth/securitycenter": "not on Google's scope list, which gives only cloud-platform for Security Command Center; taken by the champion's live sign-in",
+        "https://www.googleapis.com/auth/cloudasset": "not on Google's scope list, which gives only cloud-platform for Cloud Asset; taken by the champion's live sign-in; assets.list and analyzeIamPolicy take only it or cloud-platform, never cloud-platform.read-only, by the v1 discovery document",
+        "https://www.googleapis.com/auth/securitycenter": "not on Google's scope list, which gives only cloud-platform for Security Command Center; taken by the champion's live sign-in; sources.list, findings.list, findings.group and testIamPermissions take only it or cloud-platform, never cloud-platform.read-only, by the v2 discovery document",
         "https://www.googleapis.com/auth/cloud-platform": "on Google's scope list for IAM, Resource Manager, Compute Engine and Cloud Storage; Google Cloud Containment's alone",
         "https://www.googleapis.com/auth/userinfo.email": "on Google's scope list for Google's OpenID Connect user info; Google Cloud Containment checks who signed in with it",
     ]

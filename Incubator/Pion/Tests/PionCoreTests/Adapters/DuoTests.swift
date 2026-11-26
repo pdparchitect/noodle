@@ -39,7 +39,7 @@ final class DuoTests: XCTestCase {
         XCTAssertNil(account.tokenScheme)
         XCTAssertEqual(try Duo.keys.compose("DIWJ8X6AEYOR5OMC6TQ1", "Zh5eGmUq9zpfQnyUIu5OL9iWoMMv5ZNmk3zLJ4Ep"), ComposedToken.duoSignaturePrefix + "DIWJ8X6AEYOR5OMC6TQ1:Zh5eGmUq9zpfQnyUIu5OL9iWoMMv5ZNmk3zLJ4Ep")
         let steps = Duo.setup.joined(separator: " ")
-        for words in ["Owner", "Admin API", "Grant read log", "Grant resource - Read", "Leave every write permission off", "no OAuth", "Keychain", "API hostname"] {
+        for words in ["Owner", "Admin API", "Grant read log", "Grant resource - Read", "Leave every other permission off, **Grant settings** included", "no OAuth", "Keychain", "API hostname"] {
             XCTAssertTrue(steps.contains(words), words)
         }
         XCTAssertFalse(steps.contains("tick only **Grant resource - Write"))
@@ -82,16 +82,11 @@ final class DuoTests: XCTestCase {
 
     func testARefusalNamesThePermissionToTick() async throws {
         let service = FakeService()
-        service.answers["/admin/v1/settings"] = Self.forbidden
-        let settings = try await call("settings", service)
-        XCTAssertTrue(settings.isError)
-        XCTAssertTrue(settings.text.contains("Grant settings"), settings.text)
-        XCTAssertTrue(settings.text.contains("no read-only form"), settings.text)
-        XCTAssertTrue(settings.text.contains("40301: Access forbidden"), settings.text)
-
         service.answers["/admin/v1/admins"] = Self.forbidden
         let admins = try await call("admins", service)
+        XCTAssertTrue(admins.isError)
         XCTAssertTrue(admins.text.contains("Grant administrators - Read"), admins.text)
+        XCTAssertTrue(admins.text.contains("40301: Access forbidden"), admins.text)
 
         service.answers["/admin/v1/phones"] = (401, #"{"stat":"FAIL","code":40103,"message":"Invalid signature in request credentials"}"#)
         let phones = try await call("phones", service)
@@ -182,15 +177,9 @@ final class DuoTests: XCTestCase {
         XCTAssertEqual(result.structured?["concerning"] as? [String], ["DPBAD000000000000001"])
     }
 
-    func testSettingsLeadWithTheirGaps() async throws {
-        let service = FakeService()
-        service.answers["/admin/v1/settings"] = Self.ok(#"{"name":"Acme","lockout_threshold":20,"lockout_expire_duration":15,"fraud_email_enabled":false,"helpdesk_bypass":"allow","helpdesk_bypass_expiration":null,"user_managers_can_put_users_in_bypass":true,"email_activity_notification_enabled":false,"push_activity_notification_enabled":false,"unenrolled_user_lockout_threshold":0,"inactive_user_expiration":0,"inactive_admin_expiration":0,"minimum_password_length":8}"#)
-        let result = try await call("settings", service)
-        XCTAssertFalse(result.isError, result.text)
-        for words in ["locked out only after 20 failed attempts", "unlocked by itself after 15 minutes", "fraud_email_enabled off", "Help Desk administrators may make bypass codes",
-                      "User Manager administrators may put users in bypass status", "not told when a device is added", "never enroll are never locked out", "need only 8 characters"] {
-            XCTAssertTrue(result.text.contains(words), words)
-        }
+    func testGlobalSettingsAreNotOfferedAsDuoGivesThemOnlyWithTheRightToChangeThem() {
+        XCTAssertFalse(Duo.operations.contains { type(of: $0).name == "settings" })
+        XCTAssertTrue(Duo.setup.joined().contains("**Grant settings** included: Duo offers no read-only access"))
     }
 
     func testPoliciesLeadWithWhatTheyLetThroughAndSayPlainlyWhenTheAPIIsMissing() async throws {
@@ -257,7 +246,6 @@ final class DuoTests: XCTestCase {
         service.answers["/admin/v2/logs/authentication"] = Self.ok(#"{"authlogs":[]}"#)
         service.answers["/admin/v1/users"] = Self.ok("[]")
         service.answers["/admin/v1/admins"] = Self.forbidden
-        service.answers["/admin/v1/settings"] = Self.forbidden
         service.answers["/admin/v1/trust_monitor/events"] = Self.forbidden
         service.answers["/admin/v1/info/summary"] = Self.ok(#"{"edition":"Duo Essentials","user_count":42,"admin_count":3,"integration_count":7}"#)
         service.answers["/admin/v3/integrations"] = Self.ok(#"[{"name":"Pion Detection","type":"adminapi","adminapi_read_log":1,"adminapi_read_resource":1},{"name":"Old sync script","type":"adminapi","adminapi_write_resource":1}]"#)
@@ -266,7 +254,8 @@ final class DuoTests: XCTestCase {
         XCTAssertTrue(result.text.contains("✓ Logs (Grant read log)"), result.text)
         XCTAssertTrue(result.text.contains("✓ Users, phones, policies and applications (Grant resource - Read)"), result.text)
         XCTAssertTrue(result.text.contains("✗ Administrators: the Admin API application lacks Grant administrators - Read"), result.text)
-        XCTAssertTrue(result.text.contains("✗ Global settings: the Admin API application lacks Grant settings"), result.text)
+        XCTAssertFalse(result.text.contains("Global settings"), "Duo Detection reads no global settings, which need the right to change them")
+        XCTAssertFalse(service.requests.contains { $0.url?.path == "/admin/v1/settings" })
         XCTAssertTrue(result.text.contains("most likely lacks Trust Monitor"), result.text)
         XCTAssertTrue(result.text.contains("Duo Essentials, 42 users"), result.text)
         XCTAssertTrue(result.text.contains("Admin API applications that can change Duo: Old sync script (Grant resource - Write)"), result.text)

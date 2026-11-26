@@ -18,8 +18,11 @@ final class FakeService: ServiceAccess, @unchecked Sendable {
     /// For an AWS connection: the accounts its sign-in covers, and each one a lookup signed as, in turn.
     var awsAccountList = [AWSAccount(id: "111111111111", name: "Production", email: nil)]
     var awsAccountsUsed: [String] = []
+    /// The roles the sign-in may take in each account, as Identity Center lists them.
+    var awsRolesHeld: [String] = []
 
     func awsAccounts() async throws -> [AWSAccount] { lock.withLock { awsAccountList } }
+    func awsRoles(inAWSAccount id: String) async throws -> [String] { lock.withLock { awsRolesHeld } }
     func access(asAWSAccount id: String) async throws -> any ServiceAccess {
         lock.withLock { awsAccountsUsed.append(id) }
         return self

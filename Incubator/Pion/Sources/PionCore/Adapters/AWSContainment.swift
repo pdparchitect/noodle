@@ -52,8 +52,9 @@ extension AWS {
         "In the **IAM Identity Center** console, open **Permission sets** and create a custom permission set for containment alone, named such as `PionContainment`, apart from AWS Detection's. Set its session duration to an hour.",
         "Give it this inline policy and nothing else; leave out any statement whose actions you do not want agents to have: `\(compact(containmentPolicy))`",
         "Only if agents should be able to end a role's open sessions with revoke-role-sessions, add this statement to the policy's list too. IAM cannot limit what an inline policy it allows says, so it lets the permission set give any role any permission; it is off unless you add it: `\(compact(revocationStatement))`",
-        "Under **AWS accounts**, assign the permission set only to a responder user or group, and only in the accounts where containment is wanted, not the management account. Require MFA for them at your identity provider.",
-        "Enter the **AWS access portal URL** and the permission set's name as the role, and choose the default region. Choose **Add & Connect** and approve the code on your organisation's sign-in page, then ask an agent to run check-access.",
+        "Under **Users**, add an Identity Center user for AWS Containment alone, such as `pion-containment`, apart from AWS Detection's, with MFA, and in no group that holds a permission set. Identity Center gives a sign-in keys for every permission set its user holds.",
+        "Under **AWS accounts**, assign that user this permission set and no other, only in the accounts where containment is wanted, not the management account.",
+        "Enter the **AWS access portal URL** and the permission set's name as the role, and choose the default region. Choose **Add & Connect** and approve the code on your organisation's sign-in page signed in as AWS Containment's own user, then ask an agent to run check-access, which warns when the sign-in may take any role besides this one.",
     ]
 
     /// The containment permission set's policy: reads to check each target first, then only the changes the operations
@@ -1197,7 +1198,7 @@ extension AWS {
         struct Input: Decodable, Sendable { let account: String? }
         static let name = "check-access"
         static let jobs: Set<ToolJob> = [.containment]
-        static let summary = "Simulates each operation's actions against the permission set's own policies in an account and says which it lacks, exactly what to add, whether the optional session revocation is on, and whether it allows far more than containment. It changes nothing."
+        static let summary = "Says whether the sign-in may take any role besides this tool's own; simulates each operation's actions against the permission set's own policies in an account and says which it lacks, exactly what to add, whether the optional session revocation is on, and whether it allows far more than containment. It changes nothing."
         static let input = JSONSchema.object(["account": .string("The account, by its ID or name. Needed unless the sign-in covers only one.")])
 
         /// What each operation needs, and on what: a user, a role, or anything.
@@ -1235,6 +1236,7 @@ extension AWS {
                 guard arn.contains(":assumed-role/"), parts.count >= 2 else { throw ServiceError.unreadable }
                 role = String(parts[1])
                 lines.append("✓ Signed in as \(arn)")
+                lines.append(await AWS.otherRoles(iam.account, tool: "AWS Containment", on: service))
             } catch {
                 return try ServiceResult(text: (lines + ["✗ Who the role is could not be read: \(error.localizedDescription)"]).joined(separator: "\n"), structured: ["checks": lines])
             }
