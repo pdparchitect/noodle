@@ -1,4 +1,4 @@
-// Noodle Enterprise. Source-available under Enterprise/LICENSE, not Apache-2.0.
+// Noodle Enterprise. Source-available under Enterprise/LICENSE, not the Functional Source License.
 // Writes the Jamf schema, sample profile, published-keys ledger and the guide's key table from
 // the key registry: swift run NoodleEnterpriseFiles
 import Foundation

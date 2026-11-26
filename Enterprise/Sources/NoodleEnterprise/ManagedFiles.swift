@@ -1,4 +1,4 @@
-// Noodle Enterprise. Source-available under Enterprise/LICENSE, not Apache-2.0.
+// Noodle Enterprise. Source-available under Enterprise/LICENSE, not the Functional Source License.
 import Foundation
 
 /// The files generated from the key registry for administrators. They are never edited by hand:

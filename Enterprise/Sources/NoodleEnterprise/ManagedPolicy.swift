@@ -1,4 +1,4 @@
-// Noodle Enterprise. Source-available under Enterprise/LICENSE, not Apache-2.0.
+// Noodle Enterprise. Source-available under Enterprise/LICENSE, not the Functional Source License.
 import Foundation
 import NoodleCore
 import OSLog

@@ -118,8 +118,8 @@ let package = Package(
         .target(name: "NoodleCore", dependencies: [.target(name: "CSQLite", condition: .when(platforms: [.linux])), .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), .product(name: "ProductIdentity", package: "Product"), .product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper"), .product(name: "NoodlePatch", package: "Patch")],
             swiftSettings: developmentHooks),
         /// Noodle Enterprise: managed preferences from a configuration profile. Source-available under
-        /// Enterprise/LICENSE, not Apache-2.0; the rest of Noodle reaches it only through NoodleCore's
-        /// OrganisationPolicy.
+        /// Enterprise/LICENSE, not the Functional Source License; the rest of Noodle reaches it only
+        /// through NoodleCore's OrganisationPolicy.
         .target(name: "NoodleEnterprise", dependencies: ["NoodleCore"], path: "Enterprise/Sources/NoodleEnterprise"),
         .executableTarget(name: "NoodleEnterpriseFiles", dependencies: ["NoodleEnterprise"], path: "Enterprise/Sources/NoodleEnterpriseFiles"),
         .testTarget(name: "NoodleEnterpriseTests", dependencies: ["NoodleEnterprise", "NoodleCore"], path: "Enterprise/Tests/NoodleEnterpriseTests"),
