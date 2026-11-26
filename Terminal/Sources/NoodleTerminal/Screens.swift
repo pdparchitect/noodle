@@ -585,8 +585,8 @@ import AppKit
 #endif
 
 /// What Terminal hands the system: a link or file to open, text to copy. On a Mac through AppKit;
-/// elsewhere links and files open with xdg-open, and copies go through the terminal itself, which
-/// works over SSH too.
+/// on Windows links and files open with the program Windows chooses for them, and on Linux with xdg-open;
+/// copies go through the terminal itself, which works over SSH too.
 @MainActor enum Desktop {
     /// How the screens name the computer Terminal runs on, in a sentence and starting one.
     #if os(macOS)
@@ -600,8 +600,14 @@ import AppKit
         NSWorkspace.shared.open(url)
         #else
         let opener = Process()
+        #if os(Windows)
+        let system = ProcessInfo.processInfo.environment["SystemRoot"] ?? #"C:\Windows"#
+        opener.executableURL = URL(fileURLWithPath: system).appendingPathComponent("System32/rundll32.exe")
+        opener.arguments = ["url.dll,FileProtocolHandler", url.isFileURL ? url.path : url.absoluteString]
+        #else
         opener.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         opener.arguments = ["xdg-open", url.isFileURL ? url.path : url.absoluteString]
+        #endif
         opener.standardInput = FileHandle.nullDevice
         opener.standardOutput = FileHandle.nullDevice
         opener.standardError = FileHandle.nullDevice

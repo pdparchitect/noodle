@@ -1,3 +1,4 @@
+#if canImport(Darwin) || canImport(Glibc)
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)
@@ -150,3 +151,4 @@ private func sendBytes(_ fd: Int32, _ buffer: UnsafeRawPointer, _ count: Int) ->
     send(fd, buffer, count, Int32(MSG_NOSIGNAL))
     #endif
 }
+#endif

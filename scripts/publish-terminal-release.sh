@@ -12,9 +12,9 @@ channel="terminal-latest"
 repo="pdparchitect/noodle"
 assets="$project_root/dist/terminal-$version"
 archive="Noodle-Terminal-arm64.zip"
-# The Mac's command, and Linux's for each processor.
+# The Mac's command, and Linux's and Windows's for each processor.
 files=()
-for name in "$archive" Noodle-Terminal-linux-arm64.tar.gz Noodle-Terminal-linux-x86_64.tar.gz; do
+for name in "$archive" Noodle-Terminal-linux-arm64.tar.gz Noodle-Terminal-linux-x86_64.tar.gz     Noodle-Terminal-windows-arm64.zip Noodle-Terminal-windows-x86_64.zip; do
     [[ -s "$assets/$name" && -s "$assets/$name.sha256" ]]
     (cd "$assets"; shasum -a 256 -c "$name.sha256")
     files+=("$assets/$name" "$assets/$name.sha256")
@@ -38,7 +38,7 @@ gh release edit "$tag" --repo "$repo" --draft=false --latest=false
 
 # The channel is a marker, not a version tag, and never becomes the repository's latest release.
 download="https://github.com/$repo/releases/download/$channel"
-page="Noodle Terminal $version. [Download ZIP for Apple silicon]($download/$archive) · Linux on [arm64]($download/Noodle-Terminal-linux-arm64.tar.gz) · [x86_64]($download/Noodle-Terminal-linux-x86_64.tar.gz) · [Release notes](https://github.com/$repo/releases/tag/$tag)"
+page="Noodle Terminal $version. [Download ZIP for Apple silicon]($download/$archive) · Linux on [arm64]($download/Noodle-Terminal-linux-arm64.tar.gz) · [x86_64]($download/Noodle-Terminal-linux-x86_64.tar.gz) · Windows on [arm64]($download/Noodle-Terminal-windows-arm64.zip) · [x86_64]($download/Noodle-Terminal-windows-x86_64.zip) · [Release notes](https://github.com/$repo/releases/tag/$tag)"
 if [[ -z "$channel_title" ]]; then
     gh release create "$channel" "${files[@]}" \
         --repo "$repo" --target "$(git -C "$project_root" rev-parse "$tag^{commit}")" \

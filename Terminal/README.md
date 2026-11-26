@@ -1,6 +1,6 @@
 # Noodle Terminal
 
-[![macOS 26 ZIP](https://img.shields.io/badge/macOS_26-ZIP-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-arm64.zip) [![Linux arm64](https://img.shields.io/badge/Linux-arm64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-linux-arm64.tar.gz) [![Linux x86_64](https://img.shields.io/badge/Linux-x86__64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-linux-x86_64.tar.gz)
+[![macOS 26 ZIP](https://img.shields.io/badge/macOS_26-ZIP-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-arm64.zip) [![Linux arm64](https://img.shields.io/badge/Linux-arm64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-linux-arm64.tar.gz) [![Linux x86_64](https://img.shields.io/badge/Linux-x86__64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-linux-x86_64.tar.gz) [![Windows arm64](https://img.shields.io/badge/Windows-arm64-0078D4?logo=windows&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-windows-arm64.zip) [![Windows x86_64](https://img.shields.io/badge/Windows-x86__64-0078D4?logo=windows&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-windows-x86_64.zip)
 
 Chat with the bots and groups on your Noodle Hub from Terminal on your Mac, without the
 Noodle app. Your bots and groups are listed on the left with their pictures, newest
@@ -55,6 +55,25 @@ noodle
 
 Bots show their colours, without the symbols they have on a Mac. Copying puts text on the clipboard
 of the computer the terminal shows on, where the terminal allows it.
+
+### On Windows
+
+Noodle Terminal runs on Windows 10 and 11 on arm64 or x86_64, in Windows Terminal. Download it for
+[arm64](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-windows-arm64.zip)
+or [x86_64](https://github.com/pdparchitect/noodle/releases/download/terminal-latest/Noodle-Terminal-windows-x86_64.zip).
+The ZIP holds a `Noodle Terminal` folder with `noodle.exe` and everything it needs, including Microsoft's
+msquic and the Swift runtime, so nothing else needs installing; keep the folder's files together. In PowerShell:
+
+```
+Expand-Archive "$HOME\Downloads\Noodle-Terminal-windows-*.zip" "$env:LOCALAPPDATA\Programs"
+& "$env:LOCALAPPDATA\Programs\Noodle Terminal\noodle.exe"
+```
+
+To run it as `noodle`, add that folder to your `PATH` in **Settings → System → About → Advanced system
+settings → Environment Variables**. To update, download the ZIP again and replace the folder.
+
+Bots show their colours, without the symbols they have on a Mac. Links and files open with the apps
+Windows chooses for them, and copying uses Windows Terminal's clipboard.
 
 ### Building it
 

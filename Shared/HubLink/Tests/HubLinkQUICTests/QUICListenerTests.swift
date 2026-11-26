@@ -1,4 +1,4 @@
-#if os(Linux)
+#if os(Linux) || os(Windows)
 import CNoodleQUIC
 import Foundation
 import HubWire
@@ -65,7 +65,7 @@ final class QUICListenerTests: XCTestCase {
     private func readAll(_ stream: OpaquePointer, timeout: Int32 = 5_000) -> Data? {
         var data = Data(), buffer = [UInt8](repeating: 0, count: 65_536)
         while true {
-            let count = nq_client_read(stream, &buffer, buffer.count, timeout)
+            let count = Int(nq_client_read(stream, &buffer, buffer.count, timeout))
             if count == 0 { return data }
             if count < 0 { return nil }
             data.append(contentsOf: buffer.prefix(count))
@@ -137,7 +137,7 @@ final class QUICListenerTests: XCTestCase {
         var buffer = [UInt8](repeating: 0, count: 64)
         var received = Data()
         while received.count < 8 {
-            let count = nq_client_read(channel, &buffer, buffer.count, 5_000)
+            let count = Int(nq_client_read(channel, &buffer, buffer.count, 5_000))
             guard count > 0 else { return XCTFail("the channel's answer did not come") }
             received.append(contentsOf: buffer.prefix(count))
         }

@@ -730,6 +730,11 @@ jobs:
           pattern: terminal-release-linux-*
           path: dist
           merge-multiple: true
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: terminal-release-windows-*
+          path: dist
+          merge-multiple: true
       - name: Publish the verified Terminal archive and download channel
         env:
           GH_TOKEN: ${{ github.token }}

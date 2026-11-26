@@ -111,3 +111,7 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 7
+
+  # The `noodle` command for Windows, one ZIP for each processor.
+  windows:
+    uses: ./.github/workflows/terminal-windows.yml

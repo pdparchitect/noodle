@@ -1,20 +1,26 @@
-// msquic is Linux's QUIC here; on Apple platforms the Hub uses Network.framework instead.
+// msquic is Linux's and Windows's QUIC here; on Apple platforms the Hub uses Network.framework instead.
+#if defined(__linux__) || defined(_WIN32)
 #ifdef __linux__
 #define _GNU_SOURCE
+#endif
 #include "NoodleQUIC.h"
 #include "msquic/msquic.h"
 
-#include <dlfcn.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#ifdef _WIN32
+#include "NoodleQUICWindows.h"
+#else
+#include <dlfcn.h>
+#include <fcntl.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <time.h>
+#endif
 
 static const QUIC_BUFFER alpn = {sizeof("noodle-hub/1") - 1, (uint8_t *)"noodle-hub/1"};
 static const QUIC_API_TABLE *api;
@@ -22,6 +28,7 @@ static HQUIC registration;
 static pthread_once_t loaded = PTHREAD_ONCE_INIT;
 static char load_error[256];
 
+#ifndef _WIN32
 /// Exiting runs OpenSSL's cleanup, which frees its state while a connection may still be loading its
 /// certificate on another thread, crashing on the way out. OpenSSL is told to leave it, before msquic
 /// starts it; the process is ending, so nothing is lost.
@@ -33,8 +40,19 @@ static void keep_openssl_at_exit(void) {
     // OPENSSL_INIT_NO_ATEXIT, from OpenSSL 3's crypto.h, which is not among this package's headers.
     if (init) init(0x00080000L, NULL);
 }
+#endif
 
 static void load(void) {
+    typedef QUIC_STATUS(QUIC_API * Open)(uint32_t, const void **);
+#ifdef _WIN32
+    // msquic.dll ships beside noodle.exe; only that folder and System32 are searched, never the current one.
+    HMODULE library = LoadLibraryExW(L"msquic.dll", NULL, LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!library) {
+        snprintf(load_error, sizeof load_error, "msquic.dll is missing beside noodle.exe (error %lu).", GetLastError());
+        return;
+    }
+    Open open = (Open)(void *)GetProcAddress(library, "MsQuicOpenVersion");
+#else
     keep_openssl_at_exit();
     void *library = dlopen("libmsquic.so.2", RTLD_NOW | RTLD_LOCAL);
     if (!library) library = dlopen("libmsquic.so", RTLD_NOW | RTLD_LOCAL);
@@ -42,8 +60,8 @@ static void load(void) {
         snprintf(load_error, sizeof load_error, "msquic is not installed (%s).", dlerror());
         return;
     }
-    typedef QUIC_STATUS(QUIC_API * Open)(uint32_t, const void **);
     Open open = (Open)dlsym(library, "MsQuicOpenVersion");
+#endif
     const void *table = NULL;
     if (!open || QUIC_FAILED(open(QUIC_API_VERSION_2, &table))) {
         snprintf(load_error, sizeof load_error, "msquic could not be started.");
@@ -334,7 +352,11 @@ nq_listener *nq_listen(const char *certificate, const char *key, uint16_t port, 
     QuicAddrSetPort(&address, port);
     if (QUIC_SUCCEEDED(status)) status = api->ListenerStart(listener->handle, &alpn, 1, &address);
     if (QUIC_FAILED(status)) {
+#ifdef _WIN32
+        snprintf(error, error_length, "Port %u could not be opened (0x%lx).", port, (unsigned long)status);
+#else
         snprintf(error, error_length, "Port %u could not be opened (%s).", port, strerror((int)status));
+#endif
         if (listener->handle) api->ListenerClose(listener->handle);
         api->ConfigurationClose(listener->configuration);
         free(listener);
@@ -415,6 +437,45 @@ static QUIC_STATUS QUIC_API client_callback(HQUIC handle, void *context, QUIC_CO
     return status;
 }
 
+#ifdef _WIN32
+/// Writes `text` to a new file in `folder`, which is inside this user's own temporary folder.
+static int write_private(const char *folder, const char *name, const char *text, char *path, size_t capacity) {
+    snprintf(path, capacity, "%s/%s", folder, name);
+    HANDLE file = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, NULL);
+    if (file == INVALID_HANDLE_VALUE) return -1;
+    DWORD length = (DWORD)strlen(text), written = 0;
+    BOOL wrote = WriteFile(file, text, length, &written, NULL);
+    CloseHandle(file);
+    return wrote && written == length ? 0 : -1;
+}
+
+/// msquic reads a certificate only from files. They are written to a new folder in this user's temporary
+/// folder, which only this user and administrators can open, loaded, and removed at once.
+static HQUIC client_configuration(const char *certificate_pem, const char *key_pem) {
+    char temporary[MAX_PATH + 1], folder[MAX_PATH + 64];
+    DWORD length = GetTempPathA(sizeof temporary, temporary);
+    if (length == 0 || length > MAX_PATH) return NULL;
+    int made = 0;
+    for (int attempt = 0; attempt < 16 && !made; attempt++) {
+        snprintf(folder, sizeof folder, "%snoodle-link-%08lx%08lx", temporary, GetCurrentProcessId(),
+                 (unsigned long)(GetTickCount64() * 2654435761u + (unsigned)attempt));
+        made = CreateDirectoryA(folder, NULL);
+    }
+    if (!made) return NULL;
+    char certificate[MAX_PATH + 96], key[MAX_PATH + 96];
+    HQUIC handle = NULL;
+    if (write_private(folder, "certificate.pem", certificate_pem, certificate, sizeof certificate) == 0 &&
+        write_private(folder, "key.pem", key_pem, key, sizeof key) == 0) {
+        handle = configuration(certificate, key, 30, 1);
+    }
+    snprintf(certificate, sizeof certificate, "%s/certificate.pem", folder);
+    snprintf(key, sizeof key, "%s/key.pem", folder);
+    DeleteFileA(key);
+    DeleteFileA(certificate);
+    RemoveDirectoryA(folder);
+    return handle;
+}
+#else
 /// Writes `text` to a new file in `folder` that only this user can read.
 static int write_private(const char *folder, const char *name, const char *text, char *path, size_t capacity) {
     snprintf(path, capacity, "%s/%s", folder, name);
@@ -450,6 +511,7 @@ static HQUIC client_configuration(const char *certificate_pem, const char *key_p
     rmdir(folder);
     return handle;
 }
+#endif
 
 nq_client *nq_connect(const char *host, uint16_t port, const char *certificate_pem, const char *key_pem,
                       nq_verify verify, void *context, int timeout_ms, int *answered, char *error, size_t error_length) {
