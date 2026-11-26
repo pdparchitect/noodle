@@ -660,6 +660,7 @@ public final class AgentRuntimeCoordinator {
 
     /// Deletes every bot's harness sessions unused for `HarnessSessionCleanup.retention`: for each bot, each harness
     /// whose sessions are in its home, whichever it uses now, cleans up its own way; see `HarnessSessionCleaners`.
+    /// The bot's temporary folder loses what has gone untouched as long.
     /// Returns once every harness has finished, other than a running one that was busy, which is asked again.
     public func cleanUpSessions(repository: WorkspaceRepository) async {
         let cutoff = now().addingTimeInterval(-HarnessSessionCleanup.retention)
@@ -689,6 +690,10 @@ public final class AgentRuntimeCoordinator {
                 await work()
                 return true
             })
+        if providers == nil {
+            // Noodle's own, whatever harness the bot uses.
+            await Task.detached(priority: .utility) { HarnessSessionCleanup.sweepTemporary(workspace: workspace, before: cutoff) }.value
+        }
         var busy = Set<HarnessProvider>()
         for cleaner in HarnessSessionCleaners.all where providers?.contains(cleaner.provider) ?? true {
             guard cleaner.isPresent(in: workspace) else { continue }

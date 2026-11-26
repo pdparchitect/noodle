@@ -124,8 +124,9 @@ Antigravity and Apple Intelligence are not counted yet.
 
 Switch the measure to **Disk** to see how much space Noodle takes, by kind or by
 bot. Once a day, Noodle deletes the sessions a bot's harness has not used for a
-week, including those left behind by a harness the bot used before; click
-**Clean Up Sessions** to do it now. The session a bot is in stays, and so do the
+week, including those left behind by a harness the bot used before, and the
+temporary files nothing has touched for a week; click **Clean Up Sessions** to
+do it now. The session a bot is in stays, and so do the
 bot's own files: to have a bot tidy those, right-click its conversation in the
 sidebar and choose **Organize**.
 

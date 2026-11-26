@@ -163,4 +163,15 @@ import XCTest
         await f.runtime.cleanUpSessions(repository: f.repository)
         XCTAssertFalse(FileManager.default.fileExists(atPath: log.deletingLastPathComponent().path))
     }
+
+    /// The temporary folder is Noodle's, not a harness's, so it is swept for every bot whatever harnesses it has used.
+    func testEveryBotsTemporaryFilesUntouchedForAWeekGo() async throws {
+        let f = try fixture(), agent = try f.agent(harness: .codex)
+        let scratch = f.repository.directory(forAgentID: agent.id).appendingPathComponent(".noodle/tmp/scratch.txt")
+        try FileManager.default.createDirectory(at: scratch.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: scratch)
+        try aged(scratch, f.clock.date.addingTimeInterval(-8 * 86_400))
+        await f.runtime.cleanUpSessions(repository: f.repository)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: scratch.path))
+    }
 }

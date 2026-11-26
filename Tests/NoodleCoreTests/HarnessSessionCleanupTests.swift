@@ -271,4 +271,26 @@ final class HarnessSessionCleanupTests: XCTestCase {
         XCTAssertFalse(exists(sessions + "u0tI_G7qmV7o"))
         for kept in ["Hy0mdVYh8PQg", "8K6hW_nVwUfz", ".tmp", "index.jsonl"] { XCTAssertTrue(exists(sessions + kept), kept) }
     }
+
+    /// A bot's temporary folder loses whatever nothing has touched since the cutoff, at any depth, so a folder still
+    /// in use keeps its recent contents while its old ones go. A link goes itself, never what it points at.
+    func testTemporaryFilesUntouchedSinceTheCutoffGoAtAnyDepth() throws {
+        let tmp = ".noodle/tmp/"
+        let target = try file("target.txt", modified: old, in: root)
+        try file(tmp + "old.txt", modified: old)
+        try file(tmp + "recent.txt", modified: recent)
+        try file(tmp + "claude-501/-workspace/old-session/tasks/output.txt", modified: old)
+        try file(tmp + "claude-501/-workspace/new-session/tasks/output.txt", modified: recent)
+        try file(tmp + "cleanup1104/extracted/source.c", modified: old)
+        for folder in ["claude-501/-workspace/old-session/tasks", "claude-501/-workspace/old-session", "cleanup1104/extracted", "cleanup1104"] {
+            try age(tmp + folder, old)
+        }
+        try FileManager.default.createSymbolicLink(at: workspace.appendingPathComponent(tmp + "link"), withDestinationURL: target)
+
+        HarnessSessionCleanup.sweepTemporary(workspace: workspace, before: cutoff)
+
+        for gone in ["old.txt", "claude-501/-workspace/old-session", "cleanup1104", "link"] { XCTAssertFalse(exists(tmp + gone), gone) }
+        for kept in ["recent.txt", "claude-501/-workspace/new-session/tasks/output.txt"] { XCTAssertTrue(exists(tmp + kept), kept) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: target.path))
+    }
 }

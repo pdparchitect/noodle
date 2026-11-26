@@ -106,6 +106,33 @@ public final class WorkspaceMailbox: @unchecked Sendable {
         return latest
     }
 
+    /// Removes every entry here that nothing has touched since `cutoff`, at any depth: a folder still in use is
+    /// entered and keeps its recent contents. Links are removed themselves, never followed. Answers how many went.
+    @discardableResult
+    public func removeEntries(untouchedSince cutoff: Date) -> Int {
+        Self.removeEntries(in: descriptor, untouchedSince: cutoff, depth: 0)
+    }
+
+    private static func removeEntries(in folder: Int32, untouchedSince cutoff: Date, depth: Int) -> Int {
+        guard depth < 32 else { return 0 }
+        var removed = 0
+        for name in names(in: folder, limit: .max) ?? [] {
+            guard let date = latestModification(name, in: folder, depth: 0) else { continue }
+            if date < cutoff {
+                removeTree(name, in: folder, depth: 0)
+                removed += 1
+                continue
+            }
+            var info = stat()
+            guard fstatat(folder, name, &info, AT_SYMLINK_NOFOLLOW) == 0, info.st_mode & S_IFMT == S_IFDIR else { continue }
+            let child = openat(folder, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard child >= 0 else { continue }
+            removed += removeEntries(in: child, untouchedSince: cutoff, depth: depth + 1)
+            close(child)
+        }
+        return removed
+    }
+
     /// Removes an entry and, for a folder, everything in it. Each folder is opened without following links,
     /// so a link anywhere inside is removed itself and what it points at stays untouched.
     public func removeTree(_ name: String) {

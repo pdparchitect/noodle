@@ -29,6 +29,14 @@ public enum HarnessSessionCleanup {
         return kept
     }
 
+    /// Removes what nothing has touched since `cutoff` from the bot's temporary folder, which its harness is given
+    /// as its own: scratch files the harness and the bot leave behind. Answers how many entries went.
+    @discardableResult
+    public static func sweepTemporary(workspace: URL, before cutoff: Date) -> Int {
+        guard let folder = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/tmp") else { return 0 }
+        return folder.removeEntries(untouchedSince: cutoff)
+    }
+
     /// Removes the Claude Code sessions last changed before `cutoff`, answering how many went. Claude Code keeps
     /// each session as `<id>.jsonl` beside a folder `<id>` of its subagents and tool results, in a folder per
     /// working directory. Anything else there, such as its `memory` folder, is not a session.

@@ -7,6 +7,7 @@
 - Devin is a harness, off until turned on in **Settings › Harness**, leaving out the plugins and MCP servers added to the Devin account, with its self-updates turned off.
 - **Settings › Harness** shows the GitHub account Copilot is signed in to.
 - Old agent sessions are cleaned up: once a day, Rook deletes the Claude Code, Codex, Grok Build, FX, OpenCode and Devin sessions an agent has not used for a week, keeping the one it is in, and gives the space back to the disk; sessions left behind by a harness the agent used before go too. Codex, OpenCode and Devin delete their own, started briefly when nothing is running; Codex history they cannot delete goes once untouched for a week. The Usage window's Disk measure has **Clean Up Sessions** to do it now.
+- The daily cleanup also deletes the temporary files a agent's harness and the agent itself leave behind, once nothing has touched them for a week.
 
 ### Changed
 

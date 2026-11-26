@@ -8,6 +8,7 @@
 - Settings shows the GitHub account Copilot is signed in to, for its own row and each profile, as it does for Codex and Claude Code.
 - Fastmail can be added as a tool.
 - Old bot sessions are cleaned up: once a day, the Hub deletes the Claude Code, Codex, Grok Build, FX, OpenCode and Devin sessions a bot has not used for a week, keeping the one it is in, and gives the space back to the disk; sessions left behind by a harness the bot used before go too. Codex, OpenCode and Devin delete their own, started briefly when nothing is running; Codex history they cannot delete goes once untouched for a week. The Usage window's Disk measure has **Clean Up Sessions** to do it now. A bot's own files are never touched.
+- The daily cleanup also deletes the temporary files a bot's harness and the bot itself leave behind, once nothing has touched them for a week.
 
 ### Changed
 
