@@ -3,6 +3,8 @@ import SurfaceWire
 import XCTest
 
 final class SurfaceWireTests: XCTestCase {
+    #if !os(Windows)
+    // A live view's local socket is POSIX-only, so Windows tests only what crosses the wire.
     private func pair() throws -> (SurfaceSocket, SurfaceSocket) {
         var fds: [Int32] = [0, 0]
         #if canImport(Darwin)
@@ -15,6 +17,8 @@ final class SurfaceWireTests: XCTestCase {
         addTeardownBlock { ends.0.close(); ends.1.close() }
         return ends
     }
+
+    #endif
 
     func testInputRoundTripsThroughJSON() throws {
         let inputs: [SurfaceInput] = [.pointer(.down, x: 10, y: 20, clickCount: 2), .scroll(x: 5, y: 6, dx: 0, dy: -40),
@@ -37,6 +41,7 @@ final class SurfaceWireTests: XCTestCase {
         XCTAssertNil(SurfaceStatus(SurfaceControl.keyFrame.encoded))
     }
 
+    #if !os(Windows)
     /// Frames cross in order both ways, and closing one end ends the other.
     func testASocketCarriesFramesBothWays() async throws {
         let (companion, hub) = try pair()
@@ -87,4 +92,5 @@ final class SurfaceWireTests: XCTestCase {
         defer { companion.close() }
         XCTAssertTrue(companion.isClosed)
     }
+    #endif
 }

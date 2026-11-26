@@ -41,6 +41,9 @@ SUITES = {
     # Noodle Server, on macOS and on Linux with the Hub engine and the wire it builds on there.
     "server": (["Server"], []),
     "server-linux": (["", "Shared/HubLink", "Shared/Surface", "Server"], []),
+    # Noodle Server on Windows, with what it builds on there, through the same scripts as Terminal's.
+    "server-windows": (["", "Shared/HubLink", "Shared/Surface", "Server"], ["scripts/test-server-windows.ps1", "scripts/install-swift-windows.ps1",
+                                                                          "scripts/fetch-msquic-windows.ps1", "scripts/windows-common.ps1"]),
 }
 EVERYTHING = ["checks", *SUITES]
 # The same files the workflow's trigger leaves out: they never start a run, so they never widen one.
