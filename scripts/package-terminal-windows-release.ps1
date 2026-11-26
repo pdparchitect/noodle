@@ -26,7 +26,9 @@ Expand-Archive $package $msquic
 $msquicArch = @{ arm64 = 'arm64'; x86_64 = 'x64' }[$arch]
 
 $build = @('build', '--build-system', 'native', '-c', 'release', '--package-path', "$root/Terminal",
-           '--scratch-path', "$root/.build/terminal-windows-release", '--product', 'noodle')
+           '--scratch-path', "$root/.build/terminal-windows-release", '--product', 'noodle',
+           # Visual Studio 2026's C++ library asks for a newer Clang than Swift 6.4 has, though it builds with it.
+           '-Xcc', '-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH', '-Xcxx', '-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH')
 # Swift's warnings on standard error are not failures; its exit code says whether it built.
 function Invoke-Swift {
     $ErrorActionPreference = 'Continue'
