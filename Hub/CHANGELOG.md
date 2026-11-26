@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.61.0] - 2026-11-26
+
 ### Added
 
 - GitHub Copilot is a harness, off until turned on: the Hub can install it, signs in with a GitHub code, offers the models the Copilot plan includes and lends it like the other harnesses. Its usage reports to GitHub and its self-updates are turned off.

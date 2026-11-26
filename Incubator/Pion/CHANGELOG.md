@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-26
+
 ### Added
 
 - GitHub: two tools, each signing in with a code through a private GitHub App of its own that the organisation registers, with no client secret. **GitHub Detection**, formerly GitHub, keeps the audit log, people, teams and security alerts and its watch, and adds audit reads: the organisation's security settings and code security configurations, members and outside collaborators without two-factor authentication, other GitHub Apps installed, riskiest first, webhooks, each repository's secret scanning, push protection and default branch rules, deploy keys, fine-grained personal access tokens and requests, Actions settings and self-hosted runners, and SAML credential authorizations; its App holds only read permissions, closing the write access the old `security_events` scope carried. **GitHub Containment** removes members and outside collaborators, blocks users, demotes owners, takes people off teams, cancels invitations, revokes fine-grained tokens and SAML authorizations, deletes deploy keys, disables webhooks and Actions, cancels workflow runs, and reports leaked GitHub tokens to GitHub without signing in, never keeping the token. Each action waits for approval, and Pion records what undoing it takes first, such as a member's role or an outside collaborator's repositories, which its undo operations act from. Connect GitHub again with a GitHub App, as the new GitHub guide explains.

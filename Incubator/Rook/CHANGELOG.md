@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-26
+
 ### Added
 
 - GitHub Copilot is a harness, off until turned on in **Settings › Harness**, with its usage reports to GitHub and its self-updates turned off.

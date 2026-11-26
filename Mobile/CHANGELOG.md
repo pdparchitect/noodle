@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.61.1] - 2026-11-26
+
 ### Added
 
 - License in the Help menu, between Help and the bug and feature links.

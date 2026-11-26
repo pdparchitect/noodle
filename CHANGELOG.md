@@ -6,6 +6,8 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+## [0.98.0] - 2026-11-26
+
 ### Added
 
 - GitHub Copilot is a harness, off until turned on in **Settings → Harness**. Noodle can install it, signs in with a GitHub code into a login of its own, offers the models your Copilot plan includes, and supports profiles, restricted bots and Kick recovery like the other harnesses. A Copilot rate limit pauses the bot until the time Copilot names, and a failed model request fails the turn instead of passing as finished. Its usage reports to GitHub and its self-updates are turned off.
