@@ -217,14 +217,14 @@ struct SplitView: View {
         for attachment in message.attachments {
             if let url = attachment.url {
                 if ["http", "https"].contains(url.scheme?.lowercased()) {
-                    entries.append(PaletteEntry("Open Link \(url.host() ?? url.absoluteString)") { Desktop.open(url) })
+                    entries.append(PaletteEntry("Open Link \(url.host() ?? url.absoluteString)") { app.run { try Desktop.open(url) } })
                 }
                 continue
             }
             entries.append(PaletteEntry("Open \(attachment.filename)", "Download it and open it on \(Desktop.computer)") {
                 app.run {
                     let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Noodle Terminal/\(message.id)", isDirectory: true)
-                    Desktop.open(try await chats.download(attachment, of: message, into: folder))
+                    try Desktop.open(try await chats.download(attachment, of: message, into: folder))
                 }
             })
             entries.append(PaletteEntry("Save \(attachment.filename) to Downloads") {
@@ -236,7 +236,7 @@ struct SplitView: View {
             })
         }
         for url in Markdown.links(in: message.body) {
-            entries.append(PaletteEntry("Open Link \(url.host() ?? url.absoluteString)", url.absoluteString) { Desktop.open(url) })
+            entries.append(PaletteEntry("Open Link \(url.host() ?? url.absoluteString)", url.absoluteString) { app.run { try Desktop.open(url) } })
         }
         if !message.body.isEmpty {
             entries.append(PaletteEntry("Copy Message") {

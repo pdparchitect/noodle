@@ -106,7 +106,8 @@ import SwiftTUICLI
     /// Opens a link clicked in a message, as a web page in the browser.
     static let open = OpenLinkAction { destination in
         guard let url = URL(string: destination.rawValue), isWeb(url) else { return false }
-        Desktop.open(url)
+        // A click has nowhere to say it failed; the palette's Open Link does.
+        try? Desktop.open(url)
         return true
     }
 

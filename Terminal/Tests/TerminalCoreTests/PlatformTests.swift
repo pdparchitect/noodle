@@ -24,6 +24,10 @@ import XCTest
         let path = TerminalHubs.standardDirectory.path
         #if os(macOS)
         XCTAssertTrue(path.hasSuffix("Library/Application Support/Noodle Terminal/Hubs"), path)
+        #elseif os(Windows)
+        let data = ProcessInfo.processInfo.environment["LOCALAPPDATA"].map { URL(fileURLWithPath: $0) }
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("AppData/Local")
+        XCTAssertEqual(path, data.appendingPathComponent("Noodle Terminal/Hubs").path)
         #else
         let data = ProcessInfo.processInfo.environment["XDG_DATA_HOME"].map { URL(fileURLWithPath: $0) }
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/share")

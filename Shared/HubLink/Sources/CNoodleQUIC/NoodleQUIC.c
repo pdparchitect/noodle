@@ -1,20 +1,28 @@
-// msquic is Linux's QUIC here; on Apple platforms the Hub uses Network.framework instead.
+// msquic is Linux's and Windows's QUIC here; on Apple platforms the Hub uses Network.framework instead.
+#if defined(__linux__) || defined(_WIN32)
 #ifdef __linux__
 #define _GNU_SOURCE
+#endif
 #include "NoodleQUIC.h"
 #include "msquic/msquic.h"
 
-#include <dlfcn.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#ifdef _WIN32
+#include <wchar.h>
+#include "NoodleQUICWindows.h"
+#include <bcrypt.h>
+#else
+#include <dlfcn.h>
+#include <fcntl.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <time.h>
+#endif
 
 static const QUIC_BUFFER alpn = {sizeof("noodle-hub/1") - 1, (uint8_t *)"noodle-hub/1"};
 static const QUIC_API_TABLE *api;
@@ -22,6 +30,7 @@ static HQUIC registration;
 static pthread_once_t loaded = PTHREAD_ONCE_INIT;
 static char load_error[256];
 
+#ifndef _WIN32
 /// Exiting runs OpenSSL's cleanup, which frees its state while a connection may still be loading its
 /// certificate on another thread, crashing on the way out. OpenSSL is told to leave it, before msquic
 /// starts it; the process is ending, so nothing is lost.
@@ -33,8 +42,33 @@ static void keep_openssl_at_exit(void) {
     // OPENSSL_INIT_NO_ATEXIT, from OpenSSL 3's crypto.h, which is not among this package's headers.
     if (init) init(0x00080000L, NULL);
 }
+#endif
 
 static void load(void) {
+    typedef QUIC_STATUS(QUIC_API * Open)(uint32_t, const void **);
+#ifdef _WIN32
+    // The OpenSSL msquic.dll ships beside the program and is loaded from there by its full path: System32's own
+    // msquic.dll is the Schannel build, which cannot read the PEM certificates the link pins. What it loads in
+    // turn comes from beside it and from System32, never the current folder.
+    wchar_t path[MAX_PATH + 16];
+    DWORD length = GetModuleFileNameW(NULL, path, MAX_PATH);
+    if (length >= MAX_PATH) {
+        // Windows loads a DLL only from a path shorter than MAX_PATH, as long-path support needs a manifest.
+        snprintf(load_error, sizeof load_error, "This program is in a folder too deep for Windows to load msquic.dll "
+                 "beside it. Move it to a shorter folder.");
+        return;
+    }
+    wchar_t *separator = length > 0 ? wcsrchr(path, L'\\') : NULL;
+    HMODULE library = NULL;
+    if (separator && wcscpy_s(separator + 1, MAX_PATH + 16 - (size_t)(separator + 1 - path), L"msquic.dll") == 0) {
+        library = LoadLibraryExW(path, NULL, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    if (!library) {
+        snprintf(load_error, sizeof load_error, "msquic.dll is missing beside this program (error %lu).", GetLastError());
+        return;
+    }
+    Open open = (Open)(void *)GetProcAddress(library, "MsQuicOpenVersion");
+#else
     keep_openssl_at_exit();
     void *library = dlopen("libmsquic.so.2", RTLD_NOW | RTLD_LOCAL);
     if (!library) library = dlopen("libmsquic.so", RTLD_NOW | RTLD_LOCAL);
@@ -42,8 +76,8 @@ static void load(void) {
         snprintf(load_error, sizeof load_error, "msquic is not installed (%s).", dlerror());
         return;
     }
-    typedef QUIC_STATUS(QUIC_API * Open)(uint32_t, const void **);
     Open open = (Open)dlsym(library, "MsQuicOpenVersion");
+#endif
     const void *table = NULL;
     if (!open || QUIC_FAILED(open(QUIC_API_VERSION_2, &table))) {
         snprintf(load_error, sizeof load_error, "msquic could not be started.");
@@ -334,7 +368,11 @@ nq_listener *nq_listen(const char *certificate, const char *key, uint16_t port, 
     QuicAddrSetPort(&address, port);
     if (QUIC_SUCCEEDED(status)) status = api->ListenerStart(listener->handle, &alpn, 1, &address);
     if (QUIC_FAILED(status)) {
+#ifdef _WIN32
+        snprintf(error, error_length, "Port %u could not be opened (0x%lx).", port, (unsigned long)status);
+#else
         snprintf(error, error_length, "Port %u could not be opened (%s).", port, strerror((int)status));
+#endif
         if (listener->handle) api->ListenerClose(listener->handle);
         api->ConfigurationClose(listener->configuration);
         free(listener);
@@ -415,9 +453,63 @@ static QUIC_STATUS QUIC_API client_callback(HQUIC handle, void *context, QUIC_CO
     return status;
 }
 
-/// Writes `text` to a new file in `folder` that only this user can read.
-static int write_private(const char *folder, const char *name, const char *text, char *path, size_t capacity) {
-    snprintf(path, capacity, "%s/%s", folder, name);
+#ifdef _WIN32
+/// `path`, given in UTF-8, as Windows's wide calls take it.
+static int wide(const char *path, wchar_t *out, int capacity) {
+    return MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, out, capacity) > 0 ? 0 : -1;
+}
+
+/// Makes a new folder in this user's temporary folder, which only this user and administrators can open, and
+/// puts its path in `folder` as UTF-8, which msquic's OpenSSL opens as such whatever the code page.
+static int private_folder(char *folder, size_t capacity) {
+    wchar_t temporary[MAX_PATH + 1], path[MAX_PATH + 64];
+    DWORD length = GetTempPathW(MAX_PATH + 1, temporary);
+    if (length == 0 || length > MAX_PATH) return -1;
+    for (int attempt = 0; attempt < 16; attempt++) {
+        unsigned char random[16];
+        if (!BCRYPT_SUCCESS(BCryptGenRandom(NULL, random, sizeof random, BCRYPT_USE_SYSTEM_PREFERRED_RNG))) return -1;
+        wchar_t name[2 * sizeof random + 1];
+        for (size_t index = 0; index < sizeof random; index++) swprintf(name + 2 * index, 3, L"%02x", random[index]);
+        swprintf(path, MAX_PATH + 64, L"%lsnoodle-link-%ls", temporary, name);
+        // An existing name fails here, as with mkdtemp.
+        if (CreateDirectoryW(path, NULL)) {
+            return WideCharToMultiByte(CP_UTF8, 0, path, -1, folder, (int)capacity, NULL, NULL) > 0 ? 0 : -1;
+        }
+    }
+    return -1;
+}
+
+/// Writes `text` to the new file `path`, failing if anything is there already.
+static int write_private(const char *path, const char *text) {
+    wchar_t name[MAX_PATH + 128];
+    if (wide(path, name, MAX_PATH + 128) != 0) return -1;
+    HANDLE file = CreateFileW(name, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY, NULL);
+    if (file == INVALID_HANDLE_VALUE) return -1;
+    DWORD length = (DWORD)strlen(text), written = 0;
+    BOOL wrote = WriteFile(file, text, length, &written, NULL);
+    CloseHandle(file);
+    return wrote && written == length ? 0 : -1;
+}
+
+static void remove_file(const char *path) {
+    wchar_t name[MAX_PATH + 128];
+    if (wide(path, name, MAX_PATH + 128) == 0) DeleteFileW(name);
+}
+
+static void remove_folder(const char *path) {
+    wchar_t name[MAX_PATH + 128];
+    if (wide(path, name, MAX_PATH + 128) == 0) RemoveDirectoryW(name);
+}
+#else
+/// Makes a new folder only this user can open, in the temporary folder, and puts its path in `folder`.
+static int private_folder(char *folder, size_t capacity) {
+    const char *temporary = getenv("TMPDIR");
+    snprintf(folder, capacity, "%s/noodle-link-XXXXXX", temporary && *temporary ? temporary : "/tmp");
+    return mkdtemp(folder) ? 0 : -1;
+}
+
+/// Writes `text` to the new file `path` that only this user can read, failing if anything is there already.
+static int write_private(const char *path, const char *text) {
     int file = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
     if (file < 0) return -1;
     size_t length = strlen(text), written = 0;
@@ -430,24 +522,26 @@ static int write_private(const char *folder, const char *name, const char *text,
     return 0;
 }
 
+static void remove_file(const char *path) { unlink(path); }
+
+static void remove_folder(const char *path) { rmdir(path); }
+#endif
+
 /// msquic reads a certificate only from files. They are written to a folder only this user can open,
 /// loaded, and removed at once, so the device's key stays on disk for no longer than that.
 static HQUIC client_configuration(const char *certificate_pem, const char *key_pem) {
-    const char *temporary = getenv("TMPDIR");
-    char folder[512];
-    snprintf(folder, sizeof folder, "%s/noodle-link-XXXXXX", temporary && *temporary ? temporary : "/tmp");
-    if (!mkdtemp(folder)) return NULL;
-    char certificate[600], key[600];
-    HQUIC handle = NULL;
-    if (write_private(folder, "certificate.pem", certificate_pem, certificate, sizeof certificate) == 0 &&
-        write_private(folder, "key.pem", key_pem, key, sizeof key) == 0) {
-        handle = configuration(certificate, key, 30, 1);
-    }
+    char folder[1024];
+    if (private_folder(folder, sizeof folder) != 0) return NULL;
+    char certificate[1100], key[1100];
     snprintf(certificate, sizeof certificate, "%s/certificate.pem", folder);
     snprintf(key, sizeof key, "%s/key.pem", folder);
-    unlink(key);
-    unlink(certificate);
-    rmdir(folder);
+    HQUIC handle = NULL;
+    if (write_private(certificate, certificate_pem) == 0 && write_private(key, key_pem) == 0) {
+        handle = configuration(certificate, key, 30, 1);
+    }
+    remove_file(key);
+    remove_file(certificate);
+    remove_folder(folder);
     return handle;
 }
 
@@ -505,7 +599,7 @@ nq_stream *nq_client_open(nq_client *client, const uint8_t *bytes, size_t length
     return stream;
 }
 
-long nq_client_read(nq_stream *stream, uint8_t *buffer, size_t capacity, int timeout_ms) {
+ptrdiff_t nq_client_read(nq_stream *stream, uint8_t *buffer, size_t capacity, int timeout_ms) {
     struct timespec deadline = after(timeout_ms);
     pthread_mutex_lock(&stream->lock);
     int timed_out = 0;
