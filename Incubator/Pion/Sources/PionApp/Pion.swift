@@ -65,7 +65,9 @@ struct PionApp: App {
         .windowToolbarStyle(.unified(showsTitle: false))
         Window("Usage", id: UsageView.windowID) {
             // Editing stays in the main window and Settings, where its sheet is.
-            UsageView(history: delegate.model.usage, agents: delegate.model.everyAgent, storage: delegate.storage) { [model = delegate.model] agent in
+            UsageView(history: delegate.model.usage, agents: delegate.model.everyAgent, storage: delegate.storage,
+                      cleanUpSessions: { [model = delegate.model] in await model.runtime.cleanUpSessions(repository: model.repository) }) {
+                [model = delegate.model] agent in
                 AnyView(AgentProfileButton(model: model, agent: agent, size: 16, phase: model.phase(of: agent), opensMessageInWindow: true))
             }
             .environment(delegate.calls)

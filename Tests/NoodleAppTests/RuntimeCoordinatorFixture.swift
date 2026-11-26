@@ -80,6 +80,15 @@ import XCTest
     func heartbeat() { heartbeats += 1; launch.onHeartbeat() }
     func wake() { wakes += 1; launch.onHeartbeat() }
     func organize() { organizes += 1 }
+    /// The cutoffs it was asked to clean up sessions before; false while it is busy and declines.
+    var sessionCleanups: [Date] = []
+    var cleansUpSessions = true
+    func cleanUpSessions(before cutoff: Date, completion: @escaping @MainActor () -> Void) -> Bool {
+        guard cleansUpSessions else { return false }
+        sessionCleanups.append(cutoff)
+        completion()
+        return true
+    }
     func startVoiceCall(_ request: VoiceCallRequest, events: @escaping @MainActor (VoiceCallEvent) -> Void) throws {
         voiceCallRequests.append(request)
         voiceCallEvents = events

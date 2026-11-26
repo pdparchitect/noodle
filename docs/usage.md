@@ -122,6 +122,15 @@ History is kept across restarts and after a bot is deleted. Claude Code, Codex,
 Grok Build, FX, OpenCode, Copilot and Devin report tokens; only Claude Code reports cost. Muse,
 Antigravity and Apple Intelligence are not counted yet.
 
+Switch the measure to **Disk** to see how much space Noodle takes, by kind or by
+bot. Once a day, Noodle deletes the sessions a bot's harness has not used for a
+week; click **Clean Up Sessions** to do it now. The session a bot is in stays,
+and so do the bot's own files: to have a bot tidy those, right-click its
+conversation in the sidebar and choose **Organize**. Sessions are cleaned up for Claude Code,
+Codex, Grok Build, OpenCode and Devin; other harnesses keep theirs. A bot with
+unrestricted access keeps its sessions in your own home folder, and those are
+left alone.
+
 ## Messages and files
 
 - **Return** sends; **Shift+Return** adds a line.

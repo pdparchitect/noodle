@@ -48,7 +48,18 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
     private var recoveryPending: Bool
     private var pid: Int32?
     private var sequence = 0
-    private enum Purpose { case initialize, authenticate, create, load, model, effort, prompt(AgentWakeReason) }
+    private enum Purpose { case initialize, authenticate, create, load, model, effort, prompt(AgentWakeReason), listSessions, deleteSession }
+    /// Whether the harness lists and deletes its own sessions, as it said when it started.
+    private var canDeleteSessions = false
+    /// A cleanup of old sessions running on one connection: pages listed, then sessions still to delete.
+    private struct SessionCleanup {
+        let connection: UUID
+        let cutoff: Date
+        var pages = 0
+        var sessions: [String] = []
+        let completion: @MainActor () -> Void
+    }
+    private var sessionCleanup: SessionCleanup?
     private var requests: [Int: Purpose] = [:]
     private var startupTimeout: Task<Void, Never>?
     private lazy var trace = RuntimeTrace(agentID: configuration.id, provider: provider, workspace: workspaceURL)
@@ -210,6 +221,55 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
     public func wake() { if canReceiveHeartbeat { startTurn(.wake) } }
     public func organize() { if canReceiveHeartbeat { startTurn(.organize) } }
 
+    public func cleanUpSessions(before cutoff: Date, completion: @escaping @MainActor () -> Void) -> Bool {
+        // An unrestricted bot's harness keeps its sessions in the person's own home, which stays theirs.
+        guard !extendedAccess, canDeleteSessions else { completion(); return true }
+        if let stale = sessionCleanup, stale.connection != connectionID {
+            sessionCleanup = nil
+            stale.completion()
+        }
+        guard canReceiveHeartbeat, sessionCleanup == nil, let connectionID else { return false }
+        sessionCleanup = SessionCleanup(connection: connectionID, cutoff: cutoff, completion: completion)
+        request(.listSessions, method: "session/list", params: ["cwd": workspaceURL.path])
+        return true
+    }
+
+    /// Takes the old sessions from one page of the list, other than those the bot uses or keeps for recovery.
+    private func listedSessions(_ result: [String: Any]) {
+        guard var cleanup = sessionCleanup else { return }
+        let kept = Set([sessionID].compactMap { $0 } + state.previousSessionIDs)
+        for session in result["sessions"] as? [[String: Any]] ?? [] {
+            guard let id = session["sessionId"] as? String, FxProtocol.validIdentifier(id), !kept.contains(id),
+                  (session["cwd"] as? String).map({ $0 == workspaceURL.path }) ?? true,
+                  let updated = (session["updatedAt"] as? String).flatMap(Self.date), updated < cleanup.cutoff else { continue }
+            cleanup.sessions.append(id)
+        }
+        cleanup.pages += 1
+        sessionCleanup = cleanup
+        if let cursor = result["nextCursor"] as? String, cleanup.pages < 50 {
+            request(.listSessions, method: "session/list", params: ["cwd": workspaceURL.path, "cursor": cursor])
+        } else { continueSessionCleanup() }
+    }
+
+    /// Deletes the next session, one at a time so a turn's own requests are not held up behind many.
+    private func continueSessionCleanup() {
+        guard var cleanup = sessionCleanup else { return }
+        if let session = cleanup.sessions.popLast() {
+            sessionCleanup = cleanup
+            request(.deleteSession, method: "session/delete", params: ["sessionId": session])
+        } else {
+            sessionCleanup = nil
+            cleanup.completion()
+        }
+    }
+
+    private static func date(_ text: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        if let date = formatter.date(from: text) { return date }
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: text)
+    }
+
     private func openSession() {
         var params: [String: Any] = ["cwd": workspaceURL.path, "mcpServers": []]
         if let sessionID {
@@ -302,6 +362,18 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
             return
         }
         guard let id = object["id"] as? Int, let purpose = requests.removeValue(forKey: id) else { return }
+        if object["error"] != nil {
+            // A list or a session the harness refuses leaves the bot as it was.
+            switch purpose {
+            case .listSessions:
+                if let cleanup = sessionCleanup { sessionCleanup = nil; cleanup.completion() }
+                return
+            case .deleteSession:
+                continueSessionCleanup()
+                return
+            default: break
+            }
+        }
         if let error = object["error"] as? [String: Any] {
             if provider == .openCode, error["code"] as? Int == -32000 {
                 pause("OpenCode needs you to sign in. Run opencode auth login in Terminal, then retry.", failure: .authenticationRequired)
@@ -364,6 +436,9 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
             } else { terminated(provider == .apple ? (error["message"] as? String ?? "Apple session setup failed. Check Apple Intelligence in System Settings.") : "\(name) session setup failed. Check its sign-in and selected model in Settings.") }
             return
         }
+        // A deletion answers with nothing to read, and a cleanup's reply never ends the connection.
+        if case .deleteSession = purpose { continueSessionCleanup(); return }
+        if case .listSessions = purpose { listedSessions(object["result"] as? [String: Any] ?? [:]); return }
         guard let result = object["result"] as? [String: Any] else { terminated("\(name) returned an invalid ACP response"); return }
         switch purpose {
         case .initialize:
@@ -375,6 +450,8 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
                     return
                 }
             }
+            let sessions = (result["agentCapabilities"] as? [String: Any])?["sessionCapabilities"] as? [String: Any]
+            canDeleteSessions = sessions?["list"] != nil && sessions?["delete"] != nil
             if provider == .grokBuild {
                 request(.authenticate, method: "authenticate", params: ["methodId": "cached_token"])
             } else { openSession() }
@@ -409,6 +486,8 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
             configureEffort()
         case .effort:
             sessionReady()
+        case .listSessions, .deleteSession:
+            break
         case .prompt:
             // Per-turn usage is only in the response, which is not a session update.
             if let usage = result["usage"] as? [String: Any] {

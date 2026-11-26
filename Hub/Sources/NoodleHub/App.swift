@@ -51,7 +51,9 @@ struct NoodleHubApp: App {
             UsageView(history: delegate.settings.hub.usage, agents: delegate.settings.agents,
                       people: UsagePeople(names: Dictionary(uniqueKeysWithValues: access.users.map { ($0.id, $0.name) }),
                                           botOwners: access.botOwners),
-                      storage: delegate.settings.hub.storage) { [settings = delegate.settings] agent in
+                      storage: delegate.settings.hub.storage,
+                      cleanUpSessions: { [hub = delegate.settings.hub] in await hub.runtime.cleanUpSessions(repository: hub.repository) }) {
+                [settings = delegate.settings] agent in
                 AnyView(HubBotProfileButton(host: settings, agent: agent, size: 16))
             }
         }

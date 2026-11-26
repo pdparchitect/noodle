@@ -111,9 +111,12 @@ import XCTest
         try wire.reply("thread/name/set")
         try await wait { self.processes.last?.snapshot.phase == .ready || self.processes.last?.snapshot.phase == .working }
     }
-    func openACP(_ wire: HarnessWire, provider: HarnessProvider = .fx, resuming: Bool = false) async throws {
+    func openACP(_ wire: HarnessWire, provider: HarnessProvider = .fx, resuming: Bool = false,
+                 agentCapabilities: [String: Any]? = nil) async throws {
         try await wait { wire.count("initialize") > 0 }
-        try wire.reply("initialize", result: ["protocolVersion": 1, "agentInfo": ["version": "2.0.7"]])
+        var initialized: [String: Any] = ["protocolVersion": 1, "agentInfo": ["version": "2.0.7"]]
+        if let agentCapabilities { initialized["agentCapabilities"] = agentCapabilities }
+        try wire.reply("initialize", result: initialized)
         if provider == .grokBuild {
             try await wait { wire.count("authenticate") > 0 }; try wire.reply("authenticate")
         }

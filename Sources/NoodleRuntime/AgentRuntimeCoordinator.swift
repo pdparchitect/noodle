@@ -341,6 +341,12 @@ public final class AgentRuntimeCoordinator {
     @ObservationIgnored private let inspectHost: @MainActor (HarnessProvider) async throws -> HarnessHostInspection
     private var processes: [UUID: any AgentRuntimeProcess] = [:]
     private var runtimeIDs: [UUID: UUID] = [:]
+    /// When old harness sessions are next cleaned up: first a while after launch, then once a day.
+    @ObservationIgnored private var nextSessionCleanup: Date?
+    /// Bots whose harness was busy when its sessions were due, with the cutoff it is still owed.
+    @ObservationIgnored private var owedSessionCleanups: [UUID: Date] = [:]
+    /// Bots whose harness is deleting sessions now.
+    @ObservationIgnored private var runningSessionCleanups: Set<UUID> = []
     private var capabilityProbe: CodexCapabilityProbe?
     private var fxCapabilityTask: Task<Void, Never>?
     /// The models of each FX profile other than Default: every login sends requests through its own
@@ -620,6 +626,48 @@ public final class AgentRuntimeCoordinator {
         for id in dueIDs {
             // Do not start offline/failed bots or enqueue a heartbeat behind real work.
             processes[id]?.heartbeat()
+        }
+    }
+
+    /// Called each second with the heartbeat check: starts the daily cleanup of old harness sessions when due,
+    /// and asks harnesses that were busy for theirs again.
+    public func checkSessionCleanup(repository: WorkspaceRepository) {
+        let date = now()
+        guard let due = nextSessionCleanup else {
+            // Not at launch, when every bot is starting and the person has just opened the app.
+            nextSessionCleanup = date.addingTimeInterval(10 * 60)
+            return
+        }
+        if date >= due {
+            nextSessionCleanup = date.addingTimeInterval(24 * 60 * 60)
+            Task { await cleanUpSessions(repository: repository) }
+        } else { askOwedSessionCleanups() }
+    }
+
+    /// Deletes every bot's harness sessions unused for `HarnessSessionCleanup.retention`; see there for which go.
+    /// Returns once Claude Code and Grok Build files are swept and each idle harness has finished, or after two
+    /// minutes; a busy harness cleans up once its turn is over.
+    public func cleanUpSessions(repository: WorkspaceRepository) async {
+        let cutoff = now().addingTimeInterval(-HarnessSessionCleanup.retention)
+        let bots = ((try? repository.loadAgents()) ?? []).map { (repository.directory(forAgentID: $0.id), repository.storage(for: $0.id).runtime) }
+        for id in processes.keys { owedSessionCleanups[id] = cutoff }
+        askOwedSessionCleanups()
+        await Task.detached(priority: .utility) {
+            for (workspace, runtime) in bots {
+                HarnessSessionCleanup.sweepFiles(workspace: workspace, keeping: HarnessSessionCleanup.keptSessions(runtime: runtime), before: cutoff)
+            }
+        }.value
+        let deadline = ContinuousClock.now.advanced(by: .seconds(120))
+        while !runningSessionCleanups.isEmpty, ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(250)) }
+    }
+
+    private func askOwedSessionCleanups() {
+        for (id, cutoff) in owedSessionCleanups {
+            guard let process = processes[id] else { owedSessionCleanups[id] = nil; continue }
+            runningSessionCleanups.insert(id)
+            if process.cleanUpSessions(before: cutoff, completion: { [weak self] in self?.runningSessionCleanups.remove(id) }) {
+                owedSessionCleanups[id] = nil
+            } else { runningSessionCleanups.remove(id) }
         }
     }
 

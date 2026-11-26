@@ -25,6 +25,10 @@ public protocol AgentRuntimeProcess: AnyObject {
     func wake()
     /// Starts a turn asking the bot to tidy its own workspace files, when it can take one like a heartbeat.
     func organize()
+    /// Has the harness delete its own sessions last used before `cutoff`, other than those the bot still uses,
+    /// while it is idle; see `HarnessSessionCleanup`. False when it is busy and should be asked again. True when
+    /// it started and will call `completion` once done, or had nothing to delete this way and called it already.
+    func cleanUpSessions(before cutoff: Date, completion: @escaping @MainActor () -> Void) -> Bool
     /// Only harnesses with voices take calls; the rest keep these defaults.
     func startVoiceCall(_ request: VoiceCallRequest, events: @escaping @MainActor (VoiceCallEvent) -> Void) throws
     func sendToVoiceCall(_ text: String)
@@ -35,6 +39,10 @@ extension AgentRuntimeProcess {
     func notify() { _ = notify(immediately: false) }
     public func requestStop(_ id: UUID) { promoteNotification(id) }
     public func cancelTurn() -> Bool { false }
+    public func cleanUpSessions(before cutoff: Date, completion: @escaping @MainActor () -> Void) -> Bool {
+        completion()
+        return true
+    }
     public func startVoiceCall(_ request: VoiceCallRequest, events: @escaping @MainActor (VoiceCallEvent) -> Void) throws {
         throw VoiceCallUnavailable()
     }

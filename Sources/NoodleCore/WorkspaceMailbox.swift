@@ -55,18 +55,74 @@ public final class WorkspaceMailbox: @unchecked Sendable {
     }
 
     public func names(limit: Int = 512) throws -> [String] {
-        let copy = dup(descriptor)
+        guard let values = Self.names(in: descriptor, limit: limit) else { throw Self.invalid() }
+        return values
+    }
+
+    private static func names(in folder: Int32, limit: Int) -> [String]? {
+        let copy = dup(folder)
         guard copy >= 0, let directory = fdopendir(copy) else {
-            if copy >= 0 { close(copy) }; throw Self.invalid()
+            if copy >= 0 { close(copy) }; return nil
         }
         defer { closedir(directory) }
         rewinddir(directory)
         var values: [String] = []
         while values.count < limit, let entry = readdir(directory) {
             let name = entryName(entry)
-            if Self.validName(name) { values.append(name) }
+            if validName(name) { values.append(name) }
         }
         return values
+    }
+
+    /// A folder here, not a link to one.
+    public func isDirectory(_ name: String) -> Bool {
+        var info = stat()
+        return Self.validName(name) && fstatat(descriptor, name, &info, AT_SYMLINK_NOFOLLOW) == 0 && info.st_mode & S_IFMT == S_IFDIR
+    }
+
+    /// When an entry, or for a folder anything in it, last changed; links are not followed. Nil when it is missing.
+    public func latestModification(_ name: String) -> Date? {
+        guard Self.validName(name) else { return nil }
+        return Self.latestModification(name, in: descriptor, depth: 0)
+    }
+
+    private static func latestModification(_ name: String, in folder: Int32, depth: Int) -> Date? {
+        var info = stat()
+        guard fstatat(folder, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else { return nil }
+        #if canImport(Darwin)
+        var latest = Date(timeIntervalSince1970: TimeInterval(info.st_mtimespec.tv_sec))
+        #else
+        var latest = Date(timeIntervalSince1970: TimeInterval(info.st_mtim.tv_sec))
+        #endif
+        guard info.st_mode & S_IFMT == S_IFDIR else { return latest }
+        // Too deep to be a harness's own folder, or unreadable: counted as changed just now, so it is never removed.
+        guard depth < 32 else { return .distantFuture }
+        let child = openat(folder, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard child >= 0 else { return .distantFuture }
+        defer { close(child) }
+        for entry in names(in: child, limit: .max) ?? [] {
+            if let date = latestModification(entry, in: child, depth: depth + 1), date > latest { latest = date }
+        }
+        return latest
+    }
+
+    /// Removes an entry and, for a folder, everything in it. Each folder is opened without following links,
+    /// so a link anywhere inside is removed itself and what it points at stays untouched.
+    public func removeTree(_ name: String) {
+        guard Self.validName(name) else { return }
+        Self.removeTree(name, in: descriptor, depth: 0)
+    }
+
+    private static func removeTree(_ name: String, in folder: Int32, depth: Int) {
+        var info = stat()
+        guard fstatat(folder, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else { return }
+        guard info.st_mode & S_IFMT == S_IFDIR else { unlinkat(folder, name, 0); return }
+        guard depth < 64 else { return }
+        let child = openat(folder, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard child >= 0 else { return }
+        for entry in names(in: child, limit: .max) ?? [] { removeTree(entry, in: child, depth: depth + 1) }
+        close(child)
+        unlinkat(folder, name, AT_REMOVEDIR)
     }
 
     public func read(_ name: String, limit: Int) throws -> Data {

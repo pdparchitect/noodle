@@ -2892,6 +2892,7 @@ final class NoodleStore {
                 self.budgets.checkExpired()
                 self.applySuspensions()
                 self.runtime.checkWakes(repository: self.repository)
+                self.runtime.checkSessionCleanup(repository: self.repository)
                 if !self.ringingCalls.isEmpty { self.dropCallsOfGoneBots() }
                 if self.connectsServices { self.botWidgets.publish(self.widgetBots) }
             }

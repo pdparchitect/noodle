@@ -23,7 +23,8 @@ struct NoodleUsageView: View {
     @Environment(NoodleStore.self) private var store
 
     var body: some View {
-        UsageView(history: store.usage, agents: store.agents, storage: store.storage) { [store] agent in
+        UsageView(history: store.usage, agents: store.agents, storage: store.storage,
+                  cleanUpSessions: { [store] in await store.runtime.cleanUpSessions(repository: store.repository) }) { [store] agent in
             AnyView(AgentProfileButton(agent: agent, size: 16).environment(store))
         }
     }

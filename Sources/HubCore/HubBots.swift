@@ -198,6 +198,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
                 }
                 self.runtime.checkHeartbeats()
                 self.runtime.checkWakes(repository: self.repository)
+                self.runtime.checkSessionCleanup(repository: self.repository)
                 await self.checkForChangesInBackground()
             }
         }

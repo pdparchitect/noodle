@@ -282,6 +282,7 @@ import UniformTypeIdentifiers
         runtime.checkHeartbeats()
         budgets.checkExpired()
         runtime.checkWakes(repository: repository)
+        runtime.checkSessionCleanup(repository: repository)
         for conversation in conversations { readTranscript(conversation.id) }
         updateBadge()
     }

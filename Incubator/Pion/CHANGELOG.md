@@ -6,6 +6,7 @@
 
 - Devin is a harness, off until turned on in **Settings › Harness**, leaving out the plugins and MCP servers added to the Devin account, with its self-updates turned off.
 - **Settings › Harness** shows the GitHub account Copilot is signed in to.
+- Old agent sessions are cleaned up: once a day, Pion deletes the Claude Code, Codex, Grok Build, OpenCode and Devin sessions a restricted agent has not used for a week, keeping the one it is in. The Usage window's Disk measure has **Clean Up Sessions** to do it now.
 
 ## [0.15.0] - 2026-11-26
 

@@ -332,6 +332,7 @@ public struct UsageView: View {
     let agents: [AgentRecord]
     let people: UsagePeople
     let storage: StorageUsage?
+    let cleanUpSessions: (@MainActor () async -> Void)?
     let profileButton: (@MainActor (AgentRecord) -> AnyView)?
     @State private var span = UsageReport.Span.month
     @State private var grouping = UsageReport.Grouping.agent
@@ -341,15 +342,18 @@ public struct UsageView: View {
     /// Read only while the window is on screen: SwiftUI keeps a closed window alive to reopen it.
     @State private var reports = UsageReports()
     @State private var visible = false
+    @State private var cleaningUp = false
 
-    /// `people` adds grouping and filtering by user, on a Hub; `storage` adds the Disk measure;
-    /// `profileButton` is a bot's small picture in its row, opening its profile.
+    /// `people` adds grouping and filtering by user, on a Hub; `storage` adds the Disk measure, and
+    /// `cleanUpSessions` a button there deleting bots' old harness sessions; `profileButton` is a bot's small
+    /// picture in its row, opening its profile.
     public init(history: UsageHistory, agents: [AgentRecord], people: UsagePeople = UsagePeople(), storage: StorageUsage? = nil,
-                profileButton: (@MainActor (AgentRecord) -> AnyView)? = nil) {
+                cleanUpSessions: (@MainActor () async -> Void)? = nil, profileButton: (@MainActor (AgentRecord) -> AnyView)? = nil) {
         self.history = history
         self.agents = agents
         self.people = people
         self.storage = storage
+        self.cleanUpSessions = cleanUpSessions
         self.profileButton = profileButton
     }
 
@@ -402,7 +406,7 @@ public struct UsageView: View {
             if let snapshot = storage.snapshot {
                 let report = StorageReport(snapshot: snapshot, grouping: storageGrouping, bots: bots)
                 VStack(spacing: 0) {
-                    diskSummary(snapshot)
+                    diskSummary(snapshot, storage: storage)
                         .padding([.horizontal, .top], 20)
                     pie(report)
                         .frame(minHeight: 200)
@@ -418,7 +422,8 @@ public struct UsageView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationSubtitle(storage.isMeasuring ? "Measuring" : storage.snapshot.map { "Measured \($0.date.formatted(date: .omitted, time: .shortened))" } ?? "")
+        .navigationSubtitle(cleaningUp ? "Cleaning Up" : storage.isMeasuring ? "Measuring"
+            : storage.snapshot.map { "Measured \($0.date.formatted(date: .omitted, time: .shortened))" } ?? "")
     }
 
     // The same items for every measure: adding and removing them on each switch to or from Disk held the
@@ -504,12 +509,26 @@ public struct UsageView: View {
         return (range.lowerBound..<last).formatted(style)
     }
 
-    private func diskSummary(_ snapshot: StorageSnapshot) -> some View {
+    private func diskSummary(_ snapshot: StorageSnapshot, storage: StorageUsage) -> some View {
         HStack(spacing: 0) {
             UsageStyle.stat("Total", UsageStyle.byteText(snapshot.total))
             ForEach([StorageSnapshot.Kind.bots, .conversations, .harnesses, .caches], id: \.self) { kind in
                 Divider().frame(height: 36)
                 UsageStyle.stat(kind.rawValue, UsageStyle.byteText(snapshot.kinds[kind] ?? 0))
+            }
+            if let cleanUpSessions {
+                Divider().frame(height: 36)
+                Button("Clean Up Sessions") {
+                    cleaningUp = true
+                    Task {
+                        await cleanUpSessions()
+                        cleaningUp = false
+                        storage.refresh()
+                    }
+                }
+                .disabled(cleaningUp)
+                .help("Delete bots’ harness sessions unused for a week")
+                .padding(.horizontal, 16)
             }
         }
         .padding(.vertical, 12)
