@@ -1,10 +1,10 @@
 # Noodle Server
 
-[![Linux arm64](https://img.shields.io/badge/Linux-arm64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-arm64.tar.gz) [![Linux x86_64](https://img.shields.io/badge/Linux-x86__64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-x86_64.tar.gz)
+[![Linux arm64](https://img.shields.io/badge/Linux-arm64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-arm64.tar.gz) [![Linux x86_64](https://img.shields.io/badge/Linux-x86__64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-x86_64.tar.gz) [![macOS Apple silicon](https://img.shields.io/badge/macOS-Apple%20silicon-000000?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-macos-arm64.zip)
 
-A Noodle Hub for Linux. It runs bots for the people you list in one file, on the Claude Code
-and Codex you install, with your sign-ins kept on the server. Each bot works in a sandbox of its
-own, and sees nothing of the server, of you or of anyone else's bots.
+A Noodle Hub for Linux and the Mac. It runs bots for the people you list in one file, on the
+Claude Code and Codex you install, with your sign-ins kept on the server. Each bot works in a
+sandbox of its own, and sees nothing of the server, of you or of anyone else's bots.
 
 The people you invite chat with their bots from Noodle on a Mac, Noodle Mobile and Noodle
 Terminal, as they would with a Noodle Hub. Computers, browsers, noodlets and calls stay with
@@ -13,7 +13,8 @@ Noodle Hub on a Mac. Devices away from home are not told about new replies yet.
 ## Quick setup
 
 Noodle Server needs a Linux machine or virtual machine with systemd, on arm64 or x86_64. It
-cannot run its bots inside an ordinary container.
+cannot run its bots inside an ordinary container. To run it on a Mac instead, see
+[On a Mac](#on-a-mac).
 
 Download Noodle Server for
 [arm64](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-arm64.tar.gz)
@@ -124,3 +125,29 @@ to send. On a Mac, Ada chooses **Join** under Noodle Hubs in **Settings → Hub*
 
 Devices on the server's network find it by themselves. For devices away from it, forward UDP
 port 38415 to the server and set `address` in the file to the name or address they can reach.
+
+## On a Mac
+
+Noodle Server also runs on a Mac with Apple silicon and macOS 26 or later, in a Terminal window,
+while you are signed in to the Mac. Each bot works in a sandbox of its own there too.
+
+Download [Noodle Server for the Mac](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-macos-arm64.zip)
+and unzip it. Install Claude Code, Codex or both with their own installers rather than npm, then
+put the example configuration where the server reads it:
+
+```
+mkdir -p ~/Library/Application\ Support/Noodle\ Server
+cp noodled/noodled.yaml ~/Library/Application\ Support/Noodle\ Server/
+```
+
+Edit it as above, naming each harness by its full path, such as `/Users/ada/.local/bin/claude`.
+The server keeps its data beside the file, in `Data`. Then check it, sign in and start it:
+
+```
+noodled/noodled check
+noodled/noodled login claude-code
+noodled/noodled run
+```
+
+The server runs until you press Control-C. Invite people from another window with
+`noodled/noodled invite Ada --qr`. Setup is for Linux only.
