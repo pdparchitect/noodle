@@ -69,7 +69,8 @@ final class HarnessSandboxTests: XCTestCase {
                                                resumeSession: false, model: nil, effort: nil)
         XCTAssertEqual(codex.environment["HOME"], home)
         XCTAssertEqual(codex.environment["CODEX_HOME"], home + "/.codex")
-        XCTAssertEqual(codex.arguments, ["app-server", "-c", "analytics.enabled=false", "--disable", "apps"])
+        XCTAssertEqual(codex.arguments, ["app-server", "-c", "analytics.enabled=false", "-c", "features.plugins=false",
+                                         "-c", "features.remote_plugin=false", "--disable", "apps"])
 
         XCTAssertThrowsError(try HarnessSandbox.command(provider: .grokBuild, workspace: workspace, sessionID: nil,
                                                         resumeSession: false, model: nil, effort: nil))

@@ -139,6 +139,21 @@ public enum HarnessSessionCleanup {
         return true
     }
 
+    /// Removes the plugins Codex synced from the ChatGPT account and the catalog of every plugin it fetched, which
+    /// a bot's Codex runs without; see `CodexLaunch`. Answers whether anything went.
+    @discardableResult
+    public static func removeCodexPluginCaches(workspace: URL) -> Bool {
+        var removed = false
+        for (path, names) in [("cache", ["remote_plugin_catalog"]), ("plugins", ["cache", ".remote-plugin-install-staging"])] {
+            guard let folder = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/home/.codex/" + path) else { continue }
+            for name in names where folder.contains(name) {
+                folder.removeTree(name)
+                removed = true
+            }
+        }
+        return removed
+    }
+
     /// Codex's thread history databases, whose freed pages only an incremental vacuum gives back to the disk.
     public static func codexHistoryDatabases(workspace: URL) -> [URL] {
         guard let codex = try? WorkspaceMailbox(workspace: workspace, path: ".noodle/home/.codex") else { return [] }

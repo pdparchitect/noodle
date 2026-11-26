@@ -13,6 +13,10 @@ All notable changes to Noodle are documented here, following
 - Fastmail can be added as a tool.
 - Old bot sessions are cleaned up: once a day, Noodle deletes the Claude Code, Codex, Grok Build, OpenCode and Devin sessions a bot has not used for a week, keeping the one it is in, and gives the space back to the disk; sessions left behind by a harness the bot used before go too. Codex, OpenCode and Devin delete their own, started briefly when nothing is running; Codex history they cannot delete goes once untouched for a week. The Usage window's Disk measure has **Clean Up Sessions** to do it now. A bot's own files are never touched, and a bot with unrestricted access keeps its sessions in your home folder.
 
+### Changed
+
+- Codex bots no longer download OpenAI's plugin catalog or the plugins installed on your ChatGPT account, which are made for ChatGPT and which no bot used, and the copies already in each bot, tens of megabytes apiece, are removed.
+
 ## [0.98.0] - 2026-11-26
 
 ### Added

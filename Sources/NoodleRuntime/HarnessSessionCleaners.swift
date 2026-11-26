@@ -102,6 +102,9 @@ struct CodexSessionCleaner: HarnessSessionCleaner {
     func isPresent(in workspace: URL) -> Bool { HarnessSessionCleaners.folderExists(".codex", in: workspace) }
 
     func cleanUp(_ context: HarnessSessionCleanupContext) async -> SessionCleanupOutcome {
+        // Codex runs with plugins off, so what it fetched for them goes whether or not it is running.
+        let workspace = context.workspace
+        await Task.detached(priority: .utility) { HarnessSessionCleanup.removeCodexPluginCaches(workspace: workspace) }.value
         if let process = HarnessSessionCleaners.liveProcess(provider, context) {
             return await HarnessSessionCleaners.cleanUpLive(process, before: context.cutoff)
         }

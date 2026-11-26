@@ -8,6 +8,10 @@
 - **Settings › Harness** shows the GitHub account Copilot is signed in to.
 - Old agent sessions are cleaned up: once a day, Rook deletes the Claude Code, Codex, Grok Build, OpenCode and Devin sessions an agent has not used for a week, keeping the one it is in, and gives the space back to the disk; sessions left behind by a harness the agent used before go too. Codex, OpenCode and Devin delete their own, started briefly when nothing is running; Codex history they cannot delete goes once untouched for a week. The Usage window's Disk measure has **Clean Up Sessions** to do it now.
 
+### Changed
+
+- Codex agents no longer download OpenAI's plugin catalog or the plugins installed on the ChatGPT account, which are made for ChatGPT and which no agent used, and the copies already in each agent, tens of megabytes apiece, are removed.
+
 ## [0.9.0] - 2026-11-26
 
 ### Added

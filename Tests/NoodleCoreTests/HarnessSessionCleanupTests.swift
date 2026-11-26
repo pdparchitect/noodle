@@ -196,4 +196,33 @@ final class HarnessSessionCleanupTests: XCTestCase {
         }
         for path in kept { XCTAssertTrue(exists(codex + path), path) }
     }
+
+    /// Codex runs with plugins off, so its plugin catalog and the plugins it synced from the account go, while the
+    /// rest of its cache and its login stay.
+    func testCodexPluginCachesGoButTheRestOfItsCacheAndItsLoginStay() throws {
+        let codex = ".noodle/home/.codex/"
+        let caches = ["cache/remote_plugin_catalog/a5f2b91e3e2b63d7.json", "plugins/cache/openai-curated-remote/visualize/1.0.89/SKILL.md",
+                      "plugins/.remote-plugin-install-staging/partial"]
+        let kept = ["cache/codex_apps_tools/tools.json", "auth.json", "state_5.sqlite"]
+        for path in caches + kept { try file(codex + path, modified: recent) }
+        XCTAssertTrue(HarnessSessionCleanup.removeCodexPluginCaches(workspace: workspace))
+        for path in ["cache/remote_plugin_catalog", "plugins/cache", "plugins/.remote-plugin-install-staging"] {
+            XCTAssertFalse(exists(codex + path), path)
+        }
+        for path in kept { XCTAssertTrue(exists(codex + path), path) }
+        XCTAssertFalse(HarnessSessionCleanup.removeCodexPluginCaches(workspace: workspace), "Nothing left to remove")
+    }
+
+    /// Codex's plugins are ChatGPT's, synced from the account; bots use none of them. Turned off through settings,
+    /// which an older Codex that does not know them ignores rather than refusing to start.
+    func testCodexStartsWithPluginsOffThroughSettingsAnOlderCodexIgnores() {
+        for apps in [false, true] {
+            let arguments = CodexLaunch.appServerArguments(appsEnabled: apps)
+            for setting in ["features.plugins=false", "features.remote_plugin=false"] {
+                let index = arguments.firstIndex(of: setting)
+                XCTAssertNotNil(index, setting)
+                XCTAssertEqual(index.map { arguments[$0 - 1] }, "-c", setting)
+            }
+        }
+    }
 }

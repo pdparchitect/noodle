@@ -7,6 +7,10 @@
 - Noodle Server runs on a Mac with Apple silicon: download the ZIP, then run `noodled check`, `noodled login` and `noodled run` in Terminal. Each bot works in a sandbox of its own, as on Linux, and whatever it started ends with it. The server keeps its file and data in `~/Library/Application Support/Noodle Server`.
 - Old bot sessions are cleaned up: once a day, the server deletes the Claude Code, Codex, Grok Build, OpenCode and Devin sessions a bot has not used for a week, keeping the one it is in, and gives the space back to the disk; sessions left behind by a harness the bot used before go too. Codex, OpenCode and Devin delete their own, started briefly when nothing is running; Codex history they cannot delete goes once untouched for a week. A bot's own files are never touched.
 
+### Changed
+
+- Codex bots no longer download OpenAI's plugin catalog or the plugins installed on the ChatGPT account, which are made for ChatGPT and which no bot used, and the copies already in each bot, tens of megabytes apiece, are removed.
+
 ## [0.5.0] - 2026-11-26
 
 ### Changed
