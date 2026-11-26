@@ -14,18 +14,7 @@ $arch = switch ($env:PROCESSOR_ARCHITECTURE) {
 # Development hooks are never built into a release.
 if ($env:NOODLE_DEV_HOOKS) { throw 'Unset NOODLE_DEV_HOOKS for a release build.' }
 
-# Microsoft's msquic built with OpenSSL, which reads the PEM certificates the link pins; Schannel's cannot.
-$msquicVersion = '2.6.4'
-$msquicSha256 = '370BAF73845AC516A7ACB53394EBF889CA947F7826A0E74F8F8C332B3627ADB5'
-$package = Join-Path ([IO.Path]::GetTempPath()) "msquic-openssl-$msquicVersion.zip"
-Invoke-WebRequest "https://www.nuget.org/api/v2/package/Microsoft.Native.Quic.MsQuic.OpenSSL/$msquicVersion" -OutFile $package
-if ((Get-FileHash -Algorithm SHA256 $package).Hash -ne $msquicSha256) { throw 'msquic package checksum mismatch.' }
-$msquic = Join-Path ([IO.Path]::GetTempPath()) "msquic-openssl-$msquicVersion"
-Remove-Item -Recurse -Force $msquic -ErrorAction SilentlyContinue
-Expand-Archive $package $msquic
-$msquicArch = @{ arm64 = 'arm64'; x86_64 = 'x64' }[$arch]
-
-$build = @('build', '--build-system', 'native', '-c', 'release', '--package-path', "$root/Terminal",
+$build = @('build', '-c', 'release', '--package-path', "$root/Terminal",
            '--scratch-path', "$root/.build/terminal-windows-release", '--product', 'noodle',
            # Visual Studio 2026's C++ library asks for a newer Clang than Swift 6.4 has, though it builds with it.
            '-Xcc', '-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH', '-Xcxx', '-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH')
@@ -62,7 +51,7 @@ try {
             }
         }
     }
-    Copy-Item "$msquic/build/native/bin/$msquicArch/msquic.dll" $folder
+    & "$PSScriptRoot/fetch-msquic-windows.ps1" -Destination $folder
     Copy-Item "$root/Shared/HubLink/Sources/CNoodleQUIC/msquic/LICENSE" "$folder/msquic-LICENSE.txt"
     $usage = & "$folder/noodle.exe" --help | Out-String
     if ($usage -notmatch 'USAGE: noodle') { throw 'The release binary did not start.' }

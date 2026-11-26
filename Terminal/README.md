@@ -69,6 +69,9 @@ Expand-Archive "$HOME\Downloads\Noodle-Terminal-windows-*.zip" "$env:LOCALAPPDAT
 & "$env:LOCALAPPDATA\Programs\Noodle Terminal\noodle.exe"
 ```
 
+`noodle.exe` is not signed yet, so when you first start it from Explorer, Windows SmartScreen asks
+first: choose **More info**, then **Run anyway**. Starting it from PowerShell, as above, does not ask.
+
 To run it as `noodle`, add that folder to your `PATH` in **Settings → System → About → Advanced system
 settings → Environment Variables**. To update, download the ZIP again and replace the folder.
 

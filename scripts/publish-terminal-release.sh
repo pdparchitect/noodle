@@ -14,7 +14,8 @@ assets="$project_root/dist/terminal-$version"
 archive="Noodle-Terminal-arm64.zip"
 # The Mac's command, and Linux's and Windows's for each processor.
 files=()
-for name in "$archive" Noodle-Terminal-linux-arm64.tar.gz Noodle-Terminal-linux-x86_64.tar.gz     Noodle-Terminal-windows-arm64.zip Noodle-Terminal-windows-x86_64.zip; do
+for name in "$archive" Noodle-Terminal-linux-arm64.tar.gz Noodle-Terminal-linux-x86_64.tar.gz \
+    Noodle-Terminal-windows-arm64.zip Noodle-Terminal-windows-x86_64.zip; do
     [[ -s "$assets/$name" && -s "$assets/$name.sha256" ]]
     (cd "$assets"; shasum -a 256 -c "$name.sha256")
     files+=("$assets/$name" "$assets/$name.sha256")

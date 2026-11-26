@@ -413,6 +413,39 @@ jobs:
       - name: Test the terminal app on Linux
         run: swift test --package-path Terminal --scratch-path .build/terminal-linux
 
+  test-terminal-windows:
+    needs: [versions]
+    if: contains(fromJSON(needs.versions.outputs.suites), 'terminal-windows')
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      # Visual Studio 2026's C++ library asks for a newer Clang than Swift 6.4 has, though it builds with it.
+      SWIFT_FLAGS: -Xcc -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH -Xcxx -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install Swift
+        shell: pwsh
+        run: ./scripts/install-swift-windows.ps1
+      # The tests load msquic.dll from beside their runner, as noodle.exe does from beside itself.
+      - name: Test the Hub link over msquic on Windows
+        shell: pwsh
+        run: |
+          $flags = $env:SWIFT_FLAGS -split ' '
+          swift build --build-tests --package-path Shared/HubLink --scratch-path .build/windows-hub-link @flags
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/fetch-msquic-windows.ps1 -Destination (swift build --package-path Shared/HubLink --scratch-path .build/windows-hub-link @flags --show-bin-path)
+          swift test --skip-build --package-path Shared/HubLink --scratch-path .build/windows-hub-link @flags
+      - name: Test the terminal app on Windows
+        shell: pwsh
+        run: |
+          $flags = $env:SWIFT_FLAGS -split ' '
+          swift build --build-tests --package-path Terminal --scratch-path .build/terminal-windows @flags
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/fetch-msquic-windows.ps1 -Destination (swift build --package-path Terminal --scratch-path .build/terminal-windows @flags --show-bin-path)
+          swift test --skip-build --package-path Terminal --scratch-path .build/terminal-windows @flags
+
   test-server:
     needs: [versions]
     if: contains(fromJSON(needs.versions.outputs.suites), 'server')
@@ -455,7 +488,7 @@ jobs:
   # One check for main's ruleset to require: every test job passed or was skipped.
   ci-passed:
     name: CI passed
-    needs: [workflow-lint, versions, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-bridge, test-browser, test-hub, test-mobile, test-terminal, test-terminal-linux, test-server, test-server-linux]
+    needs: [workflow-lint, versions, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-bridge, test-browser, test-hub, test-mobile, test-terminal, test-terminal-linux, test-terminal-windows, test-server, test-server-linux]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -518,7 +551,7 @@ jobs:
     uses: ./.github/workflows/server-release.yml
 
   tag:
-    needs: [versions, workflow-lint, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-applet-rendering, test-browser, test-hub, test-mobile, test-bridge, test-terminal, test-terminal-linux, test-server, test-server-linux, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-terminal, prepare-server, prepare-images]
+    needs: [versions, workflow-lint, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-applet-rendering, test-browser, test-hub, test-mobile, test-bridge, test-terminal, test-terminal-linux, test-terminal-windows, test-server, test-server-linux, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-terminal, prepare-server, prepare-images]
     # Explicitly accept unselected/skipped products, never a failed/cancelled build.
     if: >-
       always() && !cancelled() && github.event_name != 'pull_request' &&
@@ -534,7 +567,7 @@ jobs:
       (needs.versions.outputs.browser != 'true' || needs.test-browser.result == 'success') &&
       (needs.versions.outputs.hub != 'true' || needs.test-hub.result == 'success') &&
       (needs.versions.outputs.mobile != 'true' || needs.test-mobile.result == 'success') &&
-      (needs.versions.outputs.terminal != 'true' || (needs.test-terminal.result == 'success' && needs.test-terminal-linux.result == 'success')) &&
+      (needs.versions.outputs.terminal != 'true' || (needs.test-terminal.result == 'success' && needs.test-terminal-linux.result == 'success' && needs.test-terminal-windows.result == 'success')) &&
       (needs.versions.outputs.server != 'true' || (needs.test-server.result == 'success' && needs.test-server-linux.result == 'success')) &&
       (needs.versions.outputs.noodle != 'true' || needs.test-noodle-macos27.result == 'success') &&
       (needs.versions.outputs.noodle != 'true' || needs.prepare-noodle.result == 'success') &&

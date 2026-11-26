@@ -35,6 +35,8 @@ SUITES = {
     "mobile": (["Mobile"], ["scripts/mobile.sh", "scripts/install-tuist.sh", "scripts/build-priority.sh"]),
     "terminal": (["Terminal"], []),
     "terminal-linux": (["Terminal"], []),
+    # Noodle Terminal on Windows, with the Hub link over msquic it tests there too.
+    "terminal-windows": (["Terminal", "Shared/HubLink"], ["scripts/install-swift-windows.ps1", "scripts/fetch-msquic-windows.ps1"]),
     # Noodle Server, on macOS and on Linux with the Hub engine and the wire it builds on there.
     "server": (["Server"], []),
     "server-linux": (["", "Shared/HubLink", "Shared/Surface", "Server"], []),
