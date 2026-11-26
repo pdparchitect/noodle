@@ -354,3 +354,10 @@ public enum WindowsDisplayMode {
         return "powershell -NoProfile -EncodedCommand " + encoded
     }
 }
+
+/// What Windows does with its disk.
+public enum WindowsDisk {
+    /// Extends C:, the last partition (see install.cmd), into any space after it: every computer starts from a 64 GB
+    /// install, and a stopped one's disk can grow. Run through the agent, which is elevated, each time Windows starts.
+    public static let extendSystemDrive = #"powershell -NoProfile -NonInteractive -Command "$p = Get-Partition -DriveLetter C; $s = Get-PartitionSupportedSize -DriveLetter C; if ($s.SizeMax -gt $p.Size + 1MB) { Resize-Partition -DriveLetter C -Size $s.SizeMax; 'extended' }""#
+}

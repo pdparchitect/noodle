@@ -280,6 +280,7 @@ struct EditComputerView: View {
   @State private var resizesDesktop = false
   @State private var cpus = 0
   @State private var memory = 0
+  @State private var disk = 0
   @State private var network = true
   @State private var changingSignIn = false
   private var stopLabel: String { session.computer.usesVirtualMachine || session.computer.kind == .windows ? "Force Stop" : "Stop" }
@@ -296,8 +297,8 @@ struct EditComputerView: View {
                        resizesDesktop: session.computer.resizesWithWindow ? resizesDesktop : nil)
           let computer = session.computer
           if ![.localMac, .ssh].contains(computer.kind),
-             (cpus, memory, network) != (computer.cpuCount, computer.memoryGiB, computer.networkEnabled) {
-            do { try store.changeResources(session, cpus: cpus, memoryGiB: memory, networkEnabled: network) }
+             (cpus, memory, disk, network) != (computer.cpuCount, computer.memoryGiB, computer.diskGiB, computer.networkEnabled) {
+            do { try store.changeResources(session, cpus: cpus, memoryGiB: memory, diskGiB: disk, networkEnabled: network) }
             catch { store.error = error.localizedDescription }
           }
           dismiss()
@@ -360,7 +361,13 @@ struct EditComputerView: View {
                 LabeledContent("Memory", value: "\(session.computer.memoryGiB) GB")
               }
               Divider()
-              LabeledContent("Disk capacity", value: "\(session.computer.diskGiB) GB")
+              if editable && session.computer.kind == .windows {
+                ComputerResourceRow("Disk capacity", value: $disk, unit: "GB",
+                  range: session.computer.diskGiB...max(512, session.computer.diskGiB), step: 4)
+                  .help("Can grow but not shrink. Windows uses the new space when it next starts.")
+              } else {
+                LabeledContent("Disk capacity", value: "\(session.computer.diskGiB) GB")
+              }
               Text("Disk space grows as the computer uses it, up to this capacity.")
                 .font(.caption).foregroundStyle(.secondary)
               Divider()
@@ -414,6 +421,7 @@ struct EditComputerView: View {
       appearance = session.computer.appearance ?? .init()
       resizesDesktop = session.computer.resizesDesktop
       cpus = session.computer.cpuCount; memory = session.computer.memoryGiB
+      disk = session.computer.diskGiB
       network = session.computer.networkEnabled
     }
     .alert(ComputerDeletion.title(session.computer), isPresented: $deleting) {

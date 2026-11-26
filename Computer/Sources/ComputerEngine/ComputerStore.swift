@@ -966,7 +966,7 @@ public enum ComputerDisplayMode: String {
     }
 
     /// What a stopped computer runs with; it takes effect at the next start.
-    public func changeResources(_ session: ComputerSession, cpus: Int, memoryGiB: Int, networkEnabled: Bool) throws {
+    public func changeResources(_ session: ComputerSession, cpus: Int, memoryGiB: Int, diskGiB: Int? = nil, networkEnabled: Bool) throws {
         guard ![.localMac, .ssh].contains(session.computer.kind), session.phase == .stopped,
               session.virtual == nil, session.container == nil, session.windowsRuntime == nil else {
             throw ComputerError("Stop the computer before changing its resources.")
@@ -976,6 +976,20 @@ public enum ComputerDisplayMode: String {
         computer.memoryGiB = memoryGiB
         computer.networkEnabled = networkEnabled
         try Self.requireVirtualizationLimits(computer)
+        if let diskGiB, diskGiB != computer.diskGiB {
+            // Only Windows extends its own file system into a larger disk, when it next starts (see WindowsDisk);
+            // a disk never shrinks under the file system on it.
+            guard computer.kind == .windows else { throw ComputerError("This computer’s disk capacity cannot change.") }
+            guard diskGiB > computer.diskGiB else { throw ComputerError("A computer’s disk capacity cannot shrink.") }
+            computer.diskGiB = diskGiB
+            try computer.validate()
+            let disk = library.directory(for: session.id).appendingPathComponent("Disk.img")
+            if FileManager.default.fileExists(atPath: disk.path) {
+                let file = try FileHandle(forWritingTo: disk)
+                defer { try? file.close() }
+                if try file.seekToEnd() < UInt64(diskGiB) * 1_073_741_824 { try file.truncate(atOffset: UInt64(diskGiB) * 1_073_741_824) }
+            }
+        }
         session.computer = try library.save(computer)
     }
 

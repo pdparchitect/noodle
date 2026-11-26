@@ -33,7 +33,7 @@ enum WindowsInstallation {
         await report("Copying Windows…", nil, nil)
         let disk = directory.appendingPathComponent("Disk.img")
         if clonefile(base.path, disk.path, 0) != 0 { try FileManager.default.copyItem(at: base, to: disk) }
-        // setup.ps1 grows Windows' partition into whatever the computer has beyond the base's 64 GB.
+        // Windows extends C: into whatever the computer has beyond the base's 64 GB when it starts (WindowsDisk).
         let size = UInt64(computer.diskGiB) * 1_073_741_824
         let handle = try FileHandle(forWritingTo: disk)
         defer { try? handle.close() }

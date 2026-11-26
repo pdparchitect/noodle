@@ -134,6 +134,14 @@ private let log = Logger(subsystem: ComputerAppIdentity.subsystem, category: "Wi
                     await self.updateAgent(from: hello.agent)
                 } else {
                     self.agentConnected = true
+                    Task {
+                        do {
+                            let (output, status) = try await agent.run(WindowsDisk.extendSystemDrive)
+                            if status != 0 || output.contains("extended") {
+                                log.info("extending C: ended with \(status): \(output, privacy: .public)")
+                            }
+                        } catch { log.error("extending C: failed: \(error.localizedDescription, privacy: .public)") }
+                    }
                 }
             }
         }
