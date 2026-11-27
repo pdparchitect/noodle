@@ -142,11 +142,15 @@ final class WindowsPOSIXTests: XCTestCase {
         XCTAssertEqual(errno, EINVAL)
     }
 
+    /// Compared with the folder resolved on its own, since the temporary folder's path may use short names, such
+    /// as RUNNER~1, that resolving spells out.
     func testRealpathResolvesToTheFolderItself() throws {
         let resolved = try XCTUnwrap(realpath(root.appendingPathComponent(".").path, nil))
         defer { free(resolved) }
-        XCTAssertEqual(String(cString: resolved).lowercased(), root.standardizedFileURL.path.lowercased()
-            .replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")))
+        let folder = try XCTUnwrap(realpath(root.path, nil))
+        defer { free(folder) }
+        XCTAssertEqual(String(cString: resolved), String(cString: folder))
+        XCTAssertFalse(String(cString: resolved).hasSuffix("."))
     }
 }
 #endif
