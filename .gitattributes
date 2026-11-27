@@ -45,3 +45,6 @@ Computer/Resources/Windows/drivers/**/*.inf -text
 
 # Noodle Computer's vendored build tools (Python wheels)
 Computer/Vendor/*.whl filter=lfs diff=lfs merge=lfs -text
+
+# The systemd unit Noodle Server installs on Linux, kept with Unix line endings on every checkout.
+Server/noodled.service text eol=lf
