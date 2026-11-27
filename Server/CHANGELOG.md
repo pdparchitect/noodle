@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-27
+
 ### Added
 
 - Noodle Server runs on Windows 10 and 11, on arm64 or x86_64: download the ZIP, then run `noodled check`, `noodled login` and `noodled run` in PowerShell. Each bot writes only in its own folder and whatever it started ends with it, but for now it can read what the server's account can, unlike on Linux and a Mac. The server keeps its file and data in `%LOCALAPPDATA%\Noodle Server`.

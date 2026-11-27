@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-11-27
+
 ### Added
 
 - A stopped Windows computer's disk capacity can grow in Edit Computer; Windows uses the new space when it next starts.

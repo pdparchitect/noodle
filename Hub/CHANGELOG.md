@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.62.0] - 2026-11-27
+
 ### Added
 
 - Devin is a harness, off until turned on: the Hub can install it, signs in through Devin's page in the browser, offers the models the Devin account allows, shows the account it is signed in to and lends it like the other harnesses. It leaves out the plugins and MCP servers added to the Devin account, and its self-updates are turned off.

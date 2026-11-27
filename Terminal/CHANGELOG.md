@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-27
+
 ### Added
 
 - Noodle Terminal for Windows, on arm64 and x86_64: the same chats as on the Mac and Linux, in Windows Terminal. Download it as a ZIP holding `noodle.exe` with everything it needs, msquic and the Swift runtime included, linked from the Noodle README. Hubs are kept in your local app data, links and files open with the apps Windows chooses for them, and copying uses the terminal's own clipboard.
