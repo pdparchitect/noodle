@@ -58,3 +58,30 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 7
+
+  # noodled for Windows, one ZIP for each processor.
+  windows:
+    strategy:
+      matrix:
+        runner: [windows-11-arm, windows-2025]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Swift
+        shell: pwsh
+        run: ./scripts/install-swift-windows.ps1
+
+      - name: Build and pack
+        shell: pwsh
+        run: ./scripts/package-server-windows-release.ps1
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: server-release-windows-${{ matrix.runner }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
