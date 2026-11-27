@@ -51,9 +51,9 @@ EVERYTHING = ["checks", *SUITES]
 IGNORED = ["**.md", "docs/**", "website/**", "Scenarios/**", ".github/workflows/website.yml"]
 # The workflows, their own tests and the release scripts can break any suite or the release itself.
 EVERYWHERE = [".github/", "Tests/ReleaseAutomation/", "Tests/CoverageReporting/", "scripts/"]
-# Folders no suite builds: their own workflows test them (embed.yml for the Embed Worker), so here they
-# need only the checks.
-SEPARATE = ["Embed/"]
+# Folders no suite builds: their own workflows test them (embed.yml for the Embed Worker), or nothing yet (the
+# Windows app, built by hand on Windows until it has a job), so here they need only the checks.
+SEPARATE = ["Embed/", "Windows/"]
 # What the root package owns outside the other packages. Anything else at the top runs every suite.
 ROOT_FILES = ["Sources/", "Tests/", "Tools/", "Support/", "Enterprise/", "Package.swift", "Package.resolved", "Project.swift",
               "Tuist.swift", "VERSION"]
