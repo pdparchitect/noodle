@@ -548,6 +548,7 @@ jobs:
     needs: [versions, checks]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.versions.outputs.server == 'true'
     uses: ./.github/workflows/server-release.yml
+    secrets: inherit
 
   tag:
     needs: [versions, workflow-lint, checks, test-noodle, test-shared, test-noodle-macos27, test-computer, test-applet, test-applet-rendering, test-browser, test-hub, test-mobile, test-bridge, test-terminal, test-terminal-linux, test-terminal-windows, test-server, test-server-linux, test-server-windows, prepare-noodle, prepare-computer, prepare-applet, prepare-browser, prepare-hub, prepare-mobile, prepare-terminal, prepare-server, prepare-images]

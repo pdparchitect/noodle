@@ -356,6 +356,19 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('github.event.workflow_run.head_sha', checkout['with']['ref'])
         self.assertIn('python3 scripts/testflight.py', json.dumps(job))
 
+    def test_every_server_archive_published_is_built(self):
+        # The publish script refuses to run without each archive, so each needs a job that builds it.
+        published = re.findall(r'Noodle-Server-[a-z0-9_-]+\.(?:zip|tar\.gz)',
+                               (ROOT / 'scripts/publish-server-release.sh').read_text())
+        rendered = json.dumps(workflow('server-release.yml'))
+        builders = {'macos': 'package-server-macos-release.sh', 'linux': 'package-server-release.sh',
+                    'windows': 'package-server-windows-release.ps1'}
+        for archive in set(published):
+            platform = archive.split('-')[2]
+            self.assertIn(builders[platform], rendered, archive)
+        # Signing and notarizing the Mac archive needs the release secrets.
+        self.assertEqual(self.jobs['prepare-server'].get('secrets'), 'inherit')
+
     def test_preparation_is_read_only_and_publication_uses_artifacts(self):
         for name in ['prepare-noodle-release.yml', 'computer-release.yml', 'applet-release.yml', 'browser-release.yml', 'hub-release.yml', 'mobile-release.yml', 'terminal-release.yml', 'server-release.yml', 'computer-images.yml']:
             prepare = workflow(name)
