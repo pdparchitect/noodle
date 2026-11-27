@@ -37,6 +37,13 @@ public enum RestrictedAgentSandbox {
     public static func profile(provider: HarnessProvider, workspace: URL, repository: URL, home: URL,
                                executable: URL, package: URL? = nil, application: URL, temporary: URL,
                                folders: [AgentFolder] = [], egressPort: UInt16? = nil) throws -> String {
+        seatbelt(try policy(provider: provider, workspace: workspace, executable: executable, package: package,
+                            application: application, folders: folders, egressPort: egressPort))
+    }
+
+    /// What `provider`'s restricted harness may reach, for whichever sandbox renders it.
+    public static func policy(provider: HarnessProvider, workspace: URL, executable: URL, package: URL? = nil,
+                              application: URL, folders: [AgentFolder] = [], egressPort: UInt16? = nil) throws -> HarnessSandboxPolicy {
         let privateHome = RestrictedHarnessStorage.home(workspace: workspace)
         let account = try accountDirectory(provider: provider, home: privateHome)
         var readFiles = [String]()
@@ -48,49 +55,18 @@ public enum RestrictedAgentSandbox {
         if provider == .fx || provider == .copilot { readFiles.append("/Library/Keychains/System.keychain") }
         // Muse Code 1.4.4 and later list these for system-wide settings and fail every session without them.
         if provider == .muse { readFiles += ["/Library", "/Library/Application Support"] }
-        let base = profile(workspace: workspace,
-            executablePaths: [executable.path] + (package.map { [$0.path] } ?? []), application: application,
-            readFiles: Array(Set(readFiles)).sorted(), folders: folders, egressPort: egressPort)
-        // Copilot checks every certificate through macOS's Security service, so exporting the
-        // anchors, as for Codex, does not help it. That service also fronts the Keychain, so
-        // only the verified executable may reach it, never a tool it runs. Its own home keeps
-        // the person's keychain out of its search, but not out of reach of a deliberate request.
-        if provider == .copilot {
-            return base + """
-
-            (allow mach-lookup (require-all (global-name "com.apple.SecurityServer") (process-path \(quoted(sandboxPath(executable.path))))))
-            """
-        }
-        guard provider == .openCode || provider == .antigravity else { return base }
-        // Antigravity runs every shell command in a pseudo-terminal. The pty
-        // extension limits the tree to terminals it opened itself.
-        let terminals = provider != .antigravity ? "" : """
-
-        (allow pseudo-tty)
-        (allow file-read* file-write* file-ioctl (literal "/dev/ptmx"))
-        (allow file-read* file-write* file-ioctl
-          (require-all (regex #"^/dev/ttys[0-9]+$") (extension "com.apple.sandbox.pty")))
-        """
-        // OpenCode v2's ACP implementation and Antigravity's language server each
-        // listen on 127.0.0.1. Only that verified executable can listen; tools cannot.
-        // Seatbelt's "localhost" token also matches this machine's LAN addresses,
-        // so it must not be described as an OS-enforced loopback-only boundary.
-        // Siloed, the executable still reaches its own server, which the open profile's outbound rule covered.
-        let ownServer = egressPort == nil ? "" : """
-
-        (allow network-outbound
-          (require-all
-            (process-path \(quoted(sandboxPath(executable.path))))
-            (remote ip "localhost:*")))
-        """
-        return base + terminals + """
-
-        (allow network-bind network-inbound
-          (require-all
-            (process-path \(quoted(sandboxPath(executable.path))))
-            (local ip "localhost:*")))
-        """ + ownServer
-
+        return HarnessSandboxPolicy(
+            workspace: workspace,
+            readable: [AgentStorageLayout(workspace: workspace).package.path, application.path, executable.path]
+                + (package.map { [$0.path] } ?? []),
+            readableFiles: Array(Set(readFiles)).sorted(), folders: folders, egressPort: egressPort, executable: executable.path,
+            // OpenCode v2's ACP implementation and Antigravity's language server each listen on 127.0.0.1.
+            listensLocally: provider == .openCode || provider == .antigravity,
+            // Antigravity runs every shell command in a pseudo-terminal.
+            pseudoTerminals: provider == .antigravity,
+            // Copilot checks every certificate through macOS's Security service, so exporting the anchors, as for
+            // Codex, does not help it.
+            securityService: provider == .copilot)
     }
 
     public static func environment(provider: HarnessProvider, home: URL, workspace: URL? = nil) throws -> [String: String] {
@@ -135,25 +111,66 @@ public enum RestrictedAgentSandbox {
     public static func profile(workspace: URL, repository: URL, codexHome: URL,
                                executableDirectory: URL, application: URL, temporary: URL,
                                folders: [AgentFolder] = [], egressPort: UInt16? = nil) -> String {
-        profile(workspace: workspace,
-                executablePaths: [executableDirectory.path], application: application, folders: folders, egressPort: egressPort)
+        seatbelt(HarnessSandboxPolicy(
+            workspace: workspace,
+            readable: [AgentStorageLayout(workspace: workspace).package.path, application.path, executableDirectory.path],
+            folders: folders, egressPort: egressPort))
     }
 
-    private static func profile(workspace: URL, executablePaths: [String], application: URL,
-                                readFiles: [String] = [], folders: [AgentFolder] = [], egressPort: UInt16? = nil) -> String {
+    /// `policy` as a Seatbelt profile, which the Agent Host applies before it runs the harness.
+    public static func seatbelt(_ policy: HarnessSandboxPolicy) -> String {
+        let base = baseProfile(policy)
+        // That service also fronts the Keychain, so only the verified executable may reach it, never a tool it
+        // runs. Its own home keeps the person's keychain out of its search, but not out of reach of a deliberate
+        // request.
+        if policy.securityService, let executable = policy.executable {
+            return base + """
+
+            (allow mach-lookup (require-all (global-name "com.apple.SecurityServer") (process-path \(quoted(sandboxPath(executable))))))
+            """
+        }
+        guard policy.listensLocally, let executable = policy.executable else { return base }
+        // The pty extension limits the tree to terminals it opened itself.
+        let terminals = !policy.pseudoTerminals ? "" : """
+
+        (allow pseudo-tty)
+        (allow file-read* file-write* file-ioctl (literal "/dev/ptmx"))
+        (allow file-read* file-write* file-ioctl
+          (require-all (regex #"^/dev/ttys[0-9]+$") (extension "com.apple.sandbox.pty")))
+        """
+        // Only that verified executable can listen; tools cannot. Seatbelt's "localhost" token also matches this
+        // machine's LAN addresses, so it must not be described as an OS-enforced loopback-only boundary.
+        // Siloed, the executable still reaches its own server, which the open profile's outbound rule covered.
+        let ownServer = policy.egressPort == nil ? "" : """
+
+        (allow network-outbound
+          (require-all
+            (process-path \(quoted(sandboxPath(executable))))
+            (remote ip "localhost:*")))
+        """
+        return base + terminals + """
+
+        (allow network-bind network-inbound
+          (require-all
+            (process-path \(quoted(sandboxPath(executable))))
+            (local ip "localhost:*")))
+        """ + ownServer
+    }
+
+    private static func baseProfile(_ policy: HarnessSandboxPolicy) -> String {
         // The developer tools /usr/bin's python3, git and make run, which hold no one's data.
         let reads = ["/System", "/usr", "/bin", "/sbin", "/dev", "/Library/Apple",
-                     "/Library/Preferences", "/private/etc", "/private/var/db/timezone",
-                     AgentStorageLayout(workspace: workspace).package.path, application.path] + executablePaths
-            + folders.map(\.path) + (developerTools().map { [$0.path] } ?? [])
-        let readFiles = readFiles + (FileManager.default.fileExists(atPath: selectedDeveloperLink) ? [selectedDeveloperLink] : [])
-        let writes = [workspace.path] + folders.filter(\.writable).map(\.path)
+                     "/Library/Preferences", "/private/etc", "/private/var/db/timezone"] + policy.readable
+            + policy.folders.map(\.path) + (developerTools().map { [$0.path] } ?? [])
+        let readFiles = policy.readableFiles + (FileManager.default.fileExists(atPath: selectedDeveloperLink) ? [selectedDeveloperLink] : [])
+        let writes = policy.writable
+        let workspace = policy.workspace
         // Unfiltered outbound would also reach every Unix socket on the Mac:
         // ssh-agent, Docker, other apps' daemons and Noodle's own bridges.
         // Name resolution needs mDNSResponder; harness sockets stay in the workspace.
         // Siloed, the only address is the Agent Host's proxy, which also looks names up, so
         // mDNSResponder goes too. "localhost" also matches this Mac's LAN addresses on that port.
-        let internet = egressPort.map { "(remote ip \"localhost:\($0)\")" }
+        let internet = policy.egressPort.map { "(remote ip \"localhost:\($0)\")" }
             ?? "(remote ip)\n  (literal \"/private/var/run/mDNSResponder\")"
         return """
         (version 1)
