@@ -34,7 +34,7 @@ public struct HarnessLaunchPlan: Equatable, Sendable {
     /// isolation that does not end a harness's tools with it, as bubblewrap does.
     public var endsGroup: Bool
     #if os(Windows)
-    /// The name of the bot's own SID, which its sandbox is made with.
+    /// The bot it runs for, in the sandbox Windows gives bots.
     public var sandbox: String?
     #endif
 

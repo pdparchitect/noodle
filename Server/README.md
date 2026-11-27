@@ -155,7 +155,8 @@ The server runs until you press Control-C. Invite people from another window wit
 ## On Windows
 
 Noodle Server also runs on Windows 10 and 11, on arm64 or x86_64, in a PowerShell window, while
-you are signed in. Each bot works in a sandbox of its own there too.
+you are signed in. Each bot works in a sandbox that keeps it out of your files and the server's
+data, but on Windows bots are not yet kept apart from each other.
 
 Download it for
 [arm64](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-windows-arm64.zip)

@@ -3,14 +3,26 @@ import CWindowsSandbox
 import Foundation
 import NoodleCore
 
-/// How a bot's harness runs on Windows: as a restricted, low-integrity copy of the server's account that must
-/// also be granted, by a SID of the bot's own, everything it opens. It writes only its workspace, reads its
-/// package and the harness's installation besides what Windows lets every user read, and reaches nothing of other
-/// bots, the server's data or anyone's home. The network is shared, as with bubblewrap.
+/// How a bot's harness runs on Windows: as a copy of the server's account with that account and Administrators
+/// only denying, no privileges, at low integrity. It writes only its workspace, reads its package and the harness's
+/// installation besides what Windows lets every user read, and reaches nothing granted to the server's account alone,
+/// such as its home and the server's data. Bots are not kept from each other yet: Windows gives no way to that which
+/// harnesses work in, short of an account for each bot. The network is shared, as with bubblewrap.
 public struct RestrictedTokenSandbox: Sendable {
     public init() {}
 
-    /// The name a bot's own SID is made from, after its package.
+    /// For testing in a debug build only, with NOODLED_LOW_INTEGRITY_ONLY=1: bots keep the server's account, so
+    /// PowerShell starts in them, and are held back only from writing outside their workspace. They read all of
+    /// the account's files and the server's data.
+    static var lowIntegrityOnly: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["NOODLED_LOW_INTEGRITY_ONLY"] == "1"
+        #else
+        false
+        #endif
+    }
+
+    /// The bot's name in its plan, after its package.
     static func botName(workspace: URL) -> String {
         "noodled." + AgentStorageLayout(workspace: workspace).package.lastPathComponent
     }
@@ -25,10 +37,10 @@ public struct RestrictedTokenSandbox: Sendable {
         guard error == 0 else { throw HarnessSetupError("noodled could not let the bot reach \(url.path): Windows error \(error).") }
     }
 
-    /// The bot's own SID. Free it with `sandbox_free_sid`.
-    static func bot(_ name: String) throws -> UnsafeMutableRawPointer {
+    /// The SID bots' folders are granted to. Free it with `sandbox_free_sid`.
+    static func bots() throws -> UnsafeMutableRawPointer {
         var sid: UnsafeMutableRawPointer?
-        let error = name.withCString(encodedAs: UTF16.self) { sandbox_bot($0, &sid) }
+        let error = sandbox_bots(&sid)
         guard error == 0, let sid else { throw HarnessSetupError("noodled could not make the bot's sandbox: Windows error \(error).") }
         return sid
     }
@@ -77,11 +89,26 @@ public struct RestrictedTokenSandbox: Sendable {
 
     static var system: String { ProcessInfo.processInfo.environment["SystemRoot"] ?? #"C:\Windows"# }
 
-    /// Windows's own programs, and Git's, which Claude Code runs its commands with.
+    /// Windows's own programs, and Git's, which Claude Code runs its commands with. PowerShell is left out: it
+    /// cannot start without the account's registry, which a bot may not read, so harnesses use the Command
+    /// Prompt instead.
+    /// The server's own folder and the Swift runtime it loads come last: the messenger linked into the workspace
+    /// finds the runtime there, beside noodled in a release and in Swift's installation otherwise.
     static var searchPath: String {
         let programs = ProcessInfo.processInfo.environment["ProgramFiles"] ?? #"C:\Program Files"#
-        return [system + #"\System32"#, system, system + #"\System32\WindowsPowerShell\v1.0"#,
-                programs + #"\Git\cmd"#, programs + #"\Git\usr\bin"#].joined(separator: ";")
+        return ([system + #"\System32"#, system, programs + #"\Git\cmd"#, programs + #"\Git\usr\bin"#]
+            + runtimeFolders.map(native)).joined(separator: ";")
+    }
+
+    /// Where noodled, which bots run as their messenger, and the Swift runtime it needs are: the server's folder, and
+    /// the first folder on the server's own search path holding the runtime, when that is elsewhere.
+    static var runtimeFolders: [URL] {
+        guard let server = HarnessSandbox.messenger?.deletingLastPathComponent() else { return [] }
+        if FileManager.default.fileExists(atPath: server.appendingPathComponent("swiftCore.dll").path) { return [server] }
+        let runtime = (ProcessInfo.processInfo.environment["Path"] ?? ProcessInfo.processInfo.environment["PATH"] ?? "")
+            .split(separator: ";").map { URL(fileURLWithPath: String($0), isDirectory: true) }
+            .first { FileManager.default.fileExists(atPath: $0.appendingPathComponent("swiftCore.dll").path) }
+        return [server] + (runtime.map { [$0] } ?? [])
     }
 }
 
@@ -109,15 +136,15 @@ extension RestrictedTokenSandbox: HarnessIsolation {
         // A restricted token shares the network; it cannot keep it to one local port.
         if policy.egressPort != nil { throw HarnessSetupError("noodled cannot keep a bot to the silo on Windows yet.") }
         let workspace = policy.workspace
-        let name = Self.botName(workspace: workspace)
-        let sid = try Self.bot(name)
+        let sid = try Self.bots()
         defer { sandbox_free_sid(sid) }
         try Self.grant(workspace, to: sid, writable: true)
         for path in policy.readable { try Self.grant(URL(fileURLWithPath: path), to: sid, writable: false) }
+        for folder in Self.runtimeFolders { try Self.grant(folder, to: sid, writable: false) }
         for folder in policy.folders { try Self.grant(URL(fileURLWithPath: folder.path), to: sid, writable: folder.writable) }
         var plan = HarnessLaunchPlan(name: "the bot's sandbox", executable: program, arguments: command,
                                      environment: environment, directory: workspace, endsGroup: true)
-        plan.sandbox = name
+        plan.sandbox = Self.botName(workspace: workspace)
         return plan
     }
 
@@ -134,11 +161,9 @@ extension RestrictedTokenSandbox: HarnessIsolation {
 
     /// Runs a plan to its end and returns its status, for the check.
     static func run(_ plan: HarnessLaunchPlan) throws -> UInt32 {
-        guard let name = plan.sandbox else { throw HarnessSetupError("The plan has no sandbox.") }
-        let sid = try Self.bot(name)
-        defer { sandbox_free_sid(sid) }
+        guard plan.sandbox != nil else { throw HarnessSetupError("The plan has no sandbox.") }
         var child = sandbox_child()
-        let error = spawn(plan, sid: sid, into: &child)
+        let error = spawn(plan, into: &child)
         guard error == 0 else { throw HarnessSetupError("Windows error \(error)") }
         sandbox_close(child.input)
         let status = sandbox_wait(child.process)
@@ -148,14 +173,14 @@ extension RestrictedTokenSandbox: HarnessIsolation {
         return status
     }
 
-    static func spawn(_ plan: HarnessLaunchPlan, sid: UnsafeMutableRawPointer, into child: inout sandbox_child) -> UInt32 {
+    static func spawn(_ plan: HarnessLaunchPlan, into child: inout sandbox_child) -> UInt32 {
         let program = native(plan.executable)
         var commandLine = Array(Self.commandLine(program, plan.arguments).utf16) + [0]
         var environment = environmentBlock(plan.environment)
         let directory = plan.directory.map(native)
         return program.withCString(encodedAs: UTF16.self) { application in
             func start(_ folder: UnsafePointer<UInt16>?) -> UInt32 {
-                sandbox_spawn(sid, application, &commandLine, &environment, folder, &child)
+                sandbox_spawn(application, &commandLine, &environment, folder, lowIntegrityOnly ? 1 : 0, &child)
             }
             guard let directory else { return start(nil) }
             return directory.withCString(encodedAs: UTF16.self) { start($0) }

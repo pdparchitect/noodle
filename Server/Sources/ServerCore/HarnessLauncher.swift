@@ -114,11 +114,9 @@ public typealias PlatformHarnessLauncher = WindowsHarnessLauncher
 
     public func run(_ plan: HarnessLaunchPlan, received: @escaping @MainActor (Data, Bool) -> Void,
                     closed: @escaping @MainActor () -> Void, exited: @escaping @MainActor (Int32) -> Void) throws -> Int32 {
-        guard let name = plan.sandbox else { throw HarnessSetupError("\(plan.name) has no sandbox to run in.") }
-        let sid = try RestrictedTokenSandbox.bot(name)
-        defer { sandbox_free_sid(sid) }
+        guard plan.sandbox != nil else { throw HarnessSetupError("\(plan.name) has no sandbox to run in.") }
         var child = sandbox_child()
-        let error = RestrictedTokenSandbox.spawn(plan, sid: sid, into: &child)
+        let error = RestrictedTokenSandbox.spawn(plan, into: &child)
         guard error == 0 else { throw HarnessSetupError("Windows error \(error)") }
         let handles = Handles(input: child.input, output: child.output, errors: child.errors, process: child.process, job: child.job,
                               console: child.console, consoleInput: child.consoleInput)

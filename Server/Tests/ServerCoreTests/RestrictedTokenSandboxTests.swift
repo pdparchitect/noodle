@@ -4,8 +4,8 @@ import NoodleCore
 @testable import ServerCore
 import XCTest
 
-/// What a bot's sandbox lets its harness reach on Windows, tried for real: its workspace to write, its
-/// package to read, and nothing of other bots or the server account's home. Ending the harness ends its tools.
+/// What a bot's sandbox lets its harness reach on Windows, tried for real: its workspace to write, its package to
+/// read, and nothing of the server's data or the server account's home. Ending the harness ends its tools.
 @MainActor final class RestrictedTokenSandboxTests: XCTestCase {
     private var root: URL!
     private var workspace: URL { root.appendingPathComponent("Agents/a/workspace", isDirectory: true) }
@@ -25,10 +25,13 @@ import XCTest
         try? FileManager.default.removeItem(at: root)
     }
 
-    /// Runs `command` through cmd.exe in the bot's sandbox and returns its status and output.
-    private func run(_ command: String) throws -> (status: Int32, output: String) {
+    /// Runs `command` through cmd.exe in the bot's sandbox, with `readable` granted besides its own folders, and
+    /// returns its status and output.
+    private func run(_ command: String, readable: [URL] = []) throws -> (status: Int32, output: String) {
         let sandbox = RestrictedTokenSandbox()
-        let plan = try sandbox.launch(policy: HarnessSandbox.policy(workspace: workspace, program: shell), program: shell,
+        var policy = HarnessSandbox.policy(workspace: workspace, program: shell)
+        policy.readable += readable.map(\.path)
+        let plan = try sandbox.launch(policy: policy, program: shell,
                                       command: ["/d", "/c", command],
                                       environment: try sandbox.environment(provider: .claudeCode, workspace: workspace))
         let launcher = WindowsHarnessLauncher()
@@ -52,16 +55,40 @@ import XCTest
         XCTAssertNotEqual(package.status, 0, "the package is read-only")
     }
 
-    func testOtherBotsAndTheServersHomeAreOutOfReach() throws {
-        let otherBot = try run("type \"\(RestrictedTokenSandbox.native(other.appendingPathComponent("secret.txt")))\"")
-        XCTAssertNotEqual(otherBot.status, 0, otherBot.output)
-        XCTAssertFalse(otherBot.output.contains("other"), otherBot.output)
+    /// The server makes the bot's private folders, such as its harness's home, owner-only; the bot still works in
+    /// them, as on Linux, where it runs as the server's account.
+    func testPrivateFoldersTheServerMakesInTheWorkspaceStayTheBots() throws {
+        _ = try run("exit 0")
+        _ = try WorkspaceMailbox(workspace: workspace, path: ".noodle/home/.codex", create: true)
+        let result = try run("echo kept> .noodle\\home\\.codex\\made.txt && type .noodle\\home\\.codex\\made.txt")
+        XCTAssertEqual(result.status, 0, result.output)
+        XCTAssertTrue(result.output.contains("kept"), result.output)
+    }
+
+    /// The server's data around the bot is its account's alone. Bots are not kept from each other on Windows.
+    func testTheServersDataAndTheAccountsHomeAreOutOfReach() throws {
+        let data = try run("type \"\(RestrictedTokenSandbox.native(other.appendingPathComponent("secret.txt")))\"")
+        XCTAssertNotEqual(data.status, 0, data.output)
+        XCTAssertFalse(data.output.contains("other"), data.output)
         let home = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("noodled-home-\(UUID().uuidString).txt")
         try Data("home".utf8).write(to: home)
         defer { try? FileManager.default.removeItem(at: home) }
         let homeRead = try run("type \"\(RestrictedTokenSandbox.native(home))\"")
         XCTAssertNotEqual(homeRead.status, 0, homeRead.output)
         XCTAssertFalse(homeRead.output.contains("home"), homeRead.output)
+    }
+
+    /// A harness installed in the account's own folders, as Codex is by winget, runs its helper programs from
+    /// there. The bot passes through the folders above its own, though it may not look in them.
+    func testTheBotRunsProgramsFromAHarnessInstalledInTheAccountsFolders() throws {
+        let install = root.appendingPathComponent("Install", isDirectory: true)
+        try FileManager.default.createDirectory(at: install, withIntermediateDirectories: true)
+        let tool = install.appendingPathComponent("tool.exe")
+        try FileManager.default.copyItem(atPath: system + #"\System32\whoami.exe"#, toPath: tool.path)
+        let result = try run(RestrictedTokenSandbox.native(tool) + " /logonid", readable: [install])
+        XCTAssertEqual(result.status, 0, result.output)
+        XCTAssertTrue(result.output.contains("S-1-5-5-"), result.output)
+        XCTAssertNotEqual(try run("dir " + RestrictedTokenSandbox.native(root)).status, 0, "the folders above are passed through, not shown")
     }
 
     func testTheHarnessesStatusComesBack() throws {

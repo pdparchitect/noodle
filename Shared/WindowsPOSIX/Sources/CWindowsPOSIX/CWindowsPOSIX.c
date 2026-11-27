@@ -181,11 +181,67 @@ static PSECURITY_DESCRIPTOR descriptor_for(int mode) {
     return is_private_mode(mode) && identity() ? &private_descriptor : NULL;
 }
 
+static HANDLE handle_of(int descriptor);
+static BOOL is_trusted(PSID sid);
+static NTSTATUS open_handle(int folder, const char *path, ACCESS_MASK access, ULONG disposition, ULONG options,
+                            PSECURITY_DESCRIPTOR descriptor, HANDLE *handle);
+
+// Whether everything the folder holding `path` lets in, or passes down, is trusted: then an owner-only item made
+// there inherits, and so keeps what the folder passes down to a bot, instead of an ACL of its own that would cut
+// it off.
+static BOOL parent_is_private(int folder, const char *path) {
+    if (!identity()) return FALSE;
+    const char *slash = strrchr(path, '/'), *backslash = strrchr(path, '\\');
+    const char *separator = slash > backslash ? slash : backslash;
+    HANDLE parent = NULL;
+    BOOL opened = FALSE;
+    if (!separator && folder != AT_FDCWD) {
+        parent = handle_of(folder);
+    } else {
+        size_t length = separator ? (size_t)(separator - path) : 0;
+        char *name = malloc(length + 4);
+        if (!name) return FALSE;
+        if (separator) { memcpy(name, path, length); name[length] = 0; } else { name[0] = '.'; name[1] = 0; }
+        if (length == 2 && name[1] == ':') { name[2] = '/'; name[3] = 0; }
+        opened = NT_SUCCESS(open_handle(folder, name, READ_CONTROL, FILE_OPEN, 0, NULL, &parent));
+        free(name);
+        if (!opened) return FALSE;
+    }
+    PACL acl = NULL;
+    PSECURITY_DESCRIPTOR descriptor = NULL;
+    BOOL trusted = parent && parent != INVALID_HANDLE_VALUE
+        && GetSecurityInfo(parent, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, NULL, NULL, &acl, NULL, &descriptor) == ERROR_SUCCESS
+        && acl != NULL;
+    for (DWORD i = 0; trusted && i < acl->AceCount; i++) {
+        ACE_HEADER *header;
+        if (!GetAce(acl, i, (void **)&header) || header->AceType != ACCESS_ALLOWED_ACE_TYPE) continue;
+        if (((ACCESS_ALLOWED_ACE *)header)->Mask && !is_trusted((PSID)&((ACCESS_ALLOWED_ACE *)header)->SidStart)) trusted = FALSE;
+    }
+    LocalFree(descriptor);
+    if (opened) CloseHandle(parent);
+    return trusted;
+}
+
+// The ACL a new item gets for `mode`: owner-only, unless the folder it is made in is that already.
+static PSECURITY_DESCRIPTOR descriptor_for_new(int folder, const char *path, int mode) {
+    if (!is_private_mode(mode) || parent_is_private(folder, path)) return NULL;
+    return descriptor_for(mode);
+}
+
 void *noodle_private_security(void) { return identity() ? &private_descriptor : NULL; }
+
+// This logon session's SID, which Noodle Server grants its bots' folders to. A bot works in the server's own folders,
+// as on Linux, where it runs as the server's account; reaching them does not make them anyone else's.
+static BOOL is_session_sid(PSID sid) {
+    SID_IDENTIFIER_AUTHORITY *authority = GetSidIdentifierAuthority(sid);
+    static const BYTE nt[6] = { 0, 0, 0, 0, 0, 5 };
+    return authority && memcmp(authority->Value, nt, 6) == 0 && *GetSidSubAuthorityCount(sid) == 3
+        && *GetSidSubAuthority(sid, 0) == SECURITY_LOGON_IDS_RID;
+}
 
 static BOOL is_trusted(PSID sid) {
     return EqualSid(sid, current_user) || EqualSid(sid, current_owner) || EqualSid(sid, (PSID)system_sid)
-        || EqualSid(sid, (PSID)administrators_sid) || EqualSid(sid, (PSID)creator_owner_sid);
+        || EqualSid(sid, (PSID)administrators_sid) || EqualSid(sid, (PSID)creator_owner_sid) || is_session_sid(sid);
 }
 
 // Owner and permission bits from an item's ACL: group and other bits appear when anyone beyond the owner,
@@ -295,7 +351,7 @@ int noodle_openat(int folder, const char *path, int flags, int mode) {
     else if (writes) options |= FILE_NON_DIRECTORY_FILE;
     HANDLE handle;
     NTSTATUS status = open_handle(folder, path, access, disposition, options,
-                                  (flags & _O_CREAT) ? descriptor_for(mode) : NULL, &handle);
+                                  (flags & _O_CREAT) ? descriptor_for_new(folder, path, mode) : NULL, &handle);
     if (!NT_SUCCESS(status)) return fail_nt(status);
     if ((flags & O_NOFOLLOW) && is_link(handle)) { CloseHandle(handle); errno = ELOOP; return -1; }
     if ((flags & _O_TRUNC) && writes) {
@@ -444,7 +500,7 @@ int noodle_renameat_exclusive(int fromFolder, const char *from, int toFolder, co
 int noodle_mkdirat(int folder, const char *path, int mode) {
     HANDLE handle;
     NTSTATUS status = open_handle(folder, path, FILE_LIST_DIRECTORY, FILE_CREATE, FILE_DIRECTORY_FILE,
-                                  descriptor_for(mode), &handle);
+                                  descriptor_for_new(folder, path, mode), &handle);
     if (!NT_SUCCESS(status)) return fail_nt(status);
     CloseHandle(handle);
     return 0;

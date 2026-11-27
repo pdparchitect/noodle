@@ -6,32 +6,34 @@
 #include <stdlib.h>
 #include "CWindowsSandbox.h"
 
-uint32_t sandbox_bot(const wchar_t *name, void **sid) {
-    // Windows derives an app's SID from a name alone, unique to it, but a restricted token refuses an app SID;
-    // the same numbers under the authority kept for programs' own resources make the bot's restricting SID.
-    PSID derived = NULL;
-    HRESULT result = DeriveAppContainerSidFromAppContainerName(name, &derived);
-    if (FAILED(result)) return HRESULT_CODE(result);
-    UCHAR count = *GetSidSubAuthorityCount(derived);
-    DWORD parts[8] = { 0 };
-    // The first sub-authority only says the SID is an app's.
-    for (UCHAR i = 1; i < count && i <= 8; i++) parts[i - 1] = *GetSidSubAuthority(derived, i);
-    FreeSid(derived);
-    SID_IDENTIFIER_AUTHORITY resourceManager = SECURITY_RESOURCE_MANAGER_AUTHORITY;
-    PSID bot = NULL;
-    BYTE used = count > 8 ? 8 : (BYTE)(count - 1);
-    if (!AllocateAndInitializeSid(&resourceManager, used, parts[0], parts[1], parts[2], parts[3], parts[4], parts[5],
-                                  parts[6], parts[7], &bot)) return GetLastError();
-    *sid = bot;
+static PSID logon_sid(HANDLE token);
+
+uint32_t sandbox_bots(void **sid) {
+    HANDLE own;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &own)) return GetLastError();
+    PSID session = logon_sid(own);
+    CloseHandle(own);
+    if (!session) return ERROR_NO_SUCH_LOGON_SESSION;
+    *sid = session;
     return 0;
 }
 
-void sandbox_free_sid(void *sid) { if (sid) FreeSid(sid); }
+void sandbox_free_sid(void *sid) { free(sid); }
 
-static BOOL has_grant(PACL acl, PSID sid, DWORD wanted) {
+// Whether a SID every bot's token holds, such as Users, is granted reading and running.
+static BOOL everyone_reads(ACCESS_ALLOWED_ACE *ace, DWORD wanted) {
+    WELL_KNOWN_SID_TYPE everyone[] = { WinWorldSid, WinBuiltinUsersSid, WinAuthenticatedUserSid };
+    if ((ace->Header.AceFlags & INHERIT_ONLY_ACE) || (ace->Mask & wanted) != wanted) return FALSE;
+    for (int i = 0; i < 3; i++) if (IsWellKnownSid((PSID)&ace->SidStart, everyone[i])) return TRUE;
+    return FALSE;
+}
+
+static BOOL has_grant(PACL acl, PSID sid, DWORD wanted, BOOL writable) {
     for (DWORD i = 0; acl && i < acl->AceCount; i++) {
         ACCESS_ALLOWED_ACE *ace;
         if (!GetAce(acl, i, (void **)&ace) || ace->Header.AceType != ACCESS_ALLOWED_ACE_TYPE) continue;
+        // What every user may read, as the system and Program Files are, needs no grant, nor its owner's say-so.
+        if (!writable && everyone_reads(ace, wanted)) return TRUE;
         BYTE inherits = OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE;
         if (EqualSid((PSID)&ace->SidStart, sid) && (ace->Mask & wanted) == wanted
             && (ace->Header.AceFlags & inherits) == inherits && !(ace->Header.AceFlags & INHERITED_ACE)) return TRUE;
@@ -57,7 +59,7 @@ uint32_t sandbox_grant(const wchar_t *path, void *sid, int writable) {
     DWORD result = GetNamedSecurityInfoW(path, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, NULL, NULL, &current, NULL, &descriptor);
     if (result != ERROR_SUCCESS) return result;
     // Granted before: rewriting the folder's access would pass it down its whole tree again, slowly.
-    if (!has_grant(current, sid, wanted)) {
+    if (!has_grant(current, sid, wanted, writable)) {
         EXPLICIT_ACCESS_W access = { 0 };
         access.grfAccessPermissions = wanted;
         access.grfAccessMode = GRANT_ACCESS;
@@ -115,34 +117,83 @@ static BOOL CALLBACK make_desktop(PINIT_ONCE once, PVOID parameter, PVOID *conte
     return bots_station && bots_desktop;
 }
 
-// The server's token, restricted for a bot: Administrators for denying only, no privileges but passing through
-// folders, low integrity, and every access also checked against the bot's SID, Everyone, Users and RESTRICTED.
-static DWORD bot_token(PSID bot, HANDLE *token) {
+// The logon session's SID from `token`; free() the copy.
+static PSID logon_sid(HANDLE token) {
+    DWORD size = 0;
+    GetTokenInformation(token, TokenGroups, NULL, 0, &size);
+    TOKEN_GROUPS *groups = size ? malloc(size) : NULL;
+    PSID found = NULL;
+    if (groups && GetTokenInformation(token, TokenGroups, groups, size, &size)) {
+        for (DWORD i = 0; i < groups->GroupCount && !found; i++) {
+            if ((groups->Groups[i].Attributes & SE_GROUP_LOGON_ID) == SE_GROUP_LOGON_ID) {
+                DWORD length = GetLengthSid(groups->Groups[i].Sid);
+                found = malloc(length);
+                if (found) CopySid(length, found, groups->Groups[i].Sid);
+            }
+        }
+    }
+    free(groups);
+    return found;
+}
+
+// What the bot's own objects, such as the pipes it makes, give access to: its logon session and SYSTEM. By default
+// they would give it to the account alone, which only denies in the bot's token, so it could not use them itself.
+static DWORD default_access(HANDLE token, HANDLE own) {
+    PSID session = logon_sid(own);
+    BYTE system[SECURITY_MAX_SID_SIZE];
+    DWORD size = sizeof(system);
+    if (!session || !CreateWellKnownSid(WinLocalSystemSid, NULL, system, &size)) { free(session); return ERROR_NO_SUCH_LOGON_SESSION; }
+    DWORD aclSize = sizeof(ACL) + 2 * (sizeof(ACCESS_ALLOWED_ACE) - sizeof(DWORD)) + GetLengthSid(session) + GetLengthSid((PSID)system);
+    PACL acl = malloc(aclSize);
+    DWORD error = 0;
+    if (!acl || !InitializeAcl(acl, aclSize, ACL_REVISION) || !AddAccessAllowedAce(acl, ACL_REVISION, GENERIC_ALL, session)
+        || !AddAccessAllowedAce(acl, ACL_REVISION, GENERIC_ALL, (PSID)system)) {
+        error = acl ? GetLastError() : ERROR_NOT_ENOUGH_MEMORY;
+    } else {
+        TOKEN_DEFAULT_DACL dacl = { acl };
+        if (!SetTokenInformation(token, TokenDefaultDacl, &dacl, sizeof(dacl))) error = GetLastError();
+    }
+    free(acl);
+    free(session);
+    return error;
+}
+
+// The server's token, restricted for a bot: its own account and Administrators for denying only, so nothing granted to
+// them alone is within reach, such as the account's home and the server's data; no privileges but passing through
+// folders; and low integrity, so it writes only where a folder is labelled low.
+static DWORD bot_token(HANDLE *token, int keepAccount) {
     HANDLE own;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE | TOKEN_QUERY | TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT, &own)) {
         return GetLastError();
     }
-    BYTE everyone[SECURITY_MAX_SID_SIZE], users[SECURITY_MAX_SID_SIZE], restricted[SECURITY_MAX_SID_SIZE],
-        administrators[SECURITY_MAX_SID_SIZE], localAdministrator[SECURITY_MAX_SID_SIZE], low[SECURITY_MAX_SID_SIZE];
-    DWORD size;
-    size = sizeof(everyone); CreateWellKnownSid(WinWorldSid, NULL, everyone, &size);
-    size = sizeof(users); CreateWellKnownSid(WinBuiltinUsersSid, NULL, users, &size);
-    size = sizeof(restricted); CreateWellKnownSid(WinRestrictedCodeSid, NULL, restricted, &size);
+    DWORD size = 0;
+    GetTokenInformation(own, TokenUser, NULL, 0, &size);
+    TOKEN_USER *user = size ? malloc(size) : NULL;
+    if (!user || !GetTokenInformation(own, TokenUser, user, size, &size)) {
+        DWORD error = GetLastError();
+        free(user);
+        CloseHandle(own);
+        return error ? error : ERROR_NOT_ENOUGH_MEMORY;
+    }
+    BYTE administrators[SECURITY_MAX_SID_SIZE], localAdministrator[SECURITY_MAX_SID_SIZE], low[SECURITY_MAX_SID_SIZE];
     size = sizeof(administrators); CreateWellKnownSid(WinBuiltinAdministratorsSid, NULL, administrators, &size);
     size = sizeof(localAdministrator); CreateWellKnownSid(WinLocalAccountAndAdministratorSid, NULL, localAdministrator, &size);
     size = sizeof(low); CreateWellKnownSid(WinLowLabelSid, NULL, low, &size);
-    SID_AND_ATTRIBUTES restricting[] = { { bot, 0 }, { (PSID)everyone, 0 }, { (PSID)users, 0 }, { (PSID)restricted, 0 } };
-    SID_AND_ATTRIBUTES denied[] = { { (PSID)administrators, 0 }, { (PSID)localAdministrator, 0 } };
+    SID_AND_ATTRIBUTES denied[] = { { user->User.Sid, 0 }, { (PSID)administrators, 0 }, { (PSID)localAdministrator, 0 } };
     DWORD error = 0;
-    if (!CreateRestrictedToken(own, DISABLE_MAX_PRIVILEGE, 2, denied, 0, NULL, 4, restricting, token)) {
+    // Kept, for testing only, the account still reaches its registry and all its files.
+    SID_AND_ATTRIBUTES *deniedFrom = keepAccount ? denied + 1 : denied;
+    if (!CreateRestrictedToken(own, DISABLE_MAX_PRIVILEGE, keepAccount ? 2 : 3, deniedFrom, 0, NULL, 0, NULL, token)) {
         error = GetLastError();
     } else {
         TOKEN_MANDATORY_LABEL label = { { (PSID)low, SE_GROUP_INTEGRITY } };
-        if (!SetTokenInformation(*token, TokenIntegrityLevel, &label, sizeof(label) + GetLengthSid((PSID)low))) {
-            error = GetLastError();
+        if (!SetTokenInformation(*token, TokenIntegrityLevel, &label, sizeof(label) + GetLengthSid((PSID)low))
+            || (error = default_access(*token, own)) != 0) {
+            if (!error) error = GetLastError();
             CloseHandle(*token);
         }
     }
+    free(user);
     CloseHandle(own);
     return error;
 }
@@ -196,8 +247,8 @@ static BOOL make_pipe(HANDLE *childEnd, HANDLE *serverEnd, BOOL childReads) {
     return TRUE;
 }
 
-uint32_t sandbox_spawn(void *sid, const wchar_t *application, wchar_t *commandLine, wchar_t *environment,
-                       const wchar_t *directory, struct sandbox_child *child) {
+uint32_t sandbox_spawn(const wchar_t *application, wchar_t *commandLine, wchar_t *environment,
+                       const wchar_t *directory, int keepAccount, struct sandbox_child *child) {
     DWORD error = 0;
     HANDLE childInput = NULL, childOutput = NULL, childErrors = NULL;
     HANDLE input = NULL, output = NULL, errors = NULL, job = NULL, token = NULL;
@@ -205,7 +256,7 @@ uint32_t sandbox_spawn(void *sid, const wchar_t *application, wchar_t *commandLi
     HANDLE consoleInput = NULL;
     LPPROC_THREAD_ATTRIBUTE_LIST attributes = NULL;
 
-    if ((error = bot_token((PSID)sid, &token)) != 0) { token = NULL; goto done; }
+    if ((error = bot_token(&token, keepAccount)) != 0) { token = NULL; goto done; }
     if (!make_pipe(&childInput, &input, TRUE) || !make_pipe(&childOutput, &output, FALSE)
         || !make_pipe(&childErrors, &errors, FALSE)) { error = GetLastError(); goto done; }
 
