@@ -61,6 +61,11 @@ final class ServerConfigurationTests: XCTestCase {
         let folder = FileManager.default.homeDirectoryForCurrentUser.path + "/Library/Application Support/Noodle Server"
         XCTAssertEqual(configuration.data.path, folder + "/Data")
         XCTAssertEqual(ServerConfiguration.defaultFile.path, folder + "/noodled.yaml")
+        #elseif os(Windows)
+        // On Windows too, with the account that runs it.
+        let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["LOCALAPPDATA"]!).appendingPathComponent("Noodle Server")
+        XCTAssertEqual(configuration.data.standardizedFileURL.path, folder.appendingPathComponent("Data").standardizedFileURL.path)
+        XCTAssertEqual(ServerConfiguration.defaultFile.path, folder.appendingPathComponent("noodled.yaml").path)
         #else
         XCTAssertEqual(configuration.data, URL(fileURLWithPath: "/var/lib/noodled"))
         XCTAssertEqual(ServerConfiguration.defaultFile.path, "/etc/noodled/noodled.yaml")
@@ -98,8 +103,19 @@ final class ServerConfigurationTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
+        // Windows runs what is named as a program.
+        #if os(Windows)
+        let claude = root.appendingPathComponent("claude.exe"), notes = root.appendingPathComponent("notes.txt")
+        #else
         let claude = root.appendingPathComponent("claude"), notes = root.appendingPathComponent("notes.txt")
+        #endif
+        #if os(Windows)
+        // Windows also asks that it really is one.
+        try FileManager.default.copyItem(atPath: (ProcessInfo.processInfo.environment["SystemRoot"] ?? #"C:\Windows"#) + #"\System32\whoami.exe"#,
+                                         toPath: claude.path)
+        #else
         FileManager.default.createFile(atPath: claude.path, contents: Data(), attributes: [.posixPermissions: 0o755])
+        #endif
         FileManager.default.createFile(atPath: notes.path, contents: Data(), attributes: [.posixPermissions: 0o644])
         let configuration = try ServerConfiguration(yaml: """
         address: noodle.example.com:lots

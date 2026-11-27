@@ -158,13 +158,15 @@ public final class WorkspaceMailbox: @unchecked Sendable {
         guard Self.validName(name) else { throw Self.invalid() }
         let file = openat(descriptor, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
         guard file >= 0 else { throw Self.invalid() }
-        let handle = FileHandle(fileDescriptor: file, closeOnDealloc: true)
-        defer { try? handle.close() }
         var info = stat()
         // Atomic replacement may unlink this already-open inode before fstat.
         // It remains safe to read; multiple links would expose another file.
-        guard fstat(file, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
-              info.st_nlink <= 1, info.st_size >= 0, info.st_size <= limit else { throw Self.invalid() }
+        // Checked before the handle takes the descriptor over, which on Windows it no longer answers to.
+        let checked = fstat(file, &info) == 0 && info.st_mode & S_IFMT == S_IFREG
+            && info.st_nlink <= 1 && info.st_size >= 0 && info.st_size <= limit
+        let handle = FileHandle(fileDescriptor: file, closeOnDealloc: true)
+        defer { try? handle.close() }
+        guard checked else { throw Self.invalid() }
         let data = try handle.read(upToCount: limit + 1) ?? Data()
         guard data.count <= limit else { throw Self.invalid() }
         return data

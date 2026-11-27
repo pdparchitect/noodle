@@ -20,12 +20,13 @@ public enum MuseAuthentication {
         // Bound the read, reject special files, and do not follow credential-file symlinks.
         let fd = open(path, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
         guard fd >= 0 else { return errno == ENOENT ? .unauthenticated : .managedExternally }
-        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
-        defer { try? handle.close() }
         var info = stat()
         let limit = 1_048_576
-        guard fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
-              info.st_size >= 0, info.st_size <= limit else { return .managedExternally }
+        // Checked before the handle takes the descriptor over, which on Windows it no longer answers to.
+        let checked = fstat(fd, &info) == 0 && info.st_mode & S_IFMT == S_IFREG && info.st_size >= 0 && info.st_size <= limit
+        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        defer { try? handle.close() }
+        guard checked else { return .managedExternally }
         guard let data = try? handle.read(upToCount: limit + 1), data.count <= limit else { return .managedExternally }
         return status(data: data)
     }

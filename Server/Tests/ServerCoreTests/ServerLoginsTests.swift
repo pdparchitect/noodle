@@ -81,7 +81,11 @@ final class ServerLoginsTests: XCTestCase {
         let work = try logins.login(.claudeCode, profile: "Work")
         let claude = try logins.signIn(.claudeCode, login: work)
         XCTAssertEqual(claude.arguments, ["auth", "login", "--claudeai"])
+        #if os(Windows)
+        XCTAssertEqual(claude.environment["HOME"], RestrictedTokenSandbox.native(logins.profiles.loginHome(work)))
+        #else
         XCTAssertEqual(claude.environment["HOME"], logins.profiles.loginHome(work).path)
+        #endif
         XCTAssertEqual(claude.environment["CLAUDE_CONFIG_DIR"], logins.profiles.accountHome(work).path)
 
         let own = try logins.login(.codex, profile: nil)
