@@ -230,18 +230,9 @@ static PSECURITY_DESCRIPTOR descriptor_for_new(int folder, const char *path, int
 
 void *noodle_private_security(void) { return identity() ? &private_descriptor : NULL; }
 
-// This logon session's SID, which Noodle Server grants its bots' folders to. A bot works in the server's own folders,
-// as on Linux, where it runs as the server's account; reaching them does not make them anyone else's.
-static BOOL is_session_sid(PSID sid) {
-    SID_IDENTIFIER_AUTHORITY *authority = GetSidIdentifierAuthority(sid);
-    static const BYTE nt[6] = { 0, 0, 0, 0, 0, 5 };
-    return authority && memcmp(authority->Value, nt, 6) == 0 && *GetSidSubAuthorityCount(sid) == 3
-        && *GetSidSubAuthority(sid, 0) == SECURITY_LOGON_IDS_RID;
-}
-
 static BOOL is_trusted(PSID sid) {
     return EqualSid(sid, current_user) || EqualSid(sid, current_owner) || EqualSid(sid, (PSID)system_sid)
-        || EqualSid(sid, (PSID)administrators_sid) || EqualSid(sid, (PSID)creator_owner_sid) || is_session_sid(sid);
+        || EqualSid(sid, (PSID)administrators_sid) || EqualSid(sid, (PSID)creator_owner_sid);
 }
 
 // Owner and permission bits from an item's ACL: group and other bits appear when anyone beyond the owner,
