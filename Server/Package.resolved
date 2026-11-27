@@ -1,5 +1,5 @@
 {
-  "originHash" : "250b4162b4a99d4f9ce8ebfb0f3d25b1c485c2a51152a269335ab9bfafe87b6f",
+  "originHash" : "ab10e4ad7c617a2d33764225fa0948d6db16b8eede51347c4cde55b9ffe2f84e",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -139,10 +139,9 @@
     {
       "identity" : "swift-sdk",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/modelcontextprotocol/swift-sdk",
+      "location" : "https://github.com/pdparchitect/swift-sdk",
       "state" : {
-        "revision" : "a0ae212ebf6eab5f754c3129608bc5557637e605",
-        "version" : "0.12.1"
+        "revision" : "67ac013e326590b94afddaaf2b9bbac1dd25977b"
       }
     },
     {

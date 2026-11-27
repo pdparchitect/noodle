@@ -91,7 +91,8 @@ let package = Package(
         .package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.33.0")),
         .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.3.4"),
         .package(path: "Shared/Product"),
-        .package(url: "https://github.com/modelcontextprotocol/swift-sdk", exact: "0.12.1"),
+        // 0.12.1 with its HTTP transport building on Windows, until upstream releases that (#366).
+        .package(url: "https://github.com/pdparchitect/swift-sdk", revision: "67ac013e326590b94afddaaf2b9bbac1dd25977b"),
         // CryptoKit's API where there is no CryptoKit.
         .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0" ..< "6.0.0"),
         // WebRTC for calls, built with a custom audio device, which Google's own Apple builds lack on macOS.
