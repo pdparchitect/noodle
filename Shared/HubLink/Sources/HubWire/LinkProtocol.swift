@@ -2156,9 +2156,10 @@ public struct LinkInvitation: Codable, Equatable, Sendable {
         return components.url!
     }
 
-    /// Reads a link from any Noodle build, or the bare code inside it.
+    /// Reads a link from any Noodle build, or the bare code inside it. Neither ever holds a space or a line
+    /// break, so any a long link picked up on its way, copied from a terminal or a message, are left out.
     public init(text: String) throws {
-        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = String(text.unicodeScalars.filter { !CharacterSet.whitespacesAndNewlines.contains($0) })
         let code = URLComponents(string: text).flatMap { components in
             components.host == Self.urlHost ? components.queryItems?.first { $0.name == "i" }?.value : nil
         } ?? text

@@ -16,6 +16,17 @@ final class LinkProtocolTests: XCTestCase {
         XCTAssertEqual(try LinkInvitation(text: code), invitation)
     }
 
+    /// A long link copied from a terminal or a message can come back broken over lines, or with spaces in it.
+    /// Neither a link nor its code ever holds one, so they are left out.
+    func testInvitationsSurviveSpacesAndLineBreaksPastedIntoThem() throws {
+        let link = invitation.url().absoluteString
+        let third = link.index(link.startIndex, offsetBy: link.count / 3), middle = link.index(link.startIndex, offsetBy: link.count / 2)
+        XCTAssertEqual(try LinkInvitation(text: link[..<third] + " " + link[third..<middle] + "\n  " + link[middle...]), invitation)
+        let code = try XCTUnwrap(URLComponents(url: invitation.url(), resolvingAgainstBaseURL: false)?.queryItems?.first?.value)
+        XCTAssertEqual(try LinkInvitation(text: code.prefix(20) + "\r\n" + code.dropFirst(20).prefix(10) + "\t\u{00A0}" + code.dropFirst(30)),
+                       invitation)
+    }
+
     /// A background's name comes from the Hub, so a device uses only the Hub's own kind of name for a
     /// file: never a path, nor anything that leaves the folder it is kept in.
     /// The line under Sharing says who can talk to the bot, as people are picked.

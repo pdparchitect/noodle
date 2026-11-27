@@ -6,6 +6,10 @@
 
 - Noodle's source is now under the Functional Source License instead of Apache 2.0: free to use, read and change for anything except a competing product, and each version becomes Apache 2.0 two years after its release. Earlier versions stay under Apache 2.0.
 
+### Fixed
+
+- An invitation link or code that picked up spaces or line breaks on its way, such as one copied from a terminal where a long link wraps, is accepted instead of being called not an invitation.
+
 ## [0.61.1] - 2026-11-26
 
 ### Added
