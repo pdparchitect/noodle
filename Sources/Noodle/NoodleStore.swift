@@ -158,6 +158,10 @@ final class NoodleStore {
         markConversationRead(conversationID)
     }
 
+    func canSendDraft(to conversationID: UUID) -> Bool {
+        drafts[conversationID].canSend
+    }
+
     /// Empties the composer, both what was written and what was attached to it.
     func clearDraft(for conversationID: UUID) {
         drafts.clear(conversationID)
@@ -778,9 +782,8 @@ final class NoodleStore {
         )
     }
 
-    /// When anything was last said, by anyone; renaming or editing does not count.
-    private func lastMessageDate(of conversation: BotConversation) -> Date {
-        messages(in: conversation.id).last?.createdAt ?? conversation.createdAt
+    func lastMessageDate(of conversation: BotConversation) -> Date {
+        conversation.lastMessageDate(in: messages(in: conversation.id))
     }
 
     var pinnedConversations: [BotConversation] { sidebarSections(.standard).pinned }
@@ -1064,13 +1067,8 @@ final class NoodleStore {
         participants(for: conversation).filter { $0.archivedAt == nil }
     }
 
-    /// The bots a conversation's picture and member line show: archived bots leave a group's
-    /// unless every one is archived; a direct conversation always shows its bot.
     func shownParticipants(for conversation: BotConversation) -> [AgentRecord] {
-        let all = participants(for: conversation)
-        guard conversation.kind == .group else { return all }
-        let active = all.filter { $0.archivedAt == nil }
-        return active.isEmpty ? all : active
+        conversation.shownParticipants(among: agents)
     }
 
     /// Why nothing can be sent here, shown in place of the composer's prompt.
@@ -2111,9 +2109,9 @@ final class NoodleStore {
 
     func sendDraft(to conversationID: UUID) {
         guard let conversation = conversations.first(where: { $0.id == conversationID }) else { return }
+        guard canSendDraft(to: conversationID) else { return }
         let body = draft(for: conversationID).trimmingCharacters(in: .whitespacesAndNewlines)
         let pendingAttachments = pendingAttachments(for: conversationID)
-        guard !body.isEmpty || !pendingAttachments.isEmpty else { return }
 
         do {
             let message = try PersonMessage.send(body, files: pendingAttachments, to: conversation,
@@ -2671,9 +2669,7 @@ final class NoodleStore {
     }
 
     func participants(for conversation: BotConversation) -> [AgentRecord] {
-        conversation.participantIDs.compactMap { id in
-            agents.first(where: { $0.id == id })
-        }
+        conversation.participants(among: agents)
     }
 
     func toggleReaction(_ emoji: String, on message: ChatMessage) {
@@ -2834,11 +2830,7 @@ final class NoodleStore {
     }
 
     func title(for conversation: BotConversation) -> String {
-        if conversation.kind == .direct,
-           let agent = participants(for: conversation).first {
-            return ConversationName.display(agent.displayName)
-        }
-        return ConversationName.display(conversation.displayName)
+        conversation.title(among: agents)
     }
 
     /// What was last said, by the person or a bot; the app's own notices, such as a bot being back on its first
@@ -2917,11 +2909,6 @@ final class NoodleStore {
         connectionsController.stopWatching()
         runtime.stopAll()
     }
-}
-
-extension BotConversation {
-    /// A conversation someone this Mac's bot is shared with keeps with it through a Hub is theirs; the bot reads it here.
-    var isShownHere: Bool { guest == nil }
 }
 
 /// A button the error alert adds for one message, such as the steps that fix it.

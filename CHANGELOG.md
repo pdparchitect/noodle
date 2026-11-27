@@ -6,6 +6,10 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Fixed
+
+- A row in the sidebar shows when its last message came, as its place in the list does, instead of when the group was last edited.
+
 ## [0.99.0] - 2026-11-27
 
 ### Added

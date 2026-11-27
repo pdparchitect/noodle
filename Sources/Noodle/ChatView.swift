@@ -388,10 +388,7 @@ private struct ComposerDraftInput: View {
     let controlHeight: CGFloat
     let sendControlWidth: CGFloat
 
-    private var cannotSend: Bool {
-        store.draft(for: conversation.id).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            store.pendingAttachments(for: conversation.id).isEmpty
-    }
+    private var cannotSend: Bool { !store.canSendDraft(to: conversation.id) }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {

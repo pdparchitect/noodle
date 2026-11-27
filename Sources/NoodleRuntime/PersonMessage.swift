@@ -1,6 +1,5 @@
 import Foundation
 import NoodleCore
-import NoodleRuntime
 
 /// The person's message, in every app: written to the conversation, then the conversation's bots are woken, its
 /// lead and anyone it names first. The app shows it, reads the conversation and passes it to a call itself.

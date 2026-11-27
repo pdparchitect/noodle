@@ -214,6 +214,21 @@ import XCTest
         XCTAssertEqual(f.store.directConversations.map(\.id), [f.directA.id, f.directB.id])
     }
 
+    /// The row's time is when anything was last said, as its place in the list is: an edit made today does not
+    /// make a conversation look newer than its neighbours.
+    func testRowTimeIsTheLastMessageNotTheLastEdit() throws {
+        let f = try fixture(), now = Date(), earlier = now.addingTimeInterval(-3 * 86_400)
+        try f.repository.append(ChatMessage(conversationID: f.directB.id, author: .user, body: "Earlier",
+                                            createdAt: earlier, delivery: .delivered))
+        var edited = try XCTUnwrap(f.store.conversations.first { $0.id == f.directB.id })
+        edited.updatedAt = now
+        try f.repository.updateConversation(edited)
+        f.store.refreshTranscripts()
+        let row = ConversationRowContent(try XCTUnwrap(f.store.conversations.first { $0.id == f.directB.id }),
+                                         store: f.store, detail: .standard)
+        XCTAssertEqual(row.timestamp, SidebarTimestamp.text(for: earlier))
+    }
+
     func testConversationOrderMovesUnreadButNeverPins() throws {
         let f = try fixture(), third = try f.runtime.agent("Linus")
         f.store.reload()

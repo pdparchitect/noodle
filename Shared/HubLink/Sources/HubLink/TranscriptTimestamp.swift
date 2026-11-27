@@ -30,3 +30,18 @@ public enum TranscriptTimestamp {
         return "\(day) \(time)"
     }
 }
+
+/// A conversation list row's time: the time for today, day and month for this year, and the year only when it differs.
+public enum SidebarTimestamp {
+    public static func text(
+        for date: Date, now: Date = .now, calendar: Calendar = .current, locale: Locale = .current
+    ) -> String {
+        var style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+        if calendar.isDate(date, inSameDayAs: now) {
+            return date.formatted(style.hour().minute())
+        }
+        style = style.day().month(.abbreviated)
+        if !calendar.isDate(date, equalTo: now, toGranularity: .year) { style = style.year() }
+        return date.formatted(style)
+    }
+}

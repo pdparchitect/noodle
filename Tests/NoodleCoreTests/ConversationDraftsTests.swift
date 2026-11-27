@@ -14,6 +14,20 @@ final class ConversationDraftsTests: XCTestCase {
         XCTAssertEqual(drafts[group].text, "A separate group reply")
     }
 
+    /// Send waits for words or a file; spaces and new lines alone are not a message.
+    func testOnlyWordsOrFilesCanBeSent() {
+        var drafts = ConversationDrafts()
+        let id = UUID()
+        XCTAssertFalse(drafts[id].canSend)
+        drafts[id].text = "  \n "
+        XCTAssertFalse(drafts[id].canSend)
+        drafts[id].attachments = [attachment(in: id)]
+        XCTAssertTrue(drafts[id].canSend)
+        drafts[id].attachments = []
+        drafts[id].text = " Hi "
+        XCTAssertTrue(drafts[id].canSend)
+    }
+
     func testClearingSentDraftDoesNotClearAnotherChat() {
         var drafts = ConversationDrafts()
         let first = UUID(), second = UUID()

@@ -181,21 +181,6 @@ enum TaskState {
     }
 }
 
-/// Time for today, day and month for this year, and the year only when it differs.
-enum SidebarTimestamp {
-    static func text(
-        for date: Date, now: Date = .now, calendar: Calendar = .current, locale: Locale = .current
-    ) -> String {
-        var style = Date.FormatStyle(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
-        if calendar.isDate(date, inSameDayAs: now) {
-            return date.formatted(style.hour().minute())
-        }
-        style = style.day().month(.abbreviated)
-        if !calendar.isDate(date, equalTo: now, toGranularity: .year) { style = style.year() }
-        return date.formatted(style)
-    }
-}
-
 /// The tool connections at the foot of the sidebar when View › Sidebar › Show Tools is on: a red dot marks
 /// one waiting on the person to sign in or look at a failure. Clicking one opens its page: where the app shows it, or
 /// in a window of its own.

@@ -31,19 +31,10 @@ struct MessageDeliveryLabel: View {
     let delivery: MessageDelivery
 
     var body: some View {
-        Text(Self.title(delivery))
+        Text(delivery.title)
             .font(.system(size: 9.5))
             .modifier(TranscriptCaptionStyle(style: .tertiary))
             .padding(.trailing, 5)
-    }
-
-    static func title(_ delivery: MessageDelivery) -> String {
-        switch delivery {
-        case .saved: "Saved"
-        case .queued: "Sent"
-        case .delivered: "Delivered"
-        case .failed: "Not delivered"
-        }
     }
 }
 

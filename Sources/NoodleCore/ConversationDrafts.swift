@@ -10,6 +10,11 @@ public struct ConversationDrafts {
         public init() {}
 
         public var isEmpty: Bool { text.isEmpty && attachments.isEmpty }
+
+        /// Whether Send has something to send, in every app: words or a file; spaces and new lines alone are not a message.
+        public var canSend: Bool {
+            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
+        }
     }
 
     private var drafts: [UUID: Draft] = [:]

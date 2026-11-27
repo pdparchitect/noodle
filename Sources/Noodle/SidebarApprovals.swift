@@ -1,4 +1,5 @@
 import AppKit
+import HubLink
 import NoodleCore
 import SwiftUI
 

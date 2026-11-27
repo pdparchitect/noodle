@@ -256,7 +256,7 @@ private struct SidebarList: View {
 }
 
 /// What a sidebar row shows. The list works it out, so a message or a status change redraws only the rows it changes.
-private struct ConversationRowContent: Equatable {
+struct ConversationRowContent: Equatable {
     var participants: [AgentRecord]
     var title: String
     var timestamp: String
@@ -270,7 +270,7 @@ private struct ConversationRowContent: Equatable {
     @MainActor init(_ conversation: BotConversation, store: NoodleStore, detail: ConversationRowDetail) {
         participants = store.shownParticipants(for: conversation)
         title = store.title(for: conversation)
-        timestamp = SidebarTimestamp.text(for: conversation.updatedAt)
+        timestamp = SidebarTimestamp.text(for: store.lastMessageDate(of: conversation))
         pause = store.sidebarPauseSummary(for: conversation)
         self.detail = store.sidebarDetail(for: conversation, showing: detail)
         runtimeStatus = store.runtimeStatus(for: conversation)

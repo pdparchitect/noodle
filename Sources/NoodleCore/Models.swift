@@ -157,12 +157,54 @@ extension BotConversation {
         return participantIDs.first.flatMap { id in agents.first { $0.id == id } }?.archivedAt != nil
     }
 
+    /// A conversation someone this Mac's bot is shared with keeps with it through a Hub is theirs; the bot reads it here.
+    public var isShownHere: Bool { guest == nil }
+
+    /// The conversation's bots that are still there, in its own order.
+    public func participants(among agents: [AgentRecord]) -> [AgentRecord] {
+        participantIDs.compactMap { id in agents.first { $0.id == id } }
+    }
+
+    /// The bots a conversation's picture and member line show: archived bots leave a group's unless every one is
+    /// archived; a direct conversation always shows its bot.
+    public func shownParticipants(among agents: [AgentRecord]) -> [AgentRecord] {
+        let all = participants(among: agents)
+        guard kind == .group else { return all }
+        let active = all.filter { $0.archivedAt == nil }
+        return active.isEmpty ? all : active
+    }
+
+    /// What a front end calls the conversation: a bot's own by the bot's name, a group by its own.
+    public func title(among agents: [AgentRecord]) -> String {
+        if kind == .direct, let agent = participants(among: agents).first { return ConversationName.display(agent.displayName) }
+        return ConversationName.display(displayName)
+    }
+
+    /// When anything was last said, by anyone, given its messages oldest first; renaming or editing does not count.
+    /// The conversation list orders by it and shows it on each row.
+    public func lastMessageDate(in messages: [ChatMessage]) -> Date {
+        messages.last?.createdAt ?? createdAt
+    }
+
     /// Whether a group's sheet changes it, in every app, so Save waits for a change: its name, description, members,
     /// folders or lead. Spaces around the words and the members' order are not a change.
     public func editChanges(name: String, description: String, members: Set<UUID>, folders: [AgentFolder], lead: UUID?) -> Bool {
         name.trimmingCharacters(in: .whitespacesAndNewlines) != displayName
             || description.trimmingCharacters(in: .whitespacesAndNewlines) != (publicDescription ?? "")
             || members != Set(participantIDs) || folders != (self.folders ?? []) || lead != self.lead
+    }
+}
+
+/// Why nothing can be sent in a conversation, as its message field says in every app, or nil when something can.
+public enum ComposerAvailability {
+    /// `members` are the conversation's participants, archived ones included; `member` is what the app calls them.
+    public static func unavailableReason(for conversation: BotConversation, members: [AgentRecord], member: String) -> String? {
+        if conversation.kind == .group {
+            if conversation.archivedAt != nil { return "This group is archived" }
+            return !members.isEmpty && members.allSatisfy({ $0.archivedAt != nil }) ? "Every \(member) in this group is archived" : nil
+        }
+        guard let agent = members.first, agent.archivedAt != nil else { return nil }
+        return "\(agent.displayName) is archived"
     }
 }
 
@@ -188,6 +230,18 @@ public enum MessageDelivery: String, Codable, Hashable, Sendable {
     case queued
     case delivered
     case failed
+}
+
+extension MessageDelivery {
+    /// Under the person's own message, in every app: whether it reached the conversation, and whether a bot got it.
+    public var title: String {
+        switch self {
+        case .saved: "Saved"
+        case .queued: "Sent"
+        case .delivered: "Delivered"
+        case .failed: "Not delivered"
+        }
+    }
 }
 
 public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
