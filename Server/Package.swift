@@ -37,9 +37,10 @@ let package = Package(
             .product(name: "WindowsPOSIX", package: "WindowsPOSIX", condition: .when(platforms: [.windows])),
             .target(name: "CWindowsSandbox", condition: .when(platforms: [.windows])),
         ], linkerSettings: [.linkedLibrary("iphlpapi", .when(platforms: [.windows])), .linkedLibrary("ws2_32", .when(platforms: [.windows]))]),
-        /// AppContainers and jobs for bots' harnesses on Windows; empty elsewhere.
+        /// Bots' sandboxes and jobs on Windows; empty elsewhere.
         .target(name: "CWindowsSandbox", linkerSettings: [.linkedLibrary("userenv", .when(platforms: [.windows])),
-                                                          .linkedLibrary("advapi32", .when(platforms: [.windows]))]),
+                                                          .linkedLibrary("advapi32", .when(platforms: [.windows])),
+                                                          .linkedLibrary("user32", .when(platforms: [.windows]))]),
         .executableTarget(name: "noodled", dependencies: [
             "ServerCore", .product(name: "HubWire", package: "HubLink"), .product(name: "NoodleCore", package: "Noodle"),
             .product(name: "WindowsPOSIX", package: "WindowsPOSIX", condition: .when(platforms: [.windows])),

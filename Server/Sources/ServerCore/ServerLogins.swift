@@ -65,7 +65,13 @@ public struct ServerLogins: Sendable {
     /// What a harness working on `login` itself runs with, such as to sign in or renew it: the login's
     /// folder in place of a home.
     public func environment(_ login: HarnessProfile) -> [String: String] {
+        #if os(Windows)
+        let home = profiles.loginHome(login), temporary = home.appendingPathComponent("tmp", isDirectory: true)
+        try? FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+        return profiles.environment(login, over: RestrictedTokenSandbox.environment(home: home, temporary: temporary))
+        #else
         profiles.environment(login, over: ["HOME": profiles.loginHome(login).path, "PATH": Self.searchPath, "LANG": "C.UTF-8"])
+        #endif
     }
 
     /// Where a harness working on a login looks for programs. On a Mac, Claude Code keeps its login in the Keychain

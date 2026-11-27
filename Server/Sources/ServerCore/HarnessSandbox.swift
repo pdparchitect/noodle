@@ -118,6 +118,8 @@ public struct HarnessSandbox: Sendable {
     static func searchPath(home: URL) -> String {
         #if os(macOS)
         RestrictedAgentSandbox.searchPath(home: home)
+        #elseif os(Windows)
+        RestrictedTokenSandbox.searchPath
         #else
         "/usr/local/bin:/usr/bin:/bin"
         #endif

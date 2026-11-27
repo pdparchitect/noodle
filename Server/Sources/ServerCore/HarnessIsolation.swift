@@ -1,8 +1,8 @@
 import Foundation
 import NoodleCore
 
-/// How this machine keeps a bot's harness to its own bot: bubblewrap on Linux, Seatbelt on a Mac, an AppContainer on
-/// Windows. The server
+/// How this machine keeps a bot's harness to its own bot: bubblewrap on Linux, Seatbelt on a Mac, a restricted token
+/// on Windows. The server
 /// checks `problem()` before it starts, and launches each harness from the plan `launch` makes.
 public protocol HarnessIsolation: Sendable {
     /// Why bots cannot be isolated here, or nil when they can.
@@ -34,8 +34,8 @@ public struct HarnessLaunchPlan: Equatable, Sendable {
     /// isolation that does not end a harness's tools with it, as bubblewrap does.
     public var endsGroup: Bool
     #if os(Windows)
-    /// The AppContainer it runs in.
-    public var container: AppContainerPlan?
+    /// The name of the bot's own SID, which its sandbox is made with.
+    public var sandbox: String?
     #endif
 
     public init(name: String, executable: URL, arguments: [String], environment: [String: String], directory: URL?,
@@ -49,18 +49,10 @@ public struct HarnessLaunchPlan: Equatable, Sendable {
     }
 }
 
-#if os(Windows)
-/// A bot's AppContainer: its name, and whether it also goes without what Windows lets every app read.
-public struct AppContainerPlan: Equatable, Sendable {
-    public var name: String
-    public var lessPrivileged: Bool
-}
-#endif
-
 #if os(Linux)
 public typealias PlatformHarnessIsolation = HarnessSandbox
 #elseif os(macOS)
 public typealias PlatformHarnessIsolation = SeatbeltSandbox
 #elseif os(Windows)
-public typealias PlatformHarnessIsolation = AppContainerSandbox
+public typealias PlatformHarnessIsolation = RestrictedTokenSandbox
 #endif

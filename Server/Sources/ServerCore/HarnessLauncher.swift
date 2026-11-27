@@ -98,13 +98,13 @@ private func send(_ signal: Int32, to target: pid_t) {
 #elseif os(Windows)
 public typealias PlatformHarnessLauncher = WindowsHarnessLauncher
 
-/// A harness started in its plan's AppContainer, inside a job that ends everything it started. Windows has no
+/// A harness started in its plan's sandbox, inside a job that ends everything it started. Windows has no
 /// gentler way to ask a process to end, so ending it, whether asked or forced, ends the job; so does the harness
 /// exiting, which would otherwise leave its tools holding its output open.
 @MainActor public final class WindowsHarnessLauncher: HarnessLauncher {
     /// The child's handles, which belong to whichever thread is using them.
     private struct Handles: @unchecked Sendable {
-        var input, output, errors, process, job: UnsafeMutableRawPointer?
+        var input, output, errors, process, job, console, consoleInput: UnsafeMutableRawPointer?
     }
 
     private var handles: Handles?
@@ -114,16 +114,17 @@ public typealias PlatformHarnessLauncher = WindowsHarnessLauncher
 
     public func run(_ plan: HarnessLaunchPlan, received: @escaping @MainActor (Data, Bool) -> Void,
                     closed: @escaping @MainActor () -> Void, exited: @escaping @MainActor (Int32) -> Void) throws -> Int32 {
-        guard let container = plan.container else { throw HarnessSetupError("\(plan.name) has no AppContainer to run in.") }
-        let sid = try AppContainerSandbox.container(container.name)
+        guard let name = plan.sandbox else { throw HarnessSetupError("\(plan.name) has no sandbox to run in.") }
+        let sid = try RestrictedTokenSandbox.bot(name)
         defer { sandbox_free_sid(sid) }
         var child = sandbox_child()
-        let error = AppContainerSandbox.spawn(plan, sid: sid, lessPrivileged: container.lessPrivileged, into: &child)
+        let error = RestrictedTokenSandbox.spawn(plan, sid: sid, into: &child)
         guard error == 0 else { throw HarnessSetupError("Windows error \(error)") }
-        let handles = Handles(input: child.input, output: child.output, errors: child.errors, process: child.process, job: child.job)
+        let handles = Handles(input: child.input, output: child.output, errors: child.errors, process: child.process, job: child.job,
+                              console: child.console, consoleInput: child.consoleInput)
         self.handles = handles
         for (pipe, isError) in [(handles.output, false), (handles.errors, true)] {
-            let source = Handles(input: nil, output: pipe, errors: nil, process: nil, job: nil)
+            let source = Handles(input: nil, output: pipe, errors: nil, process: nil, job: nil, console: nil, consoleInput: nil)
             Thread {
                 var buffer = [UInt8](repeating: 0, count: 65536)
                 while true {
@@ -141,6 +142,7 @@ public typealias PlatformHarnessLauncher = WindowsHarnessLauncher
             let status = sandbox_wait(handles.process)
             sandbox_end(handles.job, status)
             sandbox_close(handles.process)
+            sandbox_close_console(handles.console, handles.consoleInput)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { exited(Int32(bitPattern: status)) }
             }

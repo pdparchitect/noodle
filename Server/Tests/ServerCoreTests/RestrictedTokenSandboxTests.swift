@@ -4,9 +4,9 @@ import NoodleCore
 @testable import ServerCore
 import XCTest
 
-/// What a bot's AppContainer lets its harness reach on Windows, tried for real: its workspace to write, its
+/// What a bot's sandbox lets its harness reach on Windows, tried for real: its workspace to write, its
 /// package to read, and nothing of other bots or the server account's home. Ending the harness ends its tools.
-@MainActor final class AppContainerSandboxTests: XCTestCase {
+@MainActor final class RestrictedTokenSandboxTests: XCTestCase {
     private var root: URL!
     private var workspace: URL { root.appendingPathComponent("Agents/a/workspace", isDirectory: true) }
     private var package: URL { root.appendingPathComponent("Agents/a", isDirectory: true) }
@@ -15,7 +15,7 @@ import XCTest
     private var shell: URL { URL(fileURLWithPath: system).appendingPathComponent("System32/cmd.exe") }
 
     override func setUp() async throws {
-        root = FileManager.default.temporaryDirectory.appendingPathComponent("noodled-container-\(UUID().uuidString)")
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("noodled-sandbox-\(UUID().uuidString)")
         for folder in [workspace, other] { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
         try Data("package".utf8).write(to: package.appendingPathComponent("bot.json"))
         try Data("other".utf8).write(to: other.appendingPathComponent("secret.txt"))
@@ -25,9 +25,9 @@ import XCTest
         try? FileManager.default.removeItem(at: root)
     }
 
-    /// Runs `command` through cmd.exe in the bot's container and returns its status and output.
+    /// Runs `command` through cmd.exe in the bot's sandbox and returns its status and output.
     private func run(_ command: String) throws -> (status: Int32, output: String) {
-        let sandbox = AppContainerSandbox()
+        let sandbox = RestrictedTokenSandbox()
         let plan = try sandbox.launch(workspace: workspace, program: shell, command: ["/d", "/c", command],
                                       environment: try sandbox.environment(provider: .claudeCode, workspace: workspace))
         let launcher = WindowsHarnessLauncher()
@@ -52,13 +52,13 @@ import XCTest
     }
 
     func testOtherBotsAndTheServersHomeAreOutOfReach() throws {
-        let otherBot = try run("type \"\(AppContainerSandbox.native(other.appendingPathComponent("secret.txt")))\"")
+        let otherBot = try run("type \"\(RestrictedTokenSandbox.native(other.appendingPathComponent("secret.txt")))\"")
         XCTAssertNotEqual(otherBot.status, 0, otherBot.output)
         XCTAssertFalse(otherBot.output.contains("other"), otherBot.output)
         let home = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("noodled-home-\(UUID().uuidString).txt")
         try Data("home".utf8).write(to: home)
         defer { try? FileManager.default.removeItem(at: home) }
-        let homeRead = try run("type \"\(AppContainerSandbox.native(home))\"")
+        let homeRead = try run("type \"\(RestrictedTokenSandbox.native(home))\"")
         XCTAssertNotEqual(homeRead.status, 0, homeRead.output)
         XCTAssertFalse(homeRead.output.contains("home"), homeRead.output)
     }
@@ -76,12 +76,41 @@ import XCTest
         XCTAssertLessThan(Date().timeIntervalSince(start), 15)
     }
 
+    /// The real Codex, started as the server starts a bot's, answers from its sandbox. It needs no sign-in to
+    /// answer `initialize`; set NOODLED_TEST_CODEX to its executable to run this.
+    func testCodexAnswersFromItsSandbox() throws {
+        guard let path = ProcessInfo.processInfo.environment["NOODLED_TEST_CODEX"] else {
+            throw XCTSkip("Set NOODLED_TEST_CODEX to a Codex executable.")
+        }
+        let sandbox = RestrictedTokenSandbox()
+        var command = try HarnessSandbox.command(provider: .codex, workspace: workspace, sessionID: nil, resumeSession: false,
+                                                 model: nil, effort: nil)
+        command.environment.merge(try sandbox.environment(provider: .codex, workspace: workspace)) { _, isolation in isolation }
+        try FileManager.default.createDirectory(at: HarnessSandbox.home(workspace: workspace).appendingPathComponent(".codex"),
+                                                withIntermediateDirectories: true)
+        let plan = try sandbox.launch(workspace: workspace, program: URL(fileURLWithPath: path).resolvingSymlinksInPath(),
+                                      command: command.arguments, environment: command.environment)
+        let launcher = WindowsHarnessLauncher()
+        var output = Data(), errors = Data(), status: Int32?
+        _ = try launcher.run(plan, received: { data, isError in isError ? errors.append(data) : output.append(data) },
+                             closed: {}, exited: { status = $0 })
+        launcher.write(Data(#"{"id":1,"method":"initialize","params":{"clientInfo":{"name":"noodle","title":"Noodle","version":"0"},"capabilities":{"experimentalApi":true}}}"#.utf8 + [10]))
+        let deadline = Date().addingTimeInterval(30)
+        while !String(decoding: output, as: UTF8.self).contains(#""id":1"#), status == nil, Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+        launcher.kill()
+        let answer = String(decoding: output, as: UTF8.self)
+        XCTAssertTrue(answer.contains(#""id":1"#) && answer.contains("result"),
+                      "status \(status.map(String.init) ?? "running"); output: \(answer); errors: \(String(decoding: errors, as: UTF8.self))")
+    }
+
     func testCommandLinesSplitBackIntoTheSameArguments() {
-        XCTAssertEqual(AppContainerSandbox.quote("plain"), "plain")
-        XCTAssertEqual(AppContainerSandbox.quote("two words"), "\"two words\"")
-        XCTAssertEqual(AppContainerSandbox.quote(""), "\"\"")
-        XCTAssertEqual(AppContainerSandbox.quote(#"say "hi""#), #""say \"hi\"""#)
-        XCTAssertEqual(AppContainerSandbox.quote(#"C:\a b\"#), #""C:\a b\\""#)
+        XCTAssertEqual(RestrictedTokenSandbox.quote("plain"), "plain")
+        XCTAssertEqual(RestrictedTokenSandbox.quote("two words"), "\"two words\"")
+        XCTAssertEqual(RestrictedTokenSandbox.quote(""), "\"\"")
+        XCTAssertEqual(RestrictedTokenSandbox.quote(#"say "hi""#), #""say \"hi\"""#)
+        XCTAssertEqual(RestrictedTokenSandbox.quote(#"C:\a b\"#), #""C:\a b\\""#)
     }
 }
 #endif
