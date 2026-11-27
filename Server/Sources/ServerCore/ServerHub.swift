@@ -27,11 +27,11 @@ import NoodleRuntime
     public init(configuration: ServerConfiguration, listen: @escaping LinkListen) throws {
         let root = configuration.data
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        repository = WorkspaceRepository(rootURL: root)
+        repository = WorkspaceRepository(rootURL: root, launcherExecutableURL: HarnessSandbox.messenger)
         try repository.prepare()
         // Bots run the harnesses the file names, from where it says, by the server itself: under bubblewrap on
-        // Linux, and under Seatbelt on a Mac.
-        #if os(Linux) || os(macOS)
+        // Linux, under Seatbelt on a Mac, and with a restricted token on Windows.
+        #if os(Linux) || os(macOS) || os(Windows)
         let logins = ServerLogins(configuration: configuration, profiles: repository.harnessProfiles)
         runtime = AgentRuntimeCoordinator(discovery: HarnessDiscovery(fixed: configuration.harnesses), harnesses: HarnessSelection(),
                                           makeProcess: { [logins] launch in
@@ -80,7 +80,9 @@ import NoodleRuntime
         link.manualAddress = configuration.address ?? ""
     }
 
-    public func start() async {
+    /// Starts the bots, as Noodle Hub does before it listens, then serves devices.
+    public func start() async throws {
+        try bots.start()
         await link.start()
     }
 

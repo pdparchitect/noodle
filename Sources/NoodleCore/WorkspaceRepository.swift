@@ -379,7 +379,7 @@ public struct WorkspaceRepository: Sendable {
         try WorkspaceMailbox(workspace: directory, path: ".agents/skills/preferences-and-memory", create: true)
             .writeData(Data(Self.preferencesAndMemorySkill.utf8), named: "SKILL.md")
         if let launcherExecutableURL {
-            try messengerFiles.symlink("messenger", destination: launcherExecutableURL.path)
+            try messengerFiles.symlink(MessengerCLI.executableName, destination: launcherExecutableURL.path)
         }
         return skillsChanged
     }

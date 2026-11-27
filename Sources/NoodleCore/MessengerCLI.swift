@@ -17,10 +17,22 @@ public enum MessengerCLI {
     /// How many messages --list-messages returns at a time, the newest first page.
     public static let messagePageSize = 100
 
+    /// What the command is called in a bot's workspace: on Windows, a program needs its extension to run.
+    public static var executableName: String {
+        #if os(Windows)
+        "messenger.exe"
+        #else
+        "messenger"
+        #endif
+    }
+
+    static func isMessenger(_ url: URL) -> Bool {
+        url.lastPathComponent == "messenger" || url.lastPathComponent.lowercased() == "messenger.exe"
+    }
+
     public static func shouldHandle(arguments: [String] = CommandLine.arguments) -> Bool {
         guard let executable = arguments.first else { return false }
-        return URL(fileURLWithPath: executable).lastPathComponent == "messenger" ||
-            arguments.dropFirst().first == "messenger"
+        return isMessenger(URL(fileURLWithPath: executable)) || arguments.dropFirst().first == "messenger"
     }
 
     public static func run(
@@ -441,7 +453,7 @@ public enum MessengerCLI {
             )
             let executableURL = URL(fileURLWithPath: executable, relativeTo: currentDirectory)
                 .standardizedFileURL
-            guard executableURL.lastPathComponent == "messenger" else {
+            guard MessengerCLI.isMessenger(executableURL) else {
                 throw WorkspaceError.invalidAgentDirectory
             }
             return executableURL

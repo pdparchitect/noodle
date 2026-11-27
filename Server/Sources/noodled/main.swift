@@ -8,6 +8,14 @@ import NoodleCore
 import HubLink
 import ServerCore
 
+// Each bot's workspace links its messenger to noodled, which is the messenger when started under that name.
+if MessengerCLI.shouldHandle() {
+    let result = MessengerCLI.run()
+    FileHandle.standardOutput.write(Data(result.standardOutput.utf8))
+    FileHandle.standardError.write(Data(result.standardError.utf8))
+    exit(result.exitCode)
+}
+
 let usage = """
 USAGE: noodled <command> [--config <path>]
 
@@ -93,7 +101,7 @@ case "run":
     Task { @MainActor in
         do {
             let hub = try ServerHub(configuration: configuration, listen: listen)
-            await hub.start()
+            try await hub.start()
             guard case .listening(let port) = hub.link.state else {
                 print("noodled could not start: \(hub.link.state)")
                 exit(1)

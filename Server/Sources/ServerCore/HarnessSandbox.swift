@@ -22,12 +22,21 @@ public struct HarnessSandbox: Sendable {
                                    "localtime", "ssl", "ca-certificates", "pki", "alternatives", "ld.so.cache", "ld.so.conf",
                                    "ld.so.conf.d", "mime.types"]
 
-    /// What a bot's harness may reach on the server: its workspace, its package and the harness's installation.
-    /// The person's shared folders and the silo's egress are for later; every backend renders them already.
+    /// What a bot's harness may reach on the server: its workspace, its package, the harness's installation and
+    /// the server's own folder, for its messenger. The person's shared folders and the silo's egress are for later;
+    /// every backend renders them already.
     public static func policy(workspace: URL, program: URL) -> HarnessSandboxPolicy {
         HarnessSandboxPolicy(workspace: workspace,
-                             readable: [AgentStorageLayout(workspace: workspace).package.path, installation(of: program).path],
+                             readable: [AgentStorageLayout(workspace: workspace).package.path, installation(of: program).path]
+                                + (messenger.map { [$0.deletingLastPathComponent().path] } ?? []),
                              executable: program.path)
+    }
+
+    /// What each bot's workspace links its messenger to: noodled itself, which is the messenger when started under
+    /// that name. Nil when something else is running, such as tests.
+    public static var messenger: URL? {
+        guard let program = Bundle.main.executableURL, program.deletingPathExtension().lastPathComponent == "noodled" else { return nil }
+        return program
     }
 
     /// bubblewrap's arguments for running `program`, already resolved, with `command` in `policy`'s workspace.

@@ -15,6 +15,10 @@
 - Codex bots no longer download OpenAI's plugin catalog or the plugins installed on the ChatGPT account, which are made for ChatGPT and which no bot used, and the copies already in each bot, tens of megabytes apiece, are removed.
 - Noodle's source is now under the Functional Source License instead of Apache 2.0: free to use, read and change for anything except a competing product, and each version becomes Apache 2.0 two years after its release. Earlier versions stay under Apache 2.0.
 
+### Fixed
+
+- Bots run and answer: the server starts them when it starts and as soon as they are made, and gives each the messenger it reads and sends messages with. Until now they stayed offline and never answered.
+
 ## [0.5.0] - 2026-11-26
 
 ### Changed

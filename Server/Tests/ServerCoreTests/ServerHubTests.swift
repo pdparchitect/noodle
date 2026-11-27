@@ -30,7 +30,7 @@ import XCTest
         let listen = LinkServer.listen
         #endif
         let hub = try ServerHub(configuration: configuration, listen: listen)
-        await hub.start()
+        try await hub.start()
         addTeardownBlock { await MainActor.run { hub.stop() } }
         guard case .listening = hub.link.state else { throw XCTSkip("Could not listen: \(hub.link.state)") }
 
@@ -42,6 +42,8 @@ import XCTest
         guard case .bot(let bot) = try await device.request(.createBot(LinkBotDraft(name: "Alfred", provider: "claude-code"))) else {
             return XCTFail("no bot")
         }
+        // The server runs its bots: a new one is started at once, not left as never started.
+        XCTAssertNotEqual(hub.runtime.snapshot(for: bot.id).phase, .offline, hub.runtime.snapshot(for: bot.id).detail)
         _ = try await device.request(.send(LinkOutgoingMessage(conversationID: bot.conversationID, id: UUID(), body: "Hi")))
         guard case .messages(let page) = try await device.request(.messages(conversationID: bot.conversationID, after: 0)) else {
             return XCTFail("no messages")
