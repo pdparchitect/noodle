@@ -4,6 +4,9 @@ import CryptoKit
 import Crypto
 #endif
 import Foundation
+#if os(Windows)
+import WindowsPOSIX
+#endif
 import ProductIdentity
 #if canImport(SQLite3)
 import SQLite3

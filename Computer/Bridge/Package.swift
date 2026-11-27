@@ -2,9 +2,10 @@
 import PackageDescription
 let package = Package(name: "ComputerBridge", platforms: [.macOS(.v15)],
     products: [.library(name: "ComputerBridge", targets: ["ComputerBridge"])],
-    dependencies: [.package(path: "../../Shared/Surface")],
+    dependencies: [.package(path: "../../Shared/Surface"), .package(path: "../../Shared/WindowsPOSIX")],
     targets: [.target(name: "ComputerBridge", dependencies: [.product(name: "SurfaceWire", package: "Surface"),
-                  .product(name: "Surface", package: "Surface", condition: .when(platforms: [.macOS, .iOS]))]),
+                  .product(name: "Surface", package: "Surface", condition: .when(platforms: [.macOS, .iOS])),
+                  .product(name: "WindowsPOSIX", package: "WindowsPOSIX", condition: .when(platforms: [.windows]))]),
               .executableTarget(name: "ComputerBridgeProbe", dependencies: ["ComputerBridge"]),
               .testTarget(name: "ComputerBridgeTests", dependencies: ["ComputerBridge"])],
     swiftLanguageModes: [.v5])

@@ -2,6 +2,9 @@
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WindowsPOSIX
+import WinSDK
 #endif
 import Foundation
 import HubCore
@@ -90,34 +93,68 @@ import NoodleRuntime
 /// active interface. Loopback and link-local addresses are left out.
 public enum ServerAddresses {
     public static func local(port: UInt16) -> [LinkEndpoint] {
-        var list: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&list) == 0, let first = list else { return [] }
-        defer { freeifaddrs(list) }
         var ipv4: [String] = [], ipv6: [String] = []
-        for pointer in sequence(first: first, next: { $0.pointee.ifa_next }) {
-            let entry = pointer.pointee
-            let flags = Int32(entry.ifa_flags)
-            guard flags & Int32(IFF_UP) != 0, flags & Int32(IFF_RUNNING) != 0, flags & Int32(IFF_LOOPBACK) == 0,
-                  let address = entry.ifa_addr else { continue }
+        forEachActiveAddress { address in
             switch Int32(address.pointee.sa_family) {
             case AF_INET:
                 var value = address.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr }
                 var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
-                guard inet_ntop(AF_INET, &value, &buffer, socklen_t(buffer.count)) != nil else { continue }
+                guard inet_ntop(AF_INET, &value, &buffer, numericCast(buffer.count)) != nil else { return }
                 let text = String(cString: buffer)
                 if !text.hasPrefix("169.254.") { ipv4.append(text) }
             case AF_INET6:
                 var value = address.withMemoryRebound(to: sockaddr_in6.self, capacity: 1) { $0.pointee.sin6_addr }
                 let bytes = withUnsafeBytes(of: value) { Array($0) }
-                guard !(bytes[0] == 0xFE && bytes[1] & 0xC0 == 0x80) else { continue }
+                guard !(bytes[0] == 0xFE && bytes[1] & 0xC0 == 0x80) else { return }
                 var buffer = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
-                guard inet_ntop(AF_INET6, &value, &buffer, socklen_t(buffer.count)) != nil else { continue }
+                guard inet_ntop(AF_INET6, &value, &buffer, numericCast(buffer.count)) != nil else { return }
                 ipv6.append(String(cString: buffer))
             default:
-                continue
+                return
             }
         }
         var seen = Set<String>()
         return (ipv4 + ipv6).filter { seen.insert($0).inserted }.map { LinkEndpoint(host: $0, port: port) }
+    }
+
+    /// Each address of each interface that is up and not loopback.
+    private static func forEachActiveAddress(_ body: (UnsafeMutablePointer<sockaddr>) -> Void) {
+        #if os(Windows)
+        var size: ULONG = 16 * 1024
+        var buffer = [UInt8]()
+        var result = DWORD(ERROR_BUFFER_OVERFLOW)
+        let flags = ULONG(GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER)
+        for _ in 0..<3 where result == DWORD(ERROR_BUFFER_OVERFLOW) {
+            buffer = [UInt8](repeating: 0, count: Int(size))
+            result = buffer.withUnsafeMutableBytes {
+                GetAdaptersAddresses(ULONG(AF_UNSPEC), flags, nil, $0.baseAddress?.assumingMemoryBound(to: IP_ADAPTER_ADDRESSES.self), &size)
+            }
+        }
+        guard result == DWORD(ERROR_SUCCESS) else { return }
+        buffer.withUnsafeMutableBytes { raw in
+            var adapter = raw.baseAddress?.assumingMemoryBound(to: IP_ADAPTER_ADDRESSES.self)
+            while let current = adapter {
+                if current.pointee.OperStatus == IfOperStatusUp, current.pointee.IfType != DWORD(IF_TYPE_SOFTWARE_LOOPBACK) {
+                    var unicast = current.pointee.FirstUnicastAddress
+                    while let entry = unicast {
+                        if let address = entry.pointee.Address.lpSockaddr { body(address) }
+                        unicast = entry.pointee.Next
+                    }
+                }
+                adapter = current.pointee.Next
+            }
+        }
+        #else
+        var list: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&list) == 0, let first = list else { return }
+        defer { freeifaddrs(list) }
+        for pointer in sequence(first: first, next: { $0.pointee.ifa_next }) {
+            let entry = pointer.pointee
+            let flags = Int32(entry.ifa_flags)
+            guard flags & Int32(IFF_UP) != 0, flags & Int32(IFF_RUNNING) != 0, flags & Int32(IFF_LOOPBACK) == 0,
+                  let address = entry.ifa_addr else { continue }
+            body(address)
+        }
+        #endif
     }
 }

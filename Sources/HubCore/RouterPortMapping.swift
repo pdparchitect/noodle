@@ -2,6 +2,10 @@ import Foundation
 #if canImport(FoundationXML)
 import FoundationXML
 #endif
+#if os(Windows)
+// inet_pton.
+import WinSDK
+#endif
 import HubWire
 
 /// A port the router forwards to this Mac, and the outside address devices reach it on.

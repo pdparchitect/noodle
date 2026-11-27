@@ -2,6 +2,8 @@
 import Glibc
 #elseif canImport(Darwin)
 import Darwin
+#elseif os(Windows)
+import WinSDK
 #endif
 import Foundation
 import NoodleCore
@@ -353,7 +355,16 @@ public struct LiveSetupSystem: SetupSystem {
         }
     }
 
-    public func hasUser(_ name: String) -> Bool { getpwnam(name) != nil }
+    public func hasUser(_ name: String) -> Bool {
+        #if os(Windows)
+        var sidSize: DWORD = 0, domainSize: DWORD = 0
+        var use = SID_NAME_USE(0)
+        _ = name.withCString(encodedAs: UTF16.self) { LookupAccountNameW(nil, $0, nil, &sidSize, nil, &domainSize, &use) }
+        return sidSize > 0
+        #else
+        getpwnam(name) != nil
+        #endif
+    }
 
     public func sandboxProblem() -> String? {
         #if os(Linux)

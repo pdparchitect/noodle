@@ -1,4 +1,7 @@
 import Foundation
+#if os(Windows)
+import WindowsPOSIX
+#endif
 import ProductIdentity
 
 /// A Vercel team FX can send model requests through.

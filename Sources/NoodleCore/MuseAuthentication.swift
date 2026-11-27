@@ -1,4 +1,7 @@
 import Foundation
+#if os(Windows)
+import WindowsPOSIX
+#endif
 
 /// Read only by the Agent Host. No credentials or account details leave this check.
 /// “Authenticated” means a saved login, not a verified remote account or credit balance.

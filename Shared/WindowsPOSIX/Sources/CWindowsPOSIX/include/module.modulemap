@@ -1,0 +1,4 @@
+// No `export *`: re-exporting the C runtime module would put its constants beside the CRT overlay's, ambiguously.
+module CWindowsPOSIX {
+    header "CWindowsPOSIX.h"
+}

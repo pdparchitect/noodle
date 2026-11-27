@@ -24,7 +24,7 @@ import XCTest
             plan: Family
         """)
         configuration.port = 0
-        #if os(Linux)
+        #if os(Linux) || os(Windows)
         let listen = QUICListener.listen(certificates: root.appendingPathComponent("Certificates"))
         #else
         let listen = LinkServer.listen

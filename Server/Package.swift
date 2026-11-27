@@ -4,7 +4,8 @@ import PackageDescription
 // Noodle Server: a Hub for Linux and macOS, `noodled`, configured by a YAML file; on Linux it runs as a service.
 // ServerCore is the server's logic, tested on macOS and Linux alike; `noodled` only puts it behind a command.
 // Devices reach it through the Hub's link: msquic on Linux, and on a Mac Noodle Hub's own listener.
-let linux = TargetDependencyCondition.when(platforms: [.linux])
+// Where there is no CryptoKit.
+let withoutCryptoKit = TargetDependencyCondition.when(platforms: [.linux, .windows])
 
 let package = Package(
     name: "Server",
@@ -14,6 +15,7 @@ let package = Package(
         // Named, so it does not matter what the checkout folder is called.
         .package(name: "Noodle", path: ".."),
         .package(path: "../Shared/HubLink"),
+        .package(path: "../Shared/WindowsPOSIX"),
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.1.0"),
         .package(url: "https://github.com/apple/swift-certificates", from: "1.10.0"),
         .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0" ..< "6.0.0"),
@@ -31,10 +33,16 @@ let package = Package(
             .product(name: "Yams", package: "Yams"),
             .product(name: "X509", package: "swift-certificates"),
             .product(name: "QRCodeGenerator", package: "swift-qrcode-generator"),
-            .product(name: "Crypto", package: "swift-crypto", condition: linux),
-        ]),
+            .product(name: "Crypto", package: "swift-crypto", condition: withoutCryptoKit),
+            .product(name: "WindowsPOSIX", package: "WindowsPOSIX", condition: .when(platforms: [.windows])),
+            .target(name: "CWindowsSandbox", condition: .when(platforms: [.windows])),
+        ], linkerSettings: [.linkedLibrary("iphlpapi", .when(platforms: [.windows])), .linkedLibrary("ws2_32", .when(platforms: [.windows]))]),
+        /// AppContainers and jobs for bots' harnesses on Windows; empty elsewhere.
+        .target(name: "CWindowsSandbox", linkerSettings: [.linkedLibrary("userenv", .when(platforms: [.windows])),
+                                                          .linkedLibrary("advapi32", .when(platforms: [.windows]))]),
         .executableTarget(name: "noodled", dependencies: [
             "ServerCore", .product(name: "HubWire", package: "HubLink"), .product(name: "NoodleCore", package: "Noodle"),
+            .product(name: "WindowsPOSIX", package: "WindowsPOSIX", condition: .when(platforms: [.windows])),
         ]),
         .testTarget(name: "ServerCoreTests", dependencies: [
             "ServerCore",

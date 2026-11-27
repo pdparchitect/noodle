@@ -2,6 +2,8 @@
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WindowsPOSIX
 #endif
 import Foundation
 
@@ -25,7 +27,7 @@ enum VerifiedExecutables {
     /// The link itself and the file it leads to, as the signature check opens it.
     private static func stamp(_ path: String) -> [Int64]? {
         var link = stat(), file = stat()
-        guard lstat(path, &link) == 0, stat(path, &file) == 0 else { return nil }
+        guard lstat(path, &link) == 0, fstatat(AT_FDCWD, path, &file, 0) == 0 else { return nil }
         return [Int64(link.st_dev), Int64(truncatingIfNeeded: link.st_ino), Int64(link.st_mode),
                 Int64(file.st_dev), Int64(truncatingIfNeeded: file.st_ino), Int64(file.st_mode), Int64(file.st_size),
                 Int64(file.modified.tv_sec), Int64(file.modified.tv_nsec),

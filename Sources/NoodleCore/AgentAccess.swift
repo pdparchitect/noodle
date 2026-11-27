@@ -85,11 +85,23 @@ public struct RuntimeRequestID: Hashable, Sendable {
     public let isNumber: Bool
     public init?(_ raw: Any?) {
         if let string = raw as? String { value = string; isNumber = false }
-        else if let number = raw as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() {
+        else if let number = raw as? NSNumber, !number.isJSONBoolean {
             value = number.stringValue; isNumber = true
         } else { return nil }
     }
     public var json: Any { isNumber ? (Int(value) as Any? ?? value) : value }
+}
+
+package extension NSNumber {
+    /// Whether JSONSerialization made this from `true` or `false`, which also bridge to numbers.
+    var isJSONBoolean: Bool {
+        #if canImport(Darwin)
+        CFGetTypeID(self) == CFBooleanGetTypeID()
+        #else
+        // Elsewhere JSON booleans are numbers of type `c`; ints are `i` and `q`.
+        String(cString: objCType) == "c"
+        #endif
+    }
 }
 
 /// Noninteractive Codex server-request replies. Saved bot access governs runtime
@@ -153,5 +165,4 @@ public struct CodexRuntimeRequest {
     }
 }
 
-import CoreFoundation
 import ProductIdentity

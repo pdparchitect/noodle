@@ -1,4 +1,8 @@
 import Foundation
+#if os(Windows)
+import WindowsPOSIX
+import WinSDK
+#endif
 import HubWire
 import NoodleCore
 import HubLink
@@ -33,7 +37,11 @@ if let index = arguments.firstIndex(of: "--config") {
 }
 
 /// What stops the server and what the admin asks it, kept for as long as it runs.
+#if os(Windows)
+nonisolated(unsafe) var stopping: (() -> Void)?
+#else
 nonisolated(unsafe) var stopping: [any DispatchSourceSignal] = []
+#endif
 nonisolated(unsafe) var control: ServerControl?
 
 /// The configuration, or the reasons it cannot be used, printed before exiting.
@@ -63,7 +71,7 @@ case "check":
         let unsigned = ServerLogins(configuration: configuration, profiles: HarnessProfileStore(root: configuration.data)).unsigned()
         if !unsigned.isEmpty { print("\nBots cannot start on these logins yet:\n" + unsigned.map { "  \($0)" }.joined(separator: "\n")) }
     }
-    #if os(Linux) || os(macOS)
+    #if os(Linux) || os(macOS) || os(Windows)
     if let problem = PlatformHarnessIsolation().problem() {
         print("\n\(problem)")
         exit(1)
@@ -71,13 +79,13 @@ case "check":
     #endif
 case "run":
     let configuration = loadConfiguration()
-    #if os(Linux) || os(macOS)
+    #if os(Linux) || os(macOS) || os(Windows)
     if let problem = PlatformHarnessIsolation().problem() {
         print("noodled could not start: \(problem)")
         exit(1)
     }
     #endif
-    #if os(Linux)
+    #if os(Linux) || os(Windows)
     let listen = QUICListener.listen(certificates: configuration.data.appendingPathComponent("Link/Certificates", isDirectory: true))
     #else
     let listen = LinkServer.listen
@@ -94,6 +102,18 @@ case "run":
             try asked.start()
             control = asked
             print("noodled serves \(configuration.name) on port \(port), for \(configuration.users.count) \(configuration.users.count == 1 ? "user" : "users").")
+            #if os(Windows)
+            // Ctrl+C, Ctrl+Break and the console closing.
+            stopping = {
+                asked.stop()
+                hub.stop()
+                exit(0)
+            }
+            SetConsoleCtrlHandler({ _ in
+                DispatchQueue.main.async { stopping?() }
+                return true
+            }, true)
+            #else
             for signal in [SIGINT, SIGTERM] {
                 Foundation.signal(signal, SIG_IGN)
                 let source = DispatchSource.makeSignalSource(signal: signal, queue: .main)
@@ -105,6 +125,7 @@ case "run":
                 source.resume()
                 stopping.append(source)
             }
+            #endif
         } catch {
             print("noodled could not start: \(error.localizedDescription)")
             exit(1)

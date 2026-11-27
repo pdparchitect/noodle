@@ -135,12 +135,7 @@ public struct SubscriptionUsage: Codable, Hashable, Sendable {
     }
 
     private static func number(_ value: Any?) -> Double? {
-        #if canImport(Darwin)
-        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
-        #else
-        // Linux's JSON booleans are numbers of type `c`; its ints are `i` and `q`.
-        guard let number = value as? NSNumber, String(cString: number.objCType) != "c" else { return nil }
-        #endif
+        guard let number = value as? NSNumber, !number.isJSONBoolean else { return nil }
         let double = number.doubleValue
         return double.isFinite ? double : nil
     }

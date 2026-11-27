@@ -4,6 +4,7 @@
 
 ### Added
 
+- Noodle Server runs on Windows 10 and 11, on arm64 or x86_64: download the ZIP, then run `noodled check`, `noodled login` and `noodled run` in PowerShell. Each bot works in a sandbox of its own, which reaches the internet but not the local network, and whatever it started ends with it. The server keeps its file and data in `%LOCALAPPDATA%\Noodle Server`.
 - Noodle Server runs on a Mac with Apple silicon: download the ZIP, then run `noodled check`, `noodled login` and `noodled run` in Terminal. Each bot works in a sandbox of its own, as on Linux, and whatever it started ends with it. The server keeps its file and data in `~/Library/Application Support/Noodle Server`.
 - Old bot sessions are cleaned up: once a day, the server deletes the Claude Code, Codex, Grok Build, FX, OpenCode and Devin sessions a bot has not used for a week, keeping the one it is in, and gives the space back to the disk; sessions left behind by a harness the bot used before go too. Codex, OpenCode and Devin delete their own, started briefly when nothing is running; Codex history they cannot delete goes once untouched for a week. A bot's own files are never touched.
 - The daily cleanup also deletes the temporary files a bot's harness and the bot itself leave behind, once nothing has touched them for a week.

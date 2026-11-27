@@ -1,8 +1,8 @@
 # Noodle Server
 
-[![macOS 26 ZIP](https://img.shields.io/badge/macOS_26-ZIP-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-macos-arm64.zip) [![Linux arm64](https://img.shields.io/badge/Linux-arm64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-arm64.tar.gz) [![Linux x86_64](https://img.shields.io/badge/Linux-x86__64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-x86_64.tar.gz)
+[![macOS 26 ZIP](https://img.shields.io/badge/macOS_26-ZIP-0A84FF?logo=apple&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-macos-arm64.zip) [![Linux arm64](https://img.shields.io/badge/Linux-arm64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-arm64.tar.gz) [![Linux x86_64](https://img.shields.io/badge/Linux-x86__64-E95420?logo=linux&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-linux-x86_64.tar.gz) [![Windows arm64](https://img.shields.io/badge/Windows-arm64-0078D4?logo=windows&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-windows-arm64.zip) [![Windows x86_64](https://img.shields.io/badge/Windows-x86__64-0078D4?logo=windows&logoColor=white)](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-windows-x86_64.zip)
 
-A Noodle Hub for Linux and the Mac. It runs bots for the people you list in one file, on the
+A Noodle Hub for Linux, the Mac and Windows. It runs bots for the people you list in one file, on the
 Claude Code and Codex you install, with your sign-ins kept on the server. Each bot works in a
 sandbox of its own, and sees nothing of the server, of you or of anyone else's bots.
 
@@ -151,3 +151,46 @@ noodled/noodled run
 
 The server runs until you press Control-C. Invite people from another window with
 `noodled/noodled invite Ada --qr`. Setup is for Linux only.
+
+## On Windows
+
+Noodle Server also runs on Windows 10 and 11, on arm64 or x86_64, in a PowerShell window, while
+you are signed in. Each bot works in a sandbox of its own there too, which reaches the internet but
+not your local network.
+
+Download it for
+[arm64](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-windows-arm64.zip)
+or [x86_64](https://github.com/pdparchitect/noodle/releases/download/server-latest/Noodle-Server-windows-x86_64.zip).
+The ZIP holds a `Noodle Server` folder with `noodled.exe` and everything it needs; keep its files
+together. Install Claude Code, Codex or both with their own installers rather than npm; Claude Code
+also needs [Git for Windows](https://git-scm.com/downloads/win). Then, in PowerShell, unpack the
+server and put the example configuration where it reads it:
+
+```
+Expand-Archive "$HOME\Downloads\Noodle-Server-windows-*.zip" "$env:LOCALAPPDATA\Programs"
+New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\Noodle Server"
+Copy-Item "$env:LOCALAPPDATA\Programs\Noodle Server\noodled.yaml" "$env:LOCALAPPDATA\Noodle Server"
+```
+
+Edit it as above, naming each harness by its full path, such as
+`C:\Users\Ada\.local\bin\claude.exe`. The server keeps its data beside the file, in `Data`. Then
+check it, sign in and start it:
+
+```
+cd "$env:LOCALAPPDATA\Programs\Noodle Server"
+.\noodled check
+.\noodled login claude-code
+.\noodled run
+```
+
+Devices reach the server on UDP port 38415. To let them through Windows Firewall, run this once in
+PowerShell opened as administrator:
+
+```
+New-NetFirewallRule -DisplayName "Noodle Server" -Direction Inbound -Protocol UDP -LocalPort 38415 -Action Allow
+```
+
+The server runs until you press Control-C. Invite people from another window with
+`.\noodled invite Ada --qr`. `noodled.exe` is not signed yet, so when you first start it from
+Explorer, Windows SmartScreen asks first: choose **More info**, then **Run anyway**. Starting it
+from PowerShell, as above, does not ask.

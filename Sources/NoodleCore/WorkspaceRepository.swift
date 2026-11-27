@@ -2,6 +2,8 @@
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WindowsPOSIX
 #endif
 import AppletBridge
 #if canImport(CryptoKit)

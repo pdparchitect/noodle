@@ -1,4 +1,7 @@
 import Foundation
+#if os(Windows)
+import WindowsPOSIX
+#endif
 
 /// One account or catalogue exchange with an ACP harness: one request at a time, read-only.
 final class ACPInspectionWire: @unchecked Sendable {
@@ -36,7 +39,7 @@ final class ACPInspectionWire: @unchecked Sendable {
         process.standardInput = input
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
-        BrokenPipe.reportAsError(input.fileHandleForWriting.fileDescriptor)
+        BrokenPipe.reportAsError(input.fileHandleForWriting)
         let reader = reader
         output.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData

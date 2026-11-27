@@ -1,5 +1,7 @@
 #if canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WindowsPOSIX
 #endif
 import Foundation
 import NoodleCore
@@ -134,7 +136,7 @@ extension HarnessSandbox: HarnessIsolation {
 }
 #endif
 
-#if os(Linux) || os(macOS)
+#if os(Linux) || os(macOS) || os(Windows)
 /// A bot's harness run by the server itself, in this machine's isolation, in place of the Mac's Agent Host.
 /// Its output arrives in order, and it is reported gone only once all of it has.
 @MainActor public final class SandboxedHarnessConnection: HarnessRuntimeConnection {

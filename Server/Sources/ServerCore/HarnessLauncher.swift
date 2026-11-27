@@ -2,6 +2,9 @@
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WindowsPOSIX
+import CWindowsSandbox
 #endif
 import Foundation
 import NoodleCore
@@ -91,5 +94,84 @@ public typealias PlatformHarnessLauncher = ProcessHarnessLauncher
 /// Sends `signal` to one process, or to a whole process group when `target` is negative.
 private func send(_ signal: Int32, to target: pid_t) {
     _ = kill(target, signal)
+}
+#elseif os(Windows)
+public typealias PlatformHarnessLauncher = WindowsHarnessLauncher
+
+/// A harness started in its plan's AppContainer, inside a job that ends everything it started. Windows has no
+/// gentler way to ask a process to end, so ending it, whether asked or forced, ends the job; so does the harness
+/// exiting, which would otherwise leave its tools holding its output open.
+@MainActor public final class WindowsHarnessLauncher: HarnessLauncher {
+    /// The child's handles, which belong to whichever thread is using them.
+    private struct Handles: @unchecked Sendable {
+        var input, output, errors, process, job: UnsafeMutableRawPointer?
+    }
+
+    private var handles: Handles?
+    private let writer = DispatchQueue(label: "com.pdparchitect.noodled.harness-input")
+
+    public init() {}
+
+    public func run(_ plan: HarnessLaunchPlan, received: @escaping @MainActor (Data, Bool) -> Void,
+                    closed: @escaping @MainActor () -> Void, exited: @escaping @MainActor (Int32) -> Void) throws -> Int32 {
+        guard let container = plan.container else { throw HarnessSetupError("\(plan.name) has no AppContainer to run in.") }
+        let sid = try AppContainerSandbox.container(container.name)
+        defer { sandbox_free_sid(sid) }
+        var child = sandbox_child()
+        let error = AppContainerSandbox.spawn(plan, sid: sid, lessPrivileged: container.lessPrivileged, into: &child)
+        guard error == 0 else { throw HarnessSetupError("Windows error \(error)") }
+        let handles = Handles(input: child.input, output: child.output, errors: child.errors, process: child.process, job: child.job)
+        self.handles = handles
+        for (pipe, isError) in [(handles.output, false), (handles.errors, true)] {
+            let source = Handles(input: nil, output: pipe, errors: nil, process: nil, job: nil)
+            Thread {
+                var buffer = [UInt8](repeating: 0, count: 65536)
+                while true {
+                    let count = sandbox_read(source.output, &buffer, UInt32(buffer.count))
+                    let data = count > 0 ? Data(buffer[..<Int(count)]) : Data()
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated { data.isEmpty ? closed() : received(data, isError) }
+                    }
+                    if data.isEmpty { break }
+                }
+                sandbox_close(source.output)
+            }.start()
+        }
+        Thread {
+            let status = sandbox_wait(handles.process)
+            sandbox_end(handles.job, status)
+            sandbox_close(handles.process)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { exited(Int32(bitPattern: status)) }
+            }
+        }.start()
+        return Int32(bitPattern: child.identifier)
+    }
+
+    public func write(_ data: Data) {
+        guard let handles else { return }
+        writer.async {
+            var offset = 0
+            while offset < data.count {
+                let written = data[offset...].withUnsafeBytes { sandbox_write(handles.input, $0.baseAddress, UInt32($0.count)) }
+                guard written > 0 else { return }
+                offset += Int(written)
+            }
+        }
+    }
+
+    public func terminate() { end(1) }
+
+    public func kill() { end(137) }
+
+    private func end(_ code: UInt32) {
+        guard let handles else { return }
+        sandbox_end(handles.job, code)
+        writer.async {
+            sandbox_close(handles.input)
+            sandbox_close(handles.job)
+        }
+        self.handles = nil
+    }
 }
 #endif

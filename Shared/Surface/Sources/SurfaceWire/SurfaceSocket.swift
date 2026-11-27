@@ -15,6 +15,8 @@ public final class SurfaceSocket: @unchecked Sendable {
     /// What a companion lists among its features when it can show live views this way.
     public static let feature = "live-view-v1"
 
+    // Windows has no POSIX sockets, so there the protocols share only the feature's name.
+    #if !os(Windows)
     public let frames: AsyncStream<Data>
     private let fd: Int32
     private let writer = DispatchQueue(label: "com.pdparchitect.noodle.surface-socket")
@@ -135,8 +137,10 @@ public final class SurfaceSocket: @unchecked Sendable {
         }
         return complete ? data : nil
     }
+    #endif
 }
 
+#if !os(Windows)
 private func closeDescriptor(_ fd: Int32) { _ = close(fd) }
 
 private func receiveBytes(_ fd: Int32, _ buffer: UnsafeMutableRawPointer, _ count: Int) -> Int { read(fd, buffer, count) }
@@ -150,3 +154,4 @@ private func sendBytes(_ fd: Int32, _ buffer: UnsafeRawPointer, _ count: Int) ->
     send(fd, buffer, count, Int32(MSG_NOSIGNAL))
     #endif
 }
+#endif

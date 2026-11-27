@@ -3,6 +3,8 @@ import Foundation
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WindowsPOSIX
 #endif
 
 /// One fixed read-only command: the model listing, which also answers whether

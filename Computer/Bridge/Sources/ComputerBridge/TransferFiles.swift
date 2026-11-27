@@ -2,8 +2,15 @@
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WindowsPOSIX
 #endif
 import Foundation
+
+#if os(Windows)
+// This module's own name wins over the C runtime's type of the same name.
+typealias stat = WindowsPOSIX.stat
+#endif
 
 /// Large payloads stay out of JSON and PTYs. Both signed apps already have
 /// access to the App Group that contains their authenticated socket.

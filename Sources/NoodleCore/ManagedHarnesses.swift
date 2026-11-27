@@ -7,6 +7,8 @@ import Crypto
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WindowsPOSIX
 #endif
 import Foundation
 #if canImport(FoundationNetworking)

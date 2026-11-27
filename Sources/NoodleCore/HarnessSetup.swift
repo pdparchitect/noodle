@@ -1,4 +1,7 @@
 import Foundation
+#if os(Windows)
+import WindowsPOSIX
+#endif
 import ProductIdentity
 
 public enum HarnessAuthenticationStatus: String, Codable, Equatable, Sendable {
@@ -66,9 +69,11 @@ public enum HarnessStorage {
 
     /// The person's home as the user database has it, outside any sandbox container.
     public static var systemHome: URL {
+        #if !os(Windows)
         if let entry = getpwuid(getuid()), let path = entry.pointee.pw_dir {
             return URL(fileURLWithPath: String(cString: path))
         }
+        #endif
         return FileManager.default.homeDirectoryForCurrentUser
     }
 
@@ -234,7 +239,7 @@ enum CodexAccountResponse {
                     child.standardInput = stdinPipe
                     // Cancellation can race a queued write. Configure this valid
                     // pipe before use so a closed child reports EPIPE, not SIGPIPE.
-                    BrokenPipe.reportAsError(stdinPipe.fileHandleForWriting.fileDescriptor)
+                    BrokenPipe.reportAsError(stdinPipe.fileHandleForWriting)
                     child.standardOutput = stdoutPipe
                     // Account failures are reported through JSON-RPC. Do not retain
                     // arbitrary stderr, which may include private configuration.

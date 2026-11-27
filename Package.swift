@@ -80,6 +80,8 @@ let package = Package(
         .package(path: "Shared/Wallpaper"),
         .package(path: "Shared/Brand"),
         .package(path: "Shared/Patch"),
+        // The POSIX calls the Hub engine makes, on Windows.
+        .package(path: "Shared/WindowsPOSIX"),
         .package(path: "Shared/Document"),
         .package(path: "Computer/Bridge"),
         .package(path: "Applet/Protocol"),
@@ -113,10 +115,12 @@ let package = Package(
         .executableTarget(name: "NoodleAppleAgent", dependencies: ["NoodleAppleRuntime", "NoodleCore"],
             linkerSettings: [.unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist",
                                          "-Xlinker", "Support/AppleAgent-Info.plist"])]),
-        /// The system's SQLite where the SDK has no module for it.
+        /// The system's SQLite where the SDK has no module for it: libsqlite3 on Linux, winsqlite3 on Windows.
+        /// NoodleCore links whichever it is, since a module map cannot choose by platform.
         .systemLibrary(name: "CSQLite", providers: [.apt(["libsqlite3-dev"])]),
-        .target(name: "NoodleCore", dependencies: [.target(name: "CSQLite", condition: .when(platforms: [.linux])), .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), .product(name: "ProductIdentity", package: "Product"), .product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper"), .product(name: "NoodlePatch", package: "Patch")],
-            swiftSettings: developmentHooks),
+        .target(name: "NoodleCore", dependencies: [.target(name: "CSQLite", condition: .when(platforms: [.linux, .windows])), .product(name: "WindowsPOSIX", package: "WindowsPOSIX", condition: .when(platforms: [.windows])), .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows])), .product(name: "ProductIdentity", package: "Product"), .product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper"), .product(name: "NoodlePatch", package: "Patch")],
+            swiftSettings: developmentHooks,
+            linkerSettings: [.linkedLibrary("sqlite3", .when(platforms: [.linux])), .linkedLibrary("winsqlite3", .when(platforms: [.windows]))]),
         /// Noodle Enterprise: managed preferences from a configuration profile. Source-available under
         /// Enterprise/LICENSE, not the Functional Source License; the rest of Noodle reaches it only
         /// through NoodleCore's OrganisationPolicy.
@@ -126,21 +130,21 @@ let package = Package(
         .target(name: "NoodleWidgets", dependencies: ["NoodleCore", .product(name: "NoodleWallpaper", package: "Wallpaper")],
                 exclude: ["NoodleWidgetsBundle.swift"]),
         .testTarget(name: "NoodleWidgetsTests", dependencies: ["NoodleWidgets", "NoodleCore"]),
-        .target(name: "NoodleToolConnections", dependencies: ["NoodleCore", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])), .product(name: "ProductIdentity", package: "Product"), .product(name: "MCP", package: "swift-sdk")]),
+        .target(name: "NoodleToolConnections", dependencies: ["NoodleCore", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows])), .product(name: "ProductIdentity", package: "Product"), .product(name: "MCP", package: "swift-sdk")]),
         .target(name: "NoodleToolScripting", dependencies: ["NoodleCore"]),
         .target(name: "NoodleToolProbe", dependencies: ["NoodleCore", "NoodleToolConnections"]),
         .executableTarget(name: "NoodleToolProbeCommand", dependencies: ["NoodleCore", "NoodleToolProbe"]),
         .target(name: "NoodleSharing", dependencies: ["NoodleCore", .product(name: "ProductIdentity", package: "Product")]),
         /// Runs bots: harness processes, their discovery probes and message delivery. Shared by the
         /// apps that host bots, with none of their interface.
-        .target(name: "NoodleRuntime", dependencies: ["NoodleCore", "NoodleAgentBridge", .product(name: "ProductIdentity", package: "Product"), .product(name: "AppletBridge", package: "Protocol")],
+        .target(name: "NoodleRuntime", dependencies: ["NoodleCore", "NoodleAgentBridge", .product(name: "WindowsPOSIX", package: "WindowsPOSIX", condition: .when(platforms: [.windows])), .product(name: "ProductIdentity", package: "Product"), .product(name: "AppletBridge", package: "Protocol")],
                 swiftSettings: developmentHooks),
         /// The Harness, Heartbeat and Sandbox settings, shared by the apps that run bots.
         .target(name: "NoodleHubClient", dependencies: ["NoodleCore", .product(name: "HubLink", package: "HubLink")]),
         /// Calls' WebRTC connection to a harness's voice service, fed and played by whoever holds the call.
         .target(name: "NoodleVoicePeer", dependencies: ["NoodleCore", .product(name: "LiveKitWebRTC", package: "webrtc-xcframework")]),
         /// What serves paired devices: Noodle Hub for the people it lends to, and Noodle for its own owner.
-        .target(name: "HubCore", dependencies: ["NoodleCore", "NoodleRuntime", "NoodleToolConnections", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux])),
+        .target(name: "HubCore", dependencies: ["NoodleCore", "NoodleRuntime", "NoodleToolConnections", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows])),
                                                 .product(name: "AppletBridge", package: "Protocol"),
                                                 .product(name: "HubWire", package: "HubLink")]),
         /// HubCore on a Mac: with Noodle Computer, Browser and Applet, image generation, calls and CloudKit.
@@ -238,8 +242,8 @@ if ProcessInfo.processInfo.environment["NOODLE_APPLE_HARNESS_ONLY"] == "1" {
     package.products.removeAll { !["NoodleCore", "NoodleMessenger"].contains($0.name) }
 }
 
-#if os(Linux)
-// Only the Hub engine builds on Linux, with the tests that run there.
+#if os(Linux) || os(Windows)
+// Only the Hub engine builds on Linux and Windows, with the tests that run there.
 let linux: Set<String> = ["CSQLite", "NoodleCore", "NoodleToolConnections", "NoodleAgentBridge", "NoodleRuntime", "HubCore", "NoodleCorePortableTests", "NoodleToolConnectionsPortableTests"]
 package.targets.removeAll { !linux.contains($0.name) }
 package.products.removeAll { !["NoodleCore", "NoodleToolConnections", "NoodleAgentBridge", "NoodleRuntime", "HubCore"].contains($0.name) }

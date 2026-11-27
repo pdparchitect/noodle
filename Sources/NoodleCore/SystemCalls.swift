@@ -2,6 +2,8 @@
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WindowsPOSIX
 #endif
 import Foundation
 #if canImport(FoundationNetworking)
@@ -10,6 +12,12 @@ import FoundationNetworking
 
 // The few system calls whose spelling differs between Darwin and Linux, for code that would
 // otherwise name `Darwin.` to reach past a method of the same name.
+
+#if os(Windows)
+// This module's own names win over the C runtime's types of the same names.
+package typealias stat = WindowsPOSIX.stat
+package typealias dirent = WindowsPOSIX.dirent
+#endif
 
 package func systemOpen(_ path: String, _ flags: Int32, _ mode: mode_t = 0) -> Int32 { open(path, flags, mode) }
 
@@ -35,16 +43,18 @@ package extension stat {
 
 /// Writing to a child process that has exited reports EPIPE instead of ending this one with SIGPIPE.
 package enum BrokenPipe {
-    package static func reportAsError(_ descriptor: Int32) {
+    package static func reportAsError(_ handle: FileHandle) {
         #if canImport(Darwin)
-        _ = fcntl(descriptor, F_SETNOSIGPIPE, 1)
+        _ = fcntl(handle.fileDescriptor, F_SETNOSIGPIPE, 1)
+        #elseif os(Windows)
+        // Windows has no SIGPIPE; the write fails.
         #else
         // Linux has no such setting for a pipe, so the process ignores SIGPIPE.
         _ = ignored
         #endif
     }
 
-    #if !canImport(Darwin)
+    #if !canImport(Darwin) && !os(Windows)
     private static let ignored: Void = { _ = signal(SIGPIPE, SIG_IGN) }()
     #endif
 }
@@ -68,6 +78,8 @@ package func swapItems(_ first: String, _ second: String) -> Int32 {
 package func renameExclusively(in folder: Int32, _ source: String, _ target: String) -> Int32 {
     #if canImport(Darwin)
     renameatx_np(folder, source, folder, target, UInt32(RENAME_EXCL))
+    #elseif os(Windows)
+    renameatExclusive(folder, source, folder, target)
     #else
     // Glibc's module leaves out renameat2, so a link refuses an existing target, and only the
     // one who then removes `source` has renamed it.
@@ -96,6 +108,9 @@ package func currentDirectory(of process: pid_t) -> String? {
     let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
     guard proc_pidinfo(process, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
     return withUnsafeBytes(of: info.pvi_cdir.vip_path) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
+    #elseif os(Windows)
+    // Windows does not tell one process another's current folder.
+    return nil
     #else
     return try? FileManager.default.destinationOfSymbolicLink(atPath: "/proc/\(process)/cwd")
     #endif

@@ -39,6 +39,13 @@ public struct ServerConfiguration: Equatable, Sendable {
         .appendingPathComponent("Library/Application Support/Noodle Server", isDirectory: true)
     public static let defaultFile = folder.appendingPathComponent("noodled.yaml")
     public static let defaultData = folder.appendingPathComponent("Data", isDirectory: true)
+    #elseif os(Windows)
+    /// On Windows too the server keeps its file and its data with the account that runs it.
+    public static let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["LOCALAPPDATA"]
+        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("AppData/Local").path)
+        .appendingPathComponent("Noodle Server", isDirectory: true)
+    public static let defaultFile = folder.appendingPathComponent("noodled.yaml")
+    public static let defaultData = folder.appendingPathComponent("Data", isDirectory: true)
     #else
     public static let defaultFile = URL(fileURLWithPath: "/etc/noodled/noodled.yaml")
     public static let defaultData = URL(fileURLWithPath: "/var/lib/noodled")

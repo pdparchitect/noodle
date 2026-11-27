@@ -4,6 +4,8 @@ import ProductIdentity
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WindowsPOSIX
 #endif
 
 /// The app consumes this catalogue from the bundled harness. Model identifiers

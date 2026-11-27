@@ -1,4 +1,7 @@
 import Foundation
+#if os(Windows)
+import WindowsPOSIX
+#endif
 #if canImport(SQLite3)
 import SQLite3
 #else

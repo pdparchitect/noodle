@@ -1,0 +1,87 @@
+#if os(Windows)
+import Foundation
+import NoodleCore
+@testable import ServerCore
+import XCTest
+
+/// What a bot's AppContainer lets its harness reach on Windows, tried for real: its workspace to write, its
+/// package to read, and nothing of other bots or the server account's home. Ending the harness ends its tools.
+@MainActor final class AppContainerSandboxTests: XCTestCase {
+    private var root: URL!
+    private var workspace: URL { root.appendingPathComponent("Agents/a/workspace", isDirectory: true) }
+    private var package: URL { root.appendingPathComponent("Agents/a", isDirectory: true) }
+    private var other: URL { root.appendingPathComponent("Agents/b/workspace", isDirectory: true) }
+    private let system = ProcessInfo.processInfo.environment["SystemRoot"] ?? #"C:\Windows"#
+    private var shell: URL { URL(fileURLWithPath: system).appendingPathComponent("System32/cmd.exe") }
+
+    override func setUp() async throws {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("noodled-container-\(UUID().uuidString)")
+        for folder in [workspace, other] { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
+        try Data("package".utf8).write(to: package.appendingPathComponent("bot.json"))
+        try Data("other".utf8).write(to: other.appendingPathComponent("secret.txt"))
+    }
+
+    override func tearDown() async throws {
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    /// Runs `command` through cmd.exe in the bot's container and returns its status and output.
+    private func run(_ command: String) throws -> (status: Int32, output: String) {
+        let sandbox = AppContainerSandbox()
+        let plan = try sandbox.launch(workspace: workspace, program: shell, command: ["/d", "/c", command],
+                                      environment: try sandbox.environment(provider: .claudeCode, workspace: workspace))
+        let launcher = WindowsHarnessLauncher()
+        var output = Data(), status: Int32?, closed = 0
+        _ = try launcher.run(plan, received: { data, _ in output.append(data) }, closed: { closed += 1 },
+                             exited: { status = $0 })
+        let deadline = Date().addingTimeInterval(20)
+        while (status == nil || closed < 2) && Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+        return (try XCTUnwrap(status, "the harness did not end"), String(decoding: output, as: UTF8.self))
+    }
+
+    func testTheWorkspaceIsWritableAndThePackageReadable() throws {
+        let written = try run("echo made> made.txt && type ..\\bot.json")
+        XCTAssertEqual(written.status, 0, written.output)
+        XCTAssertTrue(written.output.contains("package"), written.output)
+        XCTAssertEqual(try String(contentsOf: workspace.appendingPathComponent("made.txt"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines), "made")
+        let package = try run("echo changed> ..\\bot.json")
+        XCTAssertNotEqual(package.status, 0, "the package is read-only")
+    }
+
+    func testOtherBotsAndTheServersHomeAreOutOfReach() throws {
+        let otherBot = try run("type \"\(AppContainerSandbox.native(other.appendingPathComponent("secret.txt")))\"")
+        XCTAssertNotEqual(otherBot.status, 0, otherBot.output)
+        XCTAssertFalse(otherBot.output.contains("other"), otherBot.output)
+        let home = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("noodled-home-\(UUID().uuidString).txt")
+        try Data("home".utf8).write(to: home)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let homeRead = try run("type \"\(AppContainerSandbox.native(home))\"")
+        XCTAssertNotEqual(homeRead.status, 0, homeRead.output)
+        XCTAssertFalse(homeRead.output.contains("home"), homeRead.output)
+    }
+
+    func testTheHarnessesStatusComesBack() throws {
+        XCTAssertEqual(try run("exit 3").status, 3)
+    }
+
+    /// A tool the harness leaves running would otherwise keep its output open, and the bot would never be
+    /// reported gone.
+    func testToolsLeftRunningEndWithTheHarness() throws {
+        let start = Date()
+        let result = try run("start /b \"\" \"\(shell.path)\" /d /c \"ping -n 30 127.0.0.1 > nul\" & exit 0")
+        XCTAssertEqual(result.status, 0, result.output)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 15)
+    }
+
+    func testCommandLinesSplitBackIntoTheSameArguments() {
+        XCTAssertEqual(AppContainerSandbox.quote("plain"), "plain")
+        XCTAssertEqual(AppContainerSandbox.quote("two words"), "\"two words\"")
+        XCTAssertEqual(AppContainerSandbox.quote(""), "\"\"")
+        XCTAssertEqual(AppContainerSandbox.quote(#"say "hi""#), #""say \"hi\"""#)
+        XCTAssertEqual(AppContainerSandbox.quote(#"C:\a b\"#), #""C:\a b\\""#)
+    }
+}
+#endif

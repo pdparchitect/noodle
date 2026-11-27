@@ -2,6 +2,8 @@
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif os(Windows)
+import WindowsPOSIX
 #endif
 import Foundation
 
@@ -16,7 +18,7 @@ public final class ProcessInputWriter: @unchecked Sendable {
         self.handle = handle
         // An exited child must report a write error, not terminate the parent
         // with SIGPIPE. Configure only this descriptor, not the whole process.
-        BrokenPipe.reportAsError(handle.fileDescriptor)
+        BrokenPipe.reportAsError(handle)
     }
 
     public func write(_ data: Data, onFailure: @escaping @Sendable (Error) -> Void) {
