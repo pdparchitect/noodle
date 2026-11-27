@@ -82,11 +82,13 @@ import XCTest
     }
 
     /// A tool the harness leaves running would otherwise keep its output open, and the bot would never be
-    /// reported gone.
+    /// reported gone. The tool's own output shows it started. The command has no quotes: cmd.exe would get them
+    /// escaped as other programs expect, and not understand them.
     func testToolsLeftRunningEndWithTheHarness() throws {
         let start = Date()
-        let result = try run("start /b \"\" \"\(shell.path)\" /d /c \"ping -n 30 127.0.0.1 > nul\" & exit 0")
+        let result = try run("start /b ping -n 30 127.0.0.1 & ping -n 2 127.0.0.1 > nul & exit 0")
         XCTAssertEqual(result.status, 0, result.output)
+        XCTAssertTrue(result.output.contains("127.0.0.1"), "the tool never started: \(result.output)")
         XCTAssertLessThan(Date().timeIntervalSince(start), 15)
     }
 
