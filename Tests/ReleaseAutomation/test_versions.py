@@ -185,22 +185,25 @@ class VersionTests(unittest.TestCase):
                     f'[Download DMG for Apple silicon]({base}.dmg) · [ZIP]({base}.zip)\n\n' + suite_link +
                     '### Fixed\n\n- A release change.\n')
                 self.assertEqual(self.module.notes(product), '### Fixed\n\n- A release change.\n')
-        # The terminal app is one command-line binary: a ZIP for the Mac, and an archive for each Linux processor.
+        # The terminal app is one command-line binary: a ZIP for the Mac, and an archive for each Linux and Windows processor.
         self.write_version('terminal', '1.2.3', body='- A release change.')
         result = run('python3', 'scripts/release-versions.py', 'notes', 'terminal', cwd=self.root)
         self.assertEqual(result.stdout,
             '[Download ZIP for Apple silicon](https://github.com/pdparchitect/noodle/releases/download/'
             'terminal-v1.2.3/Noodle-Terminal-arm64.zip) · Linux on '
             '[arm64](https://github.com/pdparchitect/noodle/releases/download/terminal-v1.2.3/Noodle-Terminal-linux-arm64.tar.gz) · '
-            '[x86_64](https://github.com/pdparchitect/noodle/releases/download/terminal-v1.2.3/Noodle-Terminal-linux-x86_64.tar.gz)'
+            '[x86_64](https://github.com/pdparchitect/noodle/releases/download/terminal-v1.2.3/Noodle-Terminal-linux-x86_64.tar.gz) · '
+            'Windows on [arm64](https://github.com/pdparchitect/noodle/releases/download/terminal-v1.2.3/Noodle-Terminal-windows-arm64.zip) · '
+            '[x86_64](https://github.com/pdparchitect/noodle/releases/download/terminal-v1.2.3/Noodle-Terminal-windows-x86_64.zip)'
             '\n\n- A release change.\n')
-        # The server is a ZIP for the Mac, and an archive for each Linux processor.
+        # The server is a ZIP for the Mac, and an archive for each Linux and Windows processor.
         self.write_version('server', '1.2.3', body='- A release change.')
         result = run('python3', 'scripts/release-versions.py', 'notes', 'server', cwd=self.root)
         base = 'https://github.com/pdparchitect/noodle/releases/download/server-v1.2.3/Noodle-Server'
         self.assertEqual(result.stdout,
             f'[Download ZIP for Apple silicon]({base}-macos-arm64.zip) · '
-            f'Linux on [arm64]({base}-linux-arm64.tar.gz) · [x86_64]({base}-linux-x86_64.tar.gz)\n\n- A release change.\n')
+            f'Linux on [arm64]({base}-linux-arm64.tar.gz) · [x86_64]({base}-linux-x86_64.tar.gz) · '
+            f'Windows on [arm64]({base}-windows-arm64.zip) · [x86_64]({base}-windows-x86_64.zip)\n\n- A release change.\n')
         # Container images and the phone app have no macOS app installer.
         for product in ['images', 'mobile']:
             with self.subTest(product=product):

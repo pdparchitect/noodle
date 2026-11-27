@@ -68,16 +68,14 @@ def release_notes(product):
     _, tag = version(product)
     basename = 'Noodle' if product == 'noodle' else product.title() if product in INCUBATOR else f'Noodle-{product.title()}'
     download = f'https://github.com/pdparchitect/noodle/releases/download/{tag}/{basename}-arm64'
-    # The server is a ZIP for the Mac, and an archive for each Linux processor.
-    if product == 'server':
-        base = f'https://github.com/pdparchitect/noodle/releases/download/{tag}/Noodle-Server'
-        return (f'[Download ZIP for Apple silicon]({base}-macos-arm64.zip) · '
-                f'Linux on [arm64]({base}-linux-arm64.tar.gz) · [x86_64]({base}-linux-x86_64.tar.gz)\n\n' + body)
-    # The terminal app is one command-line binary: a ZIP for the Mac, and an archive for each Linux processor.
-    if product == 'terminal':
-        linux = f'https://github.com/pdparchitect/noodle/releases/download/{tag}/Noodle-Terminal-linux'
-        return (f'[Download ZIP for Apple silicon]({download}.zip) · '
-                f'Linux on [arm64]({linux}-arm64.tar.gz) · [x86_64]({linux}-x86_64.tar.gz)\n\n' + body)
+    # The server and the terminal app are each one command-line binary: a ZIP for the Mac, and an archive for each
+    # Linux and Windows processor.
+    if product in ('server', 'terminal'):
+        base = f'https://github.com/pdparchitect/noodle/releases/download/{tag}/Noodle-{product.title()}'
+        mac = f'{base}-macos-arm64.zip' if product == 'server' else f'{download}.zip'
+        return (f'[Download ZIP for Apple silicon]({mac}) · '
+                f'Linux on [arm64]({base}-linux-arm64.tar.gz) · [x86_64]({base}-linux-x86_64.tar.gz) · '
+                f'Windows on [arm64]({base}-windows-arm64.zip) · [x86_64]({base}-windows-x86_64.zip)\n\n' + body)
     links = f'[Download DMG for Apple silicon]({download}.dmg) · [ZIP]({download}.zip)\n\n'
     if product == 'noodle':
         links += ('[Download Suite (macOS 26+)](https://github.com/pdparchitect/noodle/releases/download/'
