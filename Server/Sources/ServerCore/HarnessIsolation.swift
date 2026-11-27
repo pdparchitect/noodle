@@ -7,9 +7,9 @@ import NoodleCore
 public protocol HarnessIsolation: Sendable {
     /// Why bots cannot be isolated here, or nil when they can.
     func problem() -> String?
-    /// How to launch `program`, already resolved, with `command` for the bot at `workspace`, with `environment`
-    /// as its whole environment.
-    func launch(workspace: URL, program: URL, command: [String], environment: [String: String]) throws -> HarnessLaunchPlan
+    /// How to launch `program`, already resolved, with `command` for the bot whose reach `policy` describes, with
+    /// `environment` as its whole environment.
+    func launch(policy: HarnessSandboxPolicy, program: URL, command: [String], environment: [String: String]) throws -> HarnessLaunchPlan
     /// What `provider`'s harness needs in its environment besides its command's, made ready for the bot at
     /// `workspace` once its login is.
     func environment(provider: HarnessProvider, workspace: URL) throws -> [String: String]

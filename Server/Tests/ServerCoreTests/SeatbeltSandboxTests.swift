@@ -13,8 +13,8 @@ final class SeatbeltSandboxTests: XCTestCase {
     private let program = URL(fileURLWithPath: "/Users/admin/.local/share/claude/versions/2.1.0")
 
     private func plan() -> HarnessLaunchPlan {
-        SeatbeltSandbox().launch(workspace: workspace, program: program, command: ["-p", "--verbose"],
-                                 environment: ["HOME": "/home/x", "A": "1"])
+        SeatbeltSandbox().launch(policy: HarnessSandbox.policy(workspace: workspace, program: program), program: program,
+                                 command: ["-p", "--verbose"], environment: ["HOME": "/home/x", "A": "1"])
     }
 
     /// sandbox-exec applies the profile and becomes the harness, in its workspace, with only its own environment.

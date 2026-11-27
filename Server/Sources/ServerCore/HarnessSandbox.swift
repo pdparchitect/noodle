@@ -22,8 +22,19 @@ public struct HarnessSandbox: Sendable {
                                    "localtime", "ssl", "ca-certificates", "pki", "alternatives", "ld.so.cache", "ld.so.conf",
                                    "ld.so.conf.d", "mime.types"]
 
-    /// bubblewrap's arguments for running `program`, already resolved, with `command` in `workspace`.
-    func arguments(workspace: URL, program: URL, command: [String], environment: [String: String]) -> [String] {
+    /// What a bot's harness may reach on the server: its workspace, its package and the harness's installation.
+    /// The person's shared folders and the silo's egress are for later; every backend renders them already.
+    public static func policy(workspace: URL, program: URL) -> HarnessSandboxPolicy {
+        HarnessSandboxPolicy(workspace: workspace,
+                             readable: [AgentStorageLayout(workspace: workspace).package.path, installation(of: program).path],
+                             executable: program.path)
+    }
+
+    /// bubblewrap's arguments for running `program`, already resolved, with `command` in `policy`'s workspace.
+    func arguments(policy: HarnessSandboxPolicy, program: URL, command: [String], environment: [String: String]) throws -> [String] {
+        // bubblewrap shares the network or takes it away; it cannot keep it to one local port.
+        if policy.egressPort != nil { throw HarnessSetupError("noodled cannot keep a bot to the silo on Linux yet.") }
+        let workspace = policy.workspace
         var arguments = ["--unshare-all", "--share-net", "--die-with-parent", "--new-session", "--cap-drop", "ALL", "--clearenv",
                          "--ro-bind", "/usr", "/usr"]
         // Merged-/usr systems link these into /usr; older ones keep them as folders.
@@ -38,9 +49,9 @@ public struct HarnessSandbox: Sendable {
         arguments += ["--ro-bind-try", "/opt", "/opt"]
         for name in Self.settings { arguments += ["--ro-bind-try", "/etc/" + name, "/etc/" + name] }
         arguments += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
-        let root = Self.installation(of: program)
-        arguments += ["--ro-bind", root.path, root.path]
-        arguments += ["--ro-bind", AgentStorageLayout(workspace: workspace).package.path, AgentStorageLayout(workspace: workspace).package.path]
+        for path in policy.readable { arguments += ["--ro-bind", path, path] }
+        for folder in policy.folders { arguments += [folder.writable ? "--bind" : "--ro-bind", folder.path, folder.path] }
+        // Last, so it stays writable inside the package, which is read-only.
         arguments += ["--bind", workspace.path, workspace.path]
         for (key, value) in environment.sorted(by: { $0.key < $1.key }) { arguments += ["--setenv", key, value] }
         arguments += ["--chdir", workspace.path, "--", program.path] + command
@@ -62,8 +73,9 @@ public struct HarnessSandbox: Sendable {
         defer { try? FileManager.default.removeItem(at: workspace.deletingLastPathComponent().deletingLastPathComponent()) }
         let probe = Process()
         probe.executableURL = bubblewrap
-        probe.arguments = arguments(workspace: workspace, program: URL(fileURLWithPath: "/bin/true").resolvingSymlinksInPath(),
-                                    command: [], environment: [:])
+        let program = URL(fileURLWithPath: "/bin/true").resolvingSymlinksInPath()
+        probe.arguments = try? arguments(policy: Self.policy(workspace: workspace, program: program), program: program,
+                                         command: [], environment: [:])
         let errors = Pipe()
         probe.standardError = errors
         probe.standardOutput = FileHandle.nullDevice
@@ -130,9 +142,9 @@ public struct HarnessSandbox: Sendable {
 extension HarnessSandbox: HarnessIsolation {
     /// bubblewrap itself, with the harness's whole environment in its arguments. Ending it ends everything in
     /// the sandbox.
-    public func launch(workspace: URL, program: URL, command: [String], environment: [String: String]) -> HarnessLaunchPlan {
+    public func launch(policy: HarnessSandboxPolicy, program: URL, command: [String], environment: [String: String]) throws -> HarnessLaunchPlan {
         HarnessLaunchPlan(name: "bubblewrap", executable: bubblewrap,
-                          arguments: arguments(workspace: workspace, program: program, command: command, environment: environment),
+                          arguments: try arguments(policy: policy, program: program, command: command, environment: environment),
                           environment: [:], directory: nil, endsGroup: false)
     }
 }
@@ -198,8 +210,8 @@ extension HarnessSandbox: HarnessIsolation {
             }
             try logins.prepare(provider, login: login, workspace: workspace)
             command.environment.merge(try isolation.environment(provider: provider, workspace: workspace)) { _, isolation in isolation }
-            let plan = try isolation.launch(workspace: workspace, program: program, command: command.arguments,
-                                            environment: command.environment)
+            let plan = try isolation.launch(policy: HarnessSandbox.policy(workspace: workspace, program: program), program: program,
+                                            command: command.arguments, environment: command.environment)
             // Held until the harness is gone, so no second server runs this bot.
             let lock = try AgentRuntimeLock.acquire(layout: AgentStorageLayout(workspace: workspace))
             let launcher = PlatformHarnessLauncher()

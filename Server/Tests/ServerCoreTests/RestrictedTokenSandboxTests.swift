@@ -28,7 +28,8 @@ import XCTest
     /// Runs `command` through cmd.exe in the bot's sandbox and returns its status and output.
     private func run(_ command: String) throws -> (status: Int32, output: String) {
         let sandbox = RestrictedTokenSandbox()
-        let plan = try sandbox.launch(workspace: workspace, program: shell, command: ["/d", "/c", command],
+        let plan = try sandbox.launch(policy: HarnessSandbox.policy(workspace: workspace, program: shell), program: shell,
+                                      command: ["/d", "/c", command],
                                       environment: try sandbox.environment(provider: .claudeCode, workspace: workspace))
         let launcher = WindowsHarnessLauncher()
         var output = Data(), status: Int32?, closed = 0
@@ -88,7 +89,8 @@ import XCTest
         command.environment.merge(try sandbox.environment(provider: .codex, workspace: workspace)) { _, isolation in isolation }
         try FileManager.default.createDirectory(at: HarnessSandbox.home(workspace: workspace).appendingPathComponent(".codex"),
                                                 withIntermediateDirectories: true)
-        let plan = try sandbox.launch(workspace: workspace, program: URL(fileURLWithPath: path).resolvingSymlinksInPath(),
+        let codex = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+        let plan = try sandbox.launch(policy: HarnessSandbox.policy(workspace: workspace, program: codex), program: codex,
                                       command: command.arguments, environment: command.environment)
         let launcher = WindowsHarnessLauncher()
         var output = Data(), errors = Data(), status: Int32?

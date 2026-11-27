@@ -11,8 +11,9 @@ final class HarnessSandboxTests: XCTestCase {
     private var package: URL { data.appendingPathComponent("Agents/0a") }
 
     private func arguments(program: String = "/home/admin/.local/share/claude/versions/2.1.0") -> [String] {
-        HarnessSandbox().arguments(workspace: workspace, program: URL(fileURLWithPath: program),
-                                   command: ["-p", "--verbose"], environment: ["HOME": "/home/x", "A": "1"])
+        let program = URL(fileURLWithPath: program)
+        return try! HarnessSandbox().arguments(policy: HarnessSandbox.policy(workspace: workspace, program: program), program: program,
+                                               command: ["-p", "--verbose"], environment: ["HOME": "/home/x", "A": "1"])
     }
 
     /// Each `flag source destination` triple, as bubblewrap reads them.
@@ -27,6 +28,19 @@ final class HarnessSandboxTests: XCTestCase {
         let everything = mounts("--bind", in: arguments) + mounts("--ro-bind", in: arguments) + mounts("--ro-bind-try", in: arguments)
         XCTAssertFalse(everything.contains { data.path.hasPrefix($0) || $0 == data.path }, "the server's data is out of sight")
         XCTAssertFalse(everything.contains { $0 == "/" || $0 == "/home" || $0 == "/root" || $0 == "/var" })
+    }
+
+    /// Shared folders are mounted as the policy says, the workspace last so it stays writable inside the
+    /// read-only package, and a silo bubblewrap cannot keep is refused rather than left open.
+    func testSharedFoldersFollowThePolicyAndTheSiloIsRefused() throws {
+        let program = URL(fileURLWithPath: "/usr/local/bin/codex")
+        var policy = HarnessSandbox.policy(workspace: workspace, program: program)
+        policy.folders = [AgentFolder(path: "/srv/shared", writable: true), AgentFolder(path: "/srv/docs", writable: false)]
+        let arguments = try HarnessSandbox().arguments(policy: policy, program: program, command: [], environment: [:])
+        XCTAssertEqual(mounts("--bind", in: arguments), ["/srv/shared", workspace.path])
+        XCTAssertTrue(mounts("--ro-bind", in: arguments).contains("/srv/docs"))
+        policy.egressPort = 4000
+        XCTAssertThrowsError(try HarnessSandbox().arguments(policy: policy, program: program, command: [], environment: [:]))
     }
 
     /// The installation is the program's folder, or the folder above a `bin`, read-only.

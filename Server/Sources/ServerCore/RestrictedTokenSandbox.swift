@@ -95,8 +95,8 @@ extension RestrictedTokenSandbox: HarnessIsolation {
         do {
             try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
             let program = URL(fileURLWithPath: Self.system).appendingPathComponent("System32/cmd.exe")
-            let plan = try launch(workspace: workspace, program: program, command: ["/c", "exit 7"],
-                                  environment: try environment(provider: .claudeCode, workspace: workspace))
+            let plan = try launch(policy: HarnessSandbox.policy(workspace: workspace, program: program), program: program,
+                                  command: ["/c", "exit 7"], environment: try environment(provider: .claudeCode, workspace: workspace))
             let status = try Self.run(plan)
             guard status == 7 else { return "Windows ran the check in a bot's sandbox, but it ended with status \(status)." }
             return nil
@@ -105,13 +105,16 @@ extension RestrictedTokenSandbox: HarnessIsolation {
         }
     }
 
-    public func launch(workspace: URL, program: URL, command: [String], environment: [String: String]) throws -> HarnessLaunchPlan {
+    public func launch(policy: HarnessSandboxPolicy, program: URL, command: [String], environment: [String: String]) throws -> HarnessLaunchPlan {
+        // A restricted token shares the network; it cannot keep it to one local port.
+        if policy.egressPort != nil { throw HarnessSetupError("noodled cannot keep a bot to the silo on Windows yet.") }
+        let workspace = policy.workspace
         let name = Self.botName(workspace: workspace)
         let sid = try Self.bot(name)
         defer { sandbox_free_sid(sid) }
         try Self.grant(workspace, to: sid, writable: true)
-        try Self.grant(AgentStorageLayout(workspace: workspace).package, to: sid, writable: false)
-        try Self.grant(HarnessSandbox.installation(of: program), to: sid, writable: false)
+        for path in policy.readable { try Self.grant(URL(fileURLWithPath: path), to: sid, writable: false) }
+        for folder in policy.folders { try Self.grant(URL(fileURLWithPath: folder.path), to: sid, writable: folder.writable) }
         var plan = HarnessLaunchPlan(name: "the bot's sandbox", executable: program, arguments: command,
                                      environment: environment, directory: workspace, endsGroup: true)
         plan.sandbox = name

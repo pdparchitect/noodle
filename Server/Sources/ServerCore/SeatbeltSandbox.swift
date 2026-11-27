@@ -2,7 +2,7 @@
 import Foundation
 import NoodleCore
 
-/// How a bot's harness runs on a Mac: under the Seatbelt profile Noodle's Agent Host gives a restricted bot,
+/// How a bot's harness runs on a Mac: under the Seatbelt profile Noodle's Agent Host renders for a restricted bot,
 /// applied by `sandbox-exec` before the harness starts, so the harness and every tool it runs keep to it. The
 /// system, the developer tools, the harness's installation and the bot's package can be read, and only the
 /// bot's workspace written. The rest of the server's data, the admin's home and every other bot are out of
@@ -14,22 +14,10 @@ public struct SeatbeltSandbox: HarnessIsolation {
         self.sandboxExec = sandboxExec
     }
 
-    /// The profile for the bot at `workspace` running `program`. The one Noodle gives a restricted Codex names no
-    /// harness's own folders, so it serves Claude Code too; the installation is readable as a whole, as bubblewrap
-    /// mounts it.
-    func profile(workspace: URL, program: URL) -> String {
-        let installation = HarnessSandbox.installation(of: program)
-        let repository = AgentStorageLayout(workspace: workspace).package.deletingLastPathComponent().deletingLastPathComponent()
-        return RestrictedAgentSandbox.profile(workspace: workspace, repository: repository,
-                                              codexHome: HarnessSandbox.home(workspace: workspace).appendingPathComponent(".codex"),
-                                              executableDirectory: installation, application: installation,
-                                              temporary: workspace.appendingPathComponent(".noodle/tmp", isDirectory: true))
-    }
-
-    public func launch(workspace: URL, program: URL, command: [String], environment: [String: String]) -> HarnessLaunchPlan {
+    public func launch(policy: HarnessSandboxPolicy, program: URL, command: [String], environment: [String: String]) -> HarnessLaunchPlan {
         HarnessLaunchPlan(name: "sandbox-exec", executable: sandboxExec,
-                          arguments: ["-p", profile(workspace: workspace, program: program), program.path] + command,
-                          environment: environment, directory: workspace, endsGroup: true)
+                          arguments: ["-p", RestrictedAgentSandbox.seatbelt(policy), program.path] + command,
+                          environment: environment, directory: policy.workspace, endsGroup: true)
     }
 
     /// Codex cannot reach the system's certificates from inside the profile, so it gets the public ones in a file
@@ -51,7 +39,9 @@ public struct SeatbeltSandbox: HarnessIsolation {
         probe.standardOutput = FileHandle.nullDevice
         do {
             try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
-            let plan = launch(workspace: workspace, program: URL(fileURLWithPath: "/usr/bin/true"), command: [], environment: [:])
+            let program = URL(fileURLWithPath: "/usr/bin/true")
+            let plan = launch(policy: HarnessSandbox.policy(workspace: workspace, program: program), program: program,
+                              command: [], environment: [:])
             probe.executableURL = plan.executable
             probe.arguments = plan.arguments
             probe.environment = plan.environment
