@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// The tools an MCP server offers, as MCP JSON: a `tools/list` array and `tools/call` results.
@@ -19,27 +20,80 @@ public struct MCPServer: Sendable {
         self.name = name; self.version = version; self.instructions = instructions; self.source = source
     }
 
-    /// Serves until standard input closes. Calls run side by side; answers are written whole.
-    public func run(input: FileHandle = .standardInput, output sink: FileHandle = .standardOutput) async {
+    /// Serves until standard input closes. Calls run side by side; answers are written whole. On its own standard
+    /// input and output, the server hands itself over to a new executable an update put in its place.
+    public func run(input: FileHandle = .standardInput, output: FileHandle = .standardOutput) async {
+        let stdio = input.fileDescriptor == STDIN_FILENO && output.fileDescriptor == STDOUT_FILENO
+        var resume: MCPRelaunch.Resume?
+        if stdio {
+            resume = MCPRelaunch.resume(from: ProcessInfo.processInfo.environment)
+            unsetenv(MCPRelaunch.environmentKey)
+        }
+        await run(input: input, output: output, relaunch: stdio ? MCPRelaunch.current() : nil, resume: resume)
+    }
+
+    /// `resume` is what the process this one replaced handed over.
+    func run(input: FileHandle, output sink: FileHandle, relaunch: MCPRelaunch?, resume: MCPRelaunch.Resume?) async {
         let output = Output(handle: sink)
+        var relaunch = relaunch
+        var protocolVersion = resume?.protocolVersion
+        // Read here rather than through FileHandle.bytes, so whatever was read and not yet answered can be handed over.
+        var buffer = resume?.pending.map(MCPRelaunch.unstash) ?? Data()
         await withTaskGroup(of: Void.self) { group in
-            // Only a newline ends a message: Foundation's lines also break at U+2028, U+2029 and
-            // U+0085, which JSON may carry unescaped inside a string.
-            var line = Data()
-            do {
-                for try await byte in input.bytes {
-                    guard byte == UInt8(ascii: "\n") else { line.append(byte); continue }
-                    let message = line
-                    line = Data()
-                    guard !message.isEmpty else { continue }
+            var ended = false
+            while true {
+                // Only a newline ends a message: Foundation's lines also break at U+2028, U+2029 and U+0085,
+                // which JSON may carry unescaped inside a string.
+                while let end = buffer.firstIndex(of: UInt8(ascii: "\n")) {
+                    let message = Data(buffer[buffer.startIndex..<end])
+                    guard !message.isEmpty else { buffer = Data(buffer[(end + 1)...]); continue }
+                    if let current = relaunch, current.changed {
+                        // The calls already running are answered from here; the new executable takes the rest.
+                        await group.waitForAll()
+                        let failure = current.takeOver(pending: buffer, protocolVersion: protocolVersion)
+                        FileHandle.standardError.write(Data("\(name): could not run the updated tool: \(failure)\n".utf8))
+                        relaunch = nil
+                    }
+                    buffer = Data(buffer[(end + 1)...])
+                    if let version = Self.negotiated(message) { protocolVersion = version }
                     group.addTask { if let answer = await handle(message) { await output.write(answer) } }
                 }
-            } catch {}
-            if !line.isEmpty {
-                let message = line
-                group.addTask { if let answer = await handle(message) { await output.write(answer) } }
+                if ended { break }
+                let chunk = await Self.read(input)
+                if chunk.isEmpty {
+                    // The last message may end without a newline.
+                    ended = true
+                    if !buffer.isEmpty { buffer.append(UInt8(ascii: "\n")) }
+                } else {
+                    buffer.append(chunk)
+                }
             }
         }
+    }
+
+    /// What arrived next, or nothing once the input closed. One read at a time, only when the server asks for it,
+    /// so nothing is read that a hand-over would lose.
+    private static func read(_ input: FileHandle) async -> Data {
+        let descriptor = input.fileDescriptor
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                var buffer = [UInt8](repeating: 0, count: 65_536)
+                var count: Int
+                repeat { count = Darwin.read(descriptor, &buffer, buffer.count) } while count < 0 && errno == EINTR
+                continuation.resume(returning: count > 0 ? Data(buffer[..<count]) : Data())
+            }
+        }
+    }
+
+    /// The version an initialize request settles on.
+    static func negotiated(_ message: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: message) as? [String: Any],
+              object["method"] as? String == "initialize", object["id"] != nil else { return nil }
+        return agreedVersion(asked: (object["params"] as? [String: Any])?["protocolVersion"] as? String)
+    }
+
+    private static func agreedVersion(asked: String?) -> String {
+        asked.flatMap { versions.contains($0) ? $0 : nil } ?? versions.last!
     }
 
     /// The answer to one message, or nil for a notification.
@@ -56,9 +110,8 @@ public struct MCPServer: Sendable {
         let params = message["params"] as? [String: Any] ?? [:]
         switch method {
         case "initialize":
-            let asked = params["protocolVersion"] as? String ?? ""
             return Self.answer(id: id, result: [
-                "protocolVersion": Self.versions.contains(asked) ? asked : Self.versions.last!,
+                "protocolVersion": Self.agreedVersion(asked: params["protocolVersion"] as? String),
                 "capabilities": ["tools": [String: Any]()],
                 "serverInfo": ["name": name, "version": version],
                 "instructions": instructions])
