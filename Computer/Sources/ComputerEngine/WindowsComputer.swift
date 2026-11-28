@@ -1103,3 +1103,17 @@ private final class ResultBox: @unchecked Sendable {
         }
     }
 }
+
+struct WindowsKindBehavior: ComputerKindBehavior {
+    let capabilities = ComputerCapabilities(resourceEditing: true, diskGrowth: true)
+
+    func growDisk(in directory: URL, to gibibytes: Int) throws {
+        // The guest extends its own file system when it next starts.
+        let disk = directory.appendingPathComponent("Disk.img")
+        guard FileManager.default.fileExists(atPath: disk.path) else { return }
+        let file = try FileHandle(forWritingTo: disk)
+        defer { try? file.close() }
+        let capacity = UInt64(gibibytes) * 1_073_741_824
+        if try file.seekToEnd() < capacity { try file.truncate(atOffset: capacity) }
+    }
+}
