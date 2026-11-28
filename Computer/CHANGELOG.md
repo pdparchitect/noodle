@@ -5,6 +5,7 @@
 ### Fixed
 
 - noodle-computer's help and MCP instructions describe each kind of computer, Windows and SSH included: Windows terminals are PowerShell, its file paths start with the drive letter, it needs macOS 27, it can only be lent and it needs a minute after starting.
+- A Windows computer keeps its network address across restarts: every start gives its network card the hardware address it was made with instead of a new one.
 
 ## [0.35.0] - 2026-11-27
 
