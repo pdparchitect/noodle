@@ -3,6 +3,7 @@ import AppKit
 import ComputerCore
 import ComputerEngine
 import NoodleCore
+import NoodleScenarios
 import RookCore
 import SwiftUI
 

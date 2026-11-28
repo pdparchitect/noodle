@@ -6,6 +6,9 @@ import PackageDescription
 let bindings = "Bindings/Generated"
 // The generated projections are written for the Swift 5 language mode.
 let generated: [SwiftSetting] = [.swiftLanguageMode(.v5)]
+// Match the root package: development hooks are on in debug and opt in for release.
+let developmentHooks: [SwiftSetting] = [.define("NOODLE_DEV_HOOKS", .when(configuration: .debug))]
+    + (Context.environment["NOODLE_DEV_HOOKS"] == "1" ? [.define("NOODLE_DEV_HOOKS")] : [])
 
 let package = Package(
     name: "Windows",
@@ -29,10 +32,11 @@ let package = Package(
             dependencies: [
                 "WinUI", "WinAppSDK", "UWP", "WindowsFoundation",
                 .product(name: "NoodleCore", package: "Noodle"),
+                .product(name: "NoodleScenarios", package: "Noodle"),
                 .product(name: "NoodleRuntime", package: "Noodle"),
                 .product(name: "HubLink", package: "HubLink"),
             ],
-            swiftSettings: [.swiftLanguageMode(.v5)],
+            swiftSettings: [.swiftLanguageMode(.v5)] + developmentHooks,
             // A window app, without a console, in release builds; debug builds keep the console for print.
             linkerSettings: [.unsafeFlags(["-Xlinker", "/SUBSYSTEM:WINDOWS", "-Xlinker", "/ENTRY:mainCRTStartup"],
                                           .when(configuration: .release))]

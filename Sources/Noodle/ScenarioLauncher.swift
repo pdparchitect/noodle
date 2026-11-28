@@ -1,36 +1,11 @@
 #if NOODLE_DEV_HOOKS
 import AppKit
-import CryptoKit
+import NoodleScenarios
 import SwiftUI
 
-// What every app's scenarios share, whatever a scenario holds: choosing one, remembering the choice,
-// reopening the bundle into it, the picker, the Scenarios menu and the clock times scenarios are written in.
-// Nothing here knows an app's store or its scenario format. Development builds only.
-
-struct ScenarioError: LocalizedError {
-    let errorDescription: String?
-    /// The scenario is sound but names media that scripts/scenario.sh has not fetched yet. A
-    /// fresh checkout has none of it, so this is a scenario waiting for the script rather than a
-    /// mistake in it.
-    let needsFetch: Bool
-    init(_ description: String, needsFetch: Bool = false) {
-        errorDescription = description
-        self.needsFetch = needsFetch
-    }
-}
-
-/// A folder under the scenarios root, as the picker and the menu list it. A scenario that does not load keeps its
-/// place and says why.
-struct ScenarioListing: Identifiable {
-    let name: String
-    let folder: URL
-    let title: String
-    var summary: String?
-    let error: String?
-    /// Its media has not been fetched yet; the scenario itself is sound.
-    var needsFetch: Bool = false
-    var id: String { name }
-}
+// What every app's scenarios share on the Mac, whatever a scenario holds: choosing one, remembering the choice,
+// reopening the bundle into it, the picker and the Scenarios menu. Their errors, clock times and files are in
+// NoodleScenarios. Nothing here knows an app's store or its scenario format. Development builds only.
 
 @MainActor enum ScenarioLauncher {
     /// Where `scripts/scenario.sh` said the scenarios are, under the Info.plist key it wrote.
@@ -64,19 +39,7 @@ struct ScenarioListing: Identifiable {
 
     /// Every folder under `root` with a scenario.json, each read with `load` for its title and summary.
     static func listings(in root: URL?, load: (URL) throws -> (title: String, summary: String?)) -> [ScenarioListing] {
-        guard let root, let names = try? FileManager.default.contentsOfDirectory(atPath: root.path) else { return [] }
-        return names.sorted().compactMap { name in
-            let folder = root.appendingPathComponent(name, isDirectory: true)
-            guard let data = try? Data(contentsOf: folder.appendingPathComponent("scenario.json")) else { return nil }
-            do {
-                let loaded = try load(folder)
-                return ScenarioListing(name: name, folder: folder.standardizedFileURL, title: loaded.title, summary: loaded.summary, error: nil)
-            } catch {
-                let title = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["title"] as? String
-                return ScenarioListing(name: name, folder: folder.standardizedFileURL, title: title ?? name, error: error.localizedDescription,
-                                       needsFetch: (error as? ScenarioError)?.needsFetch == true)
-            }
-        }
+        ScenarioListing.all(in: root, load: load)
     }
 
     /// A sandboxed app cannot pass itself launch arguments, so the choice travels in the pointer file.
@@ -196,37 +159,6 @@ struct ScenarioMenu: Commands {
     }
 }
 
-enum ScenarioTime {
-    /// The clock a scenario opens at: `HH:mm` today, or the wall clock.
-    static func start(_ clock: String?, now: Date, calendar: Calendar = .current) throws -> Date {
-        guard let clock else { return now }
-        guard !clock.contains(" "), !clock.hasPrefix("-") else { throw ScenarioError("clock is a time such as \"09:41\".") }
-        return try date(clock, clock: now, calendar: calendar)
-    }
-
-    /// `HH:mm` on the scenario's day, `-Nd HH:mm` on an earlier day, or `-Nm` and `-Nh` before the clock.
-    static func date(_ text: String, clock: Date, calendar: Calendar = .current) throws -> Date {
-        func time(_ value: Substring, daysAgo: Int) -> Date? {
-            let fields = value.split(separator: ":", omittingEmptySubsequences: false).compactMap { Int($0) }
-            guard value.count == 5, fields.count == 2, (0..<24).contains(fields[0]), (0..<60).contains(fields[1]),
-                  let day = calendar.date(byAdding: .day, value: -daysAgo, to: clock) else { return nil }
-            return calendar.date(bySettingHour: fields[0], minute: fields[1], second: 0, of: day)
-        }
-        func ago(_ value: Substring, _ unit: Character) -> Int? {
-            value.first == "-" && value.last == unit ? Int(value.dropFirst().dropLast()).flatMap { $0 >= 0 ? $0 : nil } : nil
-        }
-        let parts = text.split(separator: " ")
-        if parts.count == 1 {
-            if let date = time(parts[0], daysAgo: 0) { return date }
-            if let minutes = ago(parts[0], "m") { return clock.addingTimeInterval(-60 * Double(minutes)) }
-            if let hours = ago(parts[0], "h") { return clock.addingTimeInterval(-3600 * Double(hours)) }
-        } else if parts.count == 2, let days = ago(parts[0], "d"), let date = time(parts[1], daysAgo: days) {
-            return date
-        }
-        throw ScenarioError("\"\(text)\" is not a time: use \"HH:mm\", \"-2d HH:mm\", \"-15m\" or \"-3h\".")
-    }
-}
-
 /// The line protocol with scripts/scenario.sh. The app writes a line; where the script must act first, as when it
 /// photographs a shot, it answers with a newline. A newline nobody waits for is Next Step. Launch Services attaches
 /// no terminal, so the input ends at once, nothing waits for an answer again, and only the menu is left.
@@ -279,71 +211,8 @@ enum ScenarioTime {
 
 // MARK: - Shared pieces
 
-enum ScenarioSupport {
-    /// Keys of `original` that did not survive decoding and encoding again. Null values are skipped, as encoding omits them.
-    static func unknownKeys(in original: Any, comparedTo encoded: Any?, path: String = "") -> [String] {
-        if let original = original as? [String: Any] {
-            let encoded = encoded as? [String: Any] ?? [:]
-            return original.keys.sorted().flatMap { key -> [String] in
-                guard !(original[key] is NSNull) else { return [] }
-                let here = path.isEmpty ? key : "\(path).\(key)"
-                return encoded[key] == nil ? [here] : unknownKeys(in: original[key]!, comparedTo: encoded[key], path: here)
-            }
-        }
-        if let original = original as? [Any] {
-            let encoded = encoded as? [Any] ?? []
-            return original.enumerated().flatMap { index, value in
-                unknownKeys(in: value, comparedTo: encoded.indices.contains(index) ? encoded[index] : nil, path: "\(path)[\(index)]")
-            }
-        }
-        return []
-    }
-
-    /// A picture or video a scenario names: an asset in its own folder, or a web address
-    /// that scripts/scenario.sh has fetched into the `.cache` beside the scenarios. The
-    /// bundle has no network of its own, so nothing is ever downloaded from in here.
-    /// A full path names a file scripts/scenario.sh has let the bundle read, such as a picture given to a recording.
-    static func media(_ value: String, in folder: URL) throws -> URL {
-        if value.hasPrefix("/") {
-            guard FileManager.default.fileExists(atPath: value) else { throw ScenarioError("Missing file: \(value)") }
-            return URL(fileURLWithPath: value)
-        }
-        guard isRemote(value) else { return try file(value, under: folder) }
-        // One cache for all of them: the name is the address, so two scenarios naming the
-        // same thing share the one copy. Found by name rather than by extension, because a
-        // web address need not end in one and the script works out what it is.
-        let stem = cacheStem(for: value)
-        let cache = folder.deletingLastPathComponent().appendingPathComponent(".cache", isDirectory: true)
-        let found = (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil))?
-            .first { $0.lastPathComponent.hasPrefix(stem) }
-        guard let found else {
-            throw ScenarioError(
-                "\(value) has not been fetched yet. scripts/scenario.sh downloads it beside the scenarios.",
-                needsFetch: true)
-        }
-        return found
-    }
-
-    static func isRemote(_ value: String) -> Bool {
-        value.hasPrefix("https://") || value.hasPrefix("http://")
-    }
-
-    /// What a fetched address is called on disk, before its extension. The script names
-    /// downloads the same way, so changing this strands every cache.
-    static func cacheStem(for address: String) -> String {
-        String(SHA256.hash(data: Data(address.utf8)).map { String(format: "%02x", $0) }.joined().prefix(16))
-    }
-
-    /// A file named by a scenario, kept inside `root` however the name is written.
-    static func file(_ path: String, under root: URL) throws -> URL {
-        let url = root.appendingPathComponent(path).standardizedFileURL
-        guard url.path.hasPrefix(root.standardizedFileURL.path + "/"),
-              FileManager.default.fileExists(atPath: url.path) else {
-            throw ScenarioError("Missing asset: \(path)")
-        }
-        return url
-    }
-
+/// What the Mac adds to reading a scenario: where its windows go, and its pictures redrawn.
+extension ScenarioSupport {
     static var screen: NSRect { NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080) }
 
     /// Scenario frames are `[x, y, width, height]` from the top left of the main screen.

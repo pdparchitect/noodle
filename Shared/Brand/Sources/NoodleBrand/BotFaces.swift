@@ -16,7 +16,8 @@ public enum BotFaces {
     /// Women first, then men, then faces for any name. Each file's name says which it is.
     public static let all: [BotFace] = {
         let order = ["feminine", "masculine", "any"]
-        let urls = (Bundle.module.urls(forResourcesWithExtension: "jpg", subdirectory: "Faces") ?? []).sorted {
+        // Foundation outside Apple's platforms hands these back as NSURL.
+        let urls = (Bundle.module.urls(forResourcesWithExtension: "jpg", subdirectory: "Faces") ?? []).map { $0 as URL }.sorted {
             let kinds = [$0, $1].map { order.firstIndex(of: kind($0)) ?? order.count }
             return kinds[0] != kinds[1] ? kinds[0] < kinds[1] : $0.lastPathComponent < $1.lastPathComponent
         }

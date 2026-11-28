@@ -1,3 +1,5 @@
+// Drawn with SwiftUI, so only where SwiftUI is; the faces and names build everywhere.
+#if canImport(SwiftUI)
 import SwiftUI
 
 /// A moment a bot marks in a conversation, drawn the same on every device. Effects travel between apps by
@@ -313,3 +315,4 @@ private func sample(_ seed: UInt64, _ index: Int, _ salt: UInt64) -> Double {
     value = (value ^ (value >> 27)) &* 0x94D049BB133111EB
     return Double((value ^ (value >> 31)) & 0xFFFF) / 65535
 }
+#endif

@@ -45,6 +45,7 @@ let package = Package(
     ],
     products: [
         .library(name: "NoodleCore", targets: ["NoodleCore"]),
+        .library(name: "NoodleScenarios", targets: ["NoodleScenarios"]),
         .library(name: "NoodleRuntime", targets: ["NoodleRuntime"]),
         .library(name: "NoodleRuntimeSettings", targets: ["NoodleRuntimeSettings"]),
         .library(name: "NoodleHubClient", targets: ["NoodleHubClient"]),
@@ -122,6 +123,12 @@ let package = Package(
         .target(name: "NoodleCore", dependencies: [.target(name: "CSQLite", condition: .when(platforms: [.linux, .windows])), .product(name: "WindowsPOSIX", package: "WindowsPOSIX", condition: .when(platforms: [.windows])), .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows])), .product(name: "ProductIdentity", package: "Product"), .product(name: "BrowserBridge", package: "BrowserProtocol"), .product(name: "AppletBridge", package: "Protocol"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "NoodleWallpaperCore", package: "Wallpaper"), .product(name: "NoodlePatch", package: "Patch")],
             swiftSettings: developmentHooks,
             linkerSettings: [.linkedLibrary("sqlite3", .when(platforms: [.linux])), .linkedLibrary("winsqlite3", .when(platforms: [.windows]))]),
+        /// Scenarios' format, checks and the workspace they seed, shared by the apps that play them, Noodle for Windows
+        /// too. Empty outside development builds, like the hooks that play them.
+        .target(name: "NoodleScenarios", dependencies: ["NoodleCore", .product(name: "NoodleBrand", package: "Brand"),
+                                                       .product(name: "NoodleDocument", package: "Document", condition: .when(platforms: [.macOS])),
+                                                       .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows]))],
+                swiftSettings: developmentHooks),
         /// Noodle Enterprise: managed preferences from a configuration profile. Source-available under
         /// Enterprise/LICENSE, not the Functional Source License; the rest of Noodle reaches it only
         /// through NoodleCore's OrganisationPolicy.
@@ -169,7 +176,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Noodle",
-            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleAppletTools", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleContextFieldsTools", "NoodleImagesTools", "NoodleRemindersTools", "NoodleToolConnections", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "NoodleVoicePeer", "HubCore", "HubMac", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleDocument", package: "Document"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "NoodleEnterprise", .product(name: "NoodletRuntime", package: "Protocol")],
+            dependencies: [.product(name: "BrowserBridge", package: "BrowserProtocol"), "NoodleCore", "NoodleAppletTools", "NoodleBrowserTools", "NoodleCalendarTools", "NoodleComputerTools", "NoodleContextFieldsTools", "NoodleImagesTools", "NoodleRemindersTools", "NoodleToolConnections", "NoodleSharing", "NoodleRuntime", "NoodleRuntimeSettings", "NoodleAgentBridge", "NoodleAudioCapture", "NoodleVoicePeer", "HubCore", "HubMac", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "NoodleSettingsUI", package: "SettingsUI"), .product(name: "NoodleWallpaper", package: "Wallpaper"), .product(name: "NoodleDocument", package: "Document"), .product(name: "NoodleBrand", package: "Brand"), .product(name: "Sparkle", package: "Sparkle"), .product(name: "ComputerBridge", package: "Bridge"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "NoodleEnterprise", "NoodleScenarios", .product(name: "NoodletRuntime", package: "Protocol")],
             swiftSettings: [
                 .unsafeFlags([
                     "-emit-const-values",
@@ -193,11 +200,13 @@ let package = Package(
         ),
         /// NoodleCore's tests that also run on Linux.
         .testTarget(name: "NoodleCorePortableTests", dependencies: ["NoodleCore"]),
+        /// Every scenario under Scenarios/ read and checked, wherever the apps that play them build.
+        .testTarget(name: "NoodleScenariosTests", dependencies: ["NoodleScenarios", "NoodleCore"], swiftSettings: developmentHooks),
         /// The tool connections' tests that also run on Linux.
         .testTarget(name: "NoodleToolConnectionsPortableTests", dependencies: ["NoodleToolConnections", "NoodleCore"]),
         .testTarget(
             name: "NoodleAppTests",
-            dependencies: ["Noodle", "NoodleContextFieldsTools", "NoodleCore", "NoodleRuntime", "NoodleVoicePeer", "NoodleRuntimeSettings", "NoodleToolConnections", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "HubCore", "HubMac", .product(name: "NoodleBrand", package: "Brand"), .product(name: "NoodletRuntime", package: "Protocol")],
+            dependencies: ["Noodle", "NoodleContextFieldsTools", "NoodleCore", "NoodleRuntime", "NoodleVoicePeer", "NoodleRuntimeSettings", "NoodleToolConnections", "NoodleAudioCapture", .product(name: "NoodleLaunchChecks", package: "LaunchChecks"), .product(name: "HubLink", package: "HubLink"), "NoodleHubClient", "HubCore", "HubMac", .product(name: "NoodleBrand", package: "Brand"), .product(name: "NoodletRuntime", package: "Protocol"), "NoodleScenarios"],
             swiftSettings: developmentHooks
         ),
         .testTarget(
@@ -244,8 +253,9 @@ if ProcessInfo.processInfo.environment["NOODLE_APPLE_HARNESS_ONLY"] == "1" {
 }
 
 #if os(Linux) || os(Windows)
-// Only the Hub engine builds on Linux and Windows, with the tests that run there.
-let linux: Set<String> = ["CSQLite", "NoodleCore", "NoodleToolConnections", "NoodleAgentBridge", "NoodleRuntime", "HubCore", "NoodleCorePortableTests", "NoodleToolConnectionsPortableTests"]
+// Only the Hub engine and the scenarios build on Linux and Windows, with the tests that run there.
+let linux: Set<String> = ["CSQLite", "NoodleCore", "NoodleToolConnections", "NoodleAgentBridge", "NoodleRuntime", "HubCore", "NoodleScenarios",
+                          "NoodleCorePortableTests", "NoodleToolConnectionsPortableTests", "NoodleScenariosTests"]
 package.targets.removeAll { !linux.contains($0.name) }
-package.products.removeAll { !["NoodleCore", "NoodleToolConnections", "NoodleAgentBridge", "NoodleRuntime", "HubCore"].contains($0.name) }
+package.products.removeAll { !["NoodleCore", "NoodleToolConnections", "NoodleAgentBridge", "NoodleRuntime", "HubCore", "NoodleScenarios"].contains($0.name) }
 #endif

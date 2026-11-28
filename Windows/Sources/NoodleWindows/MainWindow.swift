@@ -14,7 +14,10 @@ final class MainWindow {
     private let conversation: ConversationPane
     private var store: Store?
 
-    init() {
+    private let folder: URL
+
+    init(folder: URL = Store.defaultFolder, selection: UUID? = nil) {
+        self.folder = folder
         let root = Xaml.load(Self.shell) as! Grid
         navigation = Xaml.find(root, "Navigation")
         let titleBar: TitleBar = Xaml.find(root, "TitleBar")
@@ -32,19 +35,30 @@ final class MainWindow {
             guard let item = args?.selectedItem as? ConversationItem else { return }
             self?.show(item.conversationID)
         }
-        load()
+        load(selecting: selection)
     }
 
     func activate() { try? window.activate() }
 
+    #if NOODLE_DEV_HOOKS
+    func setScenarioDraft(_ text: String, for id: UUID) {
+        conversation.setScenarioDraft(text, for: id)
+    }
+
+    func refreshScenario(selecting selection: UUID? = nil) {
+        load(selecting: selection ?? (navigation.selectedItem as? ConversationItem)?.conversationID)
+    }
+
+    #endif
+
     /// Reads the store again, as after a message is sent, which can move its conversation up the list.
     private func load(selecting selection: UUID? = nil) {
         do {
-            let store = try Store()
+            let store = try Store(folder: folder)
             self.store = store
             fillPane(with: store, selecting: selection)
         } catch {
-            conversation.showProblem("Noodle could not read its store at \(Store.defaultFolder.path).", detail: "\(error)")
+            conversation.showProblem("Noodle could not read its store at \(folder.path).", detail: "\(error)")
         }
     }
 

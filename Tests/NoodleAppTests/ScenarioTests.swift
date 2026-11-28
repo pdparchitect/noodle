@@ -5,6 +5,7 @@ import NoodleCore
 import NoodleLaunchChecks
 import XCTest
 @testable import Noodle
+@testable import NoodleScenarios
 @testable import NoodleRuntime
 
 /// Scenarios are loaded by path from `Scenarios/` at the repository root. Every folder there is

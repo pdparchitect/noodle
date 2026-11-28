@@ -9,6 +9,9 @@ import WinAppSDK
 /// XAML compiler has to do itself: without it WinUI's styles fail to load, as do the names in our markup.
 public final class NoodleApp: Application, IXamlMetadataProvider {
     private var window: MainWindow?
+    #if NOODLE_DEV_HOOKS
+    private var scenario: ScenarioLaunch?
+    #endif
     private lazy var controlsMetadata = XamlControlsXamlMetaDataProvider()
     private var metadataProvider: AnyObject?
 
@@ -16,14 +19,25 @@ public final class NoodleApp: Application, IXamlMetadataProvider {
     /// Application.Start, and then runs a message loop that also serves Foundation's RunLoop and the main queue.
     static func main() {
         do {
+            #if NOODLE_DEV_HOOKS
+            let scenario = try ScenarioLaunch.load()
+            defer { scenario?.removeWorkspace() }
+            let pollingScenario = scenario?.replaysTimeline == true
+            #else
+            guard CommandLine.arguments.dropFirst().first != "--scenario" else { return }
+            let pollingScenario = false
+            #endif
             // XAML runs on a single-threaded apartment.
             guard RoInitialize(RO_INIT_SINGLETHREADED) >= 0 else { fatalError("Windows Runtime did not start") }
             try WindowsAppRuntime.start()
             let dispatcher = try DispatcherQueueController.createOnCurrentThread()
             let application = NoodleApp()
+            #if NOODLE_DEV_HOOKS
+            application.scenario = scenario
+            #endif
             let xaml = try WindowsXamlManager.initializeForCurrentThread()
             application.dispatcherShutdownMode = .onLastWindowClose
-            withExtendedLifetime([dispatcher, application, xaml] as [AnyObject]) { runMessageLoop() }
+            withExtendedLifetime([dispatcher, application, xaml] as [AnyObject]) { runMessageLoop(pollingScenario: pollingScenario) }
         } catch {
             fatalError("Noodle could not start: \(error)")
         }
@@ -33,8 +47,23 @@ public final class NoodleApp: Application, IXamlMetadataProvider {
     override public func onLaunched(_ args: WinUI.LaunchActivatedEventArgs?) {
         provideMetadata()
         resources.mergedDictionaries.append(XamlControlsResources())
+        #if NOODLE_DEV_HOOKS
+        window = MainWindow(folder: scenario?.folder ?? Store.defaultFolder, selection: scenario?.selection)
+        #else
         window = MainWindow()
+        #endif
         window?.activate()
+        #if NOODLE_DEV_HOOKS
+        if let scenario, let window {
+            Task { @MainActor in
+                do {
+                    try await scenario.play(in: window)
+                } catch {
+                    print("Scenario replay failed: \(error.localizedDescription)")
+                }
+            }
+        }
+        #endif
     }
 
     /// XAML should ask the application for this metadata through IXamlMetadataProvider, but on Windows App SDK 1.8
@@ -53,7 +82,7 @@ public final class NoodleApp: Application, IXamlMetadataProvider {
     public func getXmlnsDefinitions() throws -> [XmlnsDefinition] { try controlsMetadata.getXmlnsDefinitions() }
 
     /// Windows messages first, then Foundation's timers and the main queue, then sleep until either has work.
-    private static func runMessageLoop() {
+    private static func runMessageLoop(pollingScenario: Bool) {
         typealias PreTranslate = @convention(c) (UnsafePointer<MSG>?) -> Bool
         // WinUI's own keyboard handling, such as accelerators and focus keys, sees each message first.
         let preTranslate = GetProcAddress(LoadLibraryW("Microsoft.UI.Windowing.Core.dll".wide), "ContentPreTranslateMessage")
@@ -70,7 +99,8 @@ public final class NoodleApp: Application, IXamlMetadataProvider {
             var next = RunLoop.main.limitDate(forMode: .default)
             while let date = next, date.timeIntervalSinceNow <= 0 { next = RunLoop.main.limitDate(forMode: .default) }
             let wait = next.map { DWORD(min(max($0.timeIntervalSinceNow * 1000, 0), Double(UInt32.max - 1))) } ?? INFINITE
-            _ = MsgWaitForMultipleObjects(0, nil, false, wait, QS_ALLINPUT)
+            // Swift task continuations can reach the main queue without a Win32 message.
+            _ = MsgWaitForMultipleObjects(0, nil, false, pollingScenario ? min(wait, 16) : wait, QS_ALLINPUT)
         }
     }
 }
