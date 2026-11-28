@@ -1,3 +1,5 @@
+// Drawn with SwiftUI, so only where SwiftUI is; the faces and names build everywhere.
+#if canImport(SwiftUI)
 import SwiftUI
 
 /// A first launch in a window: the wordmark writes itself, and Continue lifts it to make room
@@ -104,3 +106,4 @@ public struct WordmarkWelcome<Next: View>: View {
         withAnimation(liftAnimation) { continued = true }
     }
 }
+#endif

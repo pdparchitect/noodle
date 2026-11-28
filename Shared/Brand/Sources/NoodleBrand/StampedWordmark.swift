@@ -1,3 +1,5 @@
+// Drawn with SwiftUI, so only where SwiftUI is; the faces and names build everywhere.
+#if canImport(SwiftUI)
 import SwiftUI
 
 /// A name stamped one letter at a time: each letter drops onto the page, lands with a jolt that shakes the
@@ -146,3 +148,4 @@ extension StampedWordmark.Letter {
         self.init(width: width, shape: shape)
     }
 }
+#endif

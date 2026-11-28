@@ -240,6 +240,7 @@ let project = Project(
                 .package(product: "RookCore"),
                 .package(product: "NoodleBrand"),
                 .package(product: "NoodleCore"),
+                .package(product: "NoodleScenarios"),
                 .package(product: "NoodleRuntime"),
                 .package(product: "NoodleRuntimeSettings"),
                 .package(product: "NoodleAudioCapture"),

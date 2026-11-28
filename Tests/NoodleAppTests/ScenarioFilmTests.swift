@@ -4,6 +4,7 @@ import Foundation
 import NoodleCore
 import XCTest
 @testable import Noodle
+@testable import NoodleScenarios
 
 /// The titles a scenario film opens and closes with, and the wordmark it writes.
 @MainActor final class ScenarioFilmTests: XCTestCase {

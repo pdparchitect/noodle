@@ -1,6 +1,7 @@
 #if PION_DEV_HOOKS
 import AppKit
 import NoodleCore
+import NoodleScenarios
 import PionCore
 import SwiftUI
 

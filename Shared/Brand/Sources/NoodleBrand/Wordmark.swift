@@ -1,3 +1,5 @@
+// Drawn with SwiftUI, so only where SwiftUI is; the faces and names build everywhere.
+#if canImport(SwiftUI)
 import SwiftUI
 
 /// The Noodle wordmark as one pen stroke, which the apps' first screens write on as the website does.
@@ -136,3 +138,4 @@ public struct Wordmark: Shape {
         return length
     }
 }
+#endif
