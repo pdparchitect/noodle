@@ -406,6 +406,7 @@ private struct ComposerDraftInput: View {
                 people: store.sharedPeople(in: conversation),
                 completion: completion,
                 submit: { store.sendDraft(to: conversation.id) },
+                submitImmediately: { store.sendDraft(to: conversation.id, interrupt: true) },
                 focusSidebar: focusSidebar,
                 pasteAttachments: { store.importAttachmentsFromPasteboard(into: conversation.id, pasteboard: $0) },
                 forcePasteAttachments: {

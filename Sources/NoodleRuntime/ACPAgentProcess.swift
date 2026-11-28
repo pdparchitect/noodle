@@ -89,7 +89,7 @@ public final class ACPAgentProcess: AgentRuntimeProcess {
         self.onUnexpectedTermination = onUnexpectedTermination
         stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: provider, extendedAccess: extendedAccess)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
-        handoff = HarnessHandoff(sessionStateURL: stateURL)
+        handoff = HarnessHandoff(sessionStateURL: stateURL, workspace: workspaceURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         if let data = try? Data(contentsOf: stateURL), let saved = try? JSONDecoder().decode(ACPSessionState.self, from: data) {
             state = saved

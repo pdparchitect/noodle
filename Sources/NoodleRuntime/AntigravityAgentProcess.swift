@@ -63,7 +63,7 @@ public final class AntigravityAgentProcess: AgentRuntimeProcess {
         let stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: .antigravity, extendedAccess: extendedAccess)
         sessionState = AntigravitySessionState(url: stateURL)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
-        handoff = HarnessHandoff(sessionStateURL: stateURL)
+        handoff = HarnessHandoff(sessionStateURL: stateURL, workspace: workspaceURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
     }

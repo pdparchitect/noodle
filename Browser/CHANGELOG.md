@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Files saved from Downloads carry a download mark so macOS can apply its usual checks when they are opened.
+
 ## [0.22.8] - 2026-11-27
 
 ### Changed

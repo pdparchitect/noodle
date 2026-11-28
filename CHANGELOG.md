@@ -6,8 +6,14 @@ All notable changes to Noodle are documented here, following
 
 ## [Unreleased]
 
+### Added
+
+- Choose **Set Away…** from the Noodle menu to tell the bots on this Mac when you’ll be back and leave a note. While you’re away they can still send messages, and new calls are unavailable until you return.
+- Press Command-Return or Control-Return to send immediately. In a group, this applies to the bots you mention.
+
 ### Fixed
 
+- Attachments saved or dragged out of a conversation are marked as downloads so macOS can apply its usual checks when they are opened.
 - A row in the sidebar shows when its last message came, as its place in the list does, instead of when the group was last edited.
 
 ## [0.99.0] - 2026-11-27

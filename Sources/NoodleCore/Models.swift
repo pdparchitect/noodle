@@ -257,6 +257,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     public var call: VoiceCallRecord?
     /// The task a person's message is about, when they wrote from the task.
     public var task: TaskReference?
+    public var interrupt: Bool?
 
     public init(
         id: UUID = UUID(),

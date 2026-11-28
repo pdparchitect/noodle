@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import SwiftUI
 import NoodleCore
 import UniformTypeIdentifiers
@@ -50,6 +51,7 @@ enum AttachmentDrag {
         let exportedURL = directory.appendingPathComponent(filename)
         do {
             try manager.copyItem(at: fileURL, to: exportedURL)
+            try markDownloaded(exportedURL)
         } catch {
             try? manager.removeItem(at: directory)
             throw error
@@ -72,7 +74,13 @@ enum AttachmentDrag {
                     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("NoodleAttachmentDrag-\(UUID())", isDirectory: true)
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                     let exported = directory.appendingPathComponent(filename.isEmpty ? file.lastPathComponent : filename)
-                    try FileManager.default.copyItem(at: file, to: exported)
+                    do {
+                        try FileManager.default.copyItem(at: file, to: exported)
+                        try markDownloaded(exported)
+                    } catch {
+                        try? FileManager.default.removeItem(at: directory)
+                        throw error
+                    }
                     completion(exported, false, nil)
                 } catch {
                     completion(nil, false, error)
@@ -205,9 +213,29 @@ enum AttachmentDrag {
         if manager.fileExists(atPath: destination.path) {
             let copy = try temporaryCopy(of: fileURL)
             defer { try? manager.removeItem(at: copy.deletingLastPathComponent()) }
-            _ = try manager.replaceItemAt(destination, withItemAt: copy)
+            try markDownloaded(copy)
+            _ = try manager.replaceItemAt(destination, withItemAt: copy, options: .usingNewMetadataOnly)
         } else {
             try manager.copyItem(at: fileURL, to: destination)
+            do {
+                try markDownloaded(destination)
+            } catch {
+                try? manager.removeItem(at: destination)
+                throw error
+            }
+        }
+    }
+
+    private static func markDownloaded(_ file: URL) throws {
+        let timestamp = String(Int(Date().timeIntervalSince1970), radix: 16)
+        let value = Array("0001;\(timestamp);Noodle;".utf8)
+        let result = file.path.withCString { path in
+            value.withUnsafeBytes { bytes in
+                setxattr(path, "com.apple.quarantine", bytes.baseAddress, bytes.count, 0, XATTR_NOFOLLOW | XATTR_CREATE)
+            }
+        }
+        if result != 0, errno != EEXIST {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSURLErrorKey: file])
         }
     }
 

@@ -85,6 +85,9 @@ public enum AgentCallDocumentation {
 extension WorkspaceRepository {
     /// Places a call from a bot whose harness takes calls to the person in its own conversation.
     public func requestCall(agentID: UUID, reason rawReason: String, now: Date = Date()) throws -> AgentCallRequest {
+        if let away = try loadOwnerAway(forAgent: agentID), away.isActive(at: now) {
+            throw AgentCallError("Your person is away until \(away.until.formatted()). Send a message instead.")
+        }
         let reason = AgentCallRequest.shownReason(rawReason)
         guard !reason.isEmpty, reason.unicodeScalars.count <= AgentCallLimits.reasonLength else {
             throw AgentCallError("A call needs a --reason of at most \(AgentCallLimits.reasonLength) characters saying why you are calling.")

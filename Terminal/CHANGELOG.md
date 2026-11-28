@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Terminal marks downloaded attachments as coming from the internet on Mac and Windows. Opening an executable attachment shows it in its folder.
+
 ## [0.3.0] - 2026-11-28
 
 ### Changed

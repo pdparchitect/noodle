@@ -183,6 +183,8 @@ public enum LinkRequest: Codable, Equatable, Sendable {
     /// The Hub pushes `groupNotificationsChanged` and answers with `status`. Only a Hub whose status says
     /// `notifiesMentions` knows it.
     case setGroupNotifications(LinkNotifications)
+    case ownerAway
+    case setOwnerAway(LinkOwnerAway?)
     /// Where this device hears of unread replies while it is away from the Hub, or nil to stop.
     case pushTopic(LinkPushTopic)
     /// Lets the Hub ring this device through Noodle Push while it is away or Noodle is closed, or with no
@@ -641,7 +643,18 @@ extension LinkBrowser: LinkPictured {
     }
 }
 
+public struct LinkOwnerAway: Codable, Equatable, Sendable {
+    public let until: Date
+    public let note: String
+
+    public init(until: Date, note: String) {
+        self.until = until
+        self.note = note
+    }
+}
+
 public enum LinkResponse: Codable, Equatable, Sendable {
+    case ownerAway(LinkOwnerAway?)
     case status(LinkStatus)
     case bots([LinkBot])
     case bot(LinkBot)
@@ -2051,16 +2064,19 @@ public struct LinkOutgoingMessage: Codable, Equatable, Sendable {
     public var attachmentIDs: [UUID]
     /// One of a bot's tasks the message is about; the Hub carries it to the bot.
     public var taskID: UUID?
+    public var interrupt: Bool?
 
-    public init(conversationID: UUID, id: UUID, body: String, attachmentIDs: [UUID] = [], taskID: UUID? = nil) {
+    public init(conversationID: UUID, id: UUID, body: String, attachmentIDs: [UUID] = [],
+                taskID: UUID? = nil, interrupt: Bool? = nil) {
         self.conversationID = conversationID
         self.id = id
         self.body = body
         self.attachmentIDs = attachmentIDs
         self.taskID = taskID
+        self.interrupt = interrupt
     }
 
-    private enum CodingKeys: String, CodingKey { case conversationID, id, body, attachmentIDs, taskID }
+    private enum CodingKeys: String, CodingKey { case conversationID, id, body, attachmentIDs, taskID, interrupt }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2069,6 +2085,7 @@ public struct LinkOutgoingMessage: Codable, Equatable, Sendable {
         body = try c.decode(String.self, forKey: .body)
         attachmentIDs = try c.decode(.attachmentIDs, or: [])
         taskID = try c.decodeIfPresent(UUID.self, forKey: .taskID)
+        interrupt = try c.decodeIfPresent(Bool.self, forKey: .interrupt)
     }
 }
 

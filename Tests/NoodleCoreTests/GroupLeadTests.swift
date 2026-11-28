@@ -43,6 +43,18 @@ final class GroupLeadTests: XCTestCase {
         XCTAssertTrue(GroupLead.wakeOrder([heron, moth], in: group, body: "Hi").later.isEmpty)
     }
 
+    func testAnImmediateGroupSendTargetsOnlyMentionedBots() {
+        let ada = AgentRecord(displayName: "Ada", harnessIdentifier: "codex")
+        let grace = AgentRecord(displayName: "Grace", harnessIdentifier: "codex")
+        var group = BotConversation(displayName: "Case", kind: .group, participantIDs: [ada.id, grace.id])
+        group.leadID = grace.id
+
+        XCTAssertEqual(GroupLead.interruptionTargets([ada, grace], in: group, body: "@Ada, stop"), [ada.id])
+        XCTAssertTrue(GroupLead.interruptionTargets([ada, grace], in: group, body: "Anybody?").isEmpty)
+        let direct = BotConversation(displayName: "Ada", kind: .direct, participantIDs: [ada.id])
+        XCTAssertEqual(GroupLead.interruptionTargets([ada], in: direct, body: "Stop"), [ada.id])
+    }
+
     func testAMentionNeedsTheWholeName() {
         let ada = AgentRecord(displayName: "Ada", harnessIdentifier: "codex")
         XCTAssertEqual(GroupLead.mentioned(in: "@Ada?", among: [ada]), [ada.id])

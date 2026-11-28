@@ -41,17 +41,28 @@ public struct AgentTurnRecovery {
 /// catches up from the conversation and workspace. The mark sits beside the session it applies to.
 public struct HarnessHandoff {
     private let url: URL
+    private let workspace: URL?
 
-    public init(sessionStateURL: URL) {
+    public init(sessionStateURL: URL, workspace: URL? = nil) {
         url = sessionStateURL.appendingPathExtension("handoff")
+        self.workspace = workspace
     }
 
     public var isPending: Bool { FileManager.default.fileExists(atPath: url.path) }
 
     /// What a turn adds to its prompt: a replaced session's own history recovery, or else the handoff's catch-up.
     public func context(recoveringHistory: Bool = false) -> String {
-        if recoveringHistory { return "\n\n" + MessengerDocumentation.recoveredModelContext }
-        return isPending ? "\n\n" + MessengerDocumentation.harnessHandoffContext : ""
+        var context = ""
+        if recoveringHistory { context = "\n\n" + MessengerDocumentation.recoveredModelContext }
+        else if isPending { context = "\n\n" + MessengerDocumentation.harnessHandoffContext }
+        guard let workspace,
+              let layout = try? AgentStorageLayout.containing(workspace),
+              let agentID = UUID(uuidString: layout.package.lastPathComponent) else { return context }
+        let root = layout.package.deletingLastPathComponent().deletingLastPathComponent()
+        if let away = try? WorkspaceRepository(rootURL: root).loadOwnerAway(forAgent: agentID), away.isActive() {
+            context += "\n\n" + away.notice
+        }
+        return context
     }
 
     /// Once a turn carrying the catch-up has been sent.

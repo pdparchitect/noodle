@@ -32,7 +32,16 @@ public final class MessageDeliveryRouter {
     }
 
     @discardableResult
-    func notify(_ process: any AgentRuntimeProcess, repository: WorkspaceRepository) -> Task<Void, Never>? {
+    func notify(_ process: any AgentRuntimeProcess, repository: WorkspaceRepository,
+                interrupt: Bool = false) -> Task<Void, Never>? {
+        if interrupt {
+            cancel(for: process.configuration.id)
+            let wasWorking = process.snapshot.phase == .working
+            let interrupted = wasWorking && process.cancelTurn()
+            let pending = process.notify(immediately: false)
+            if wasWorking && !interrupted { process.requestStop(pending) }
+            return nil
+        }
         let agentID = process.configuration.id
         return notify(process) { try await Task.detached {
             try MessageDeliveryContext.load(for: agentID, repository: repository)

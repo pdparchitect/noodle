@@ -56,6 +56,43 @@ struct ConversationCommands: Commands {
     }
 }
 
+struct AwayCommands: Commands {
+    let store: NoodleStore
+
+    var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            if let away = store.ownerAway {
+                Button("Away until \(away.until.formatted(date: .omitted, time: .shortened))") {}
+                    .disabled(true)
+                Button("I’m Back") { store.setOwnerAway(nil) }
+            } else {
+                Button("Set Away…", action: setAway)
+            }
+        }
+    }
+
+    @MainActor private func setAway() {
+        let alert = NSAlert()
+        alert.messageText = "Set Away"
+        alert.informativeText = "Tell your bots when you’ll be back and leave an optional note."
+        alert.addButton(withTitle: "Set Away")
+        alert.addButton(withTitle: "Cancel")
+        let duration = NSPopUpButton(frame: NSRect(x: 0, y: 34, width: 300, height: 28))
+        let hours = [1, 4, 8, 12]
+        duration.addItems(withTitles: hours.map { $0 == 1 ? "1 hour" : "\($0) hours" })
+        duration.selectItem(at: 2)
+        let note = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        note.placeholderString = "Note for your bots"
+        let fields = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 65))
+        fields.addSubview(duration)
+        fields.addSubview(note)
+        alert.accessoryView = fields
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let seconds = TimeInterval(hours[max(0, duration.indexOfSelectedItem)] * 3600)
+        store.setOwnerAway(.init(until: Date().addingTimeInterval(seconds), note: note.stringValue))
+    }
+}
+
 /// All, This Mac's, a space for each joined Hub with its bots, groups and the pins it keeps, then the spaces the
 /// person made. ⌘1 is All, ⌘2 on the rest.
 struct SpaceCommands: Commands {

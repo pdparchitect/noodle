@@ -1428,7 +1428,7 @@ public final class AgentRuntimeCoordinator {
         if let old { old.stop(completion: finish) } else { finish(true) }
     }
 
-    public func notify(_ agents: [AgentRecord], repository: WorkspaceRepository) {
+    public func notify(_ agents: [AgentRecord], repository: WorkspaceRepository, interrupting: Set<UUID> = []) {
         for agent in agents {
             quietStarts.remove(agent.id)
             recordActivity(for: agent.id)
@@ -1436,16 +1436,19 @@ public final class AgentRuntimeCoordinator {
             if processes[agent.id] == nil {
                 start(agent: agent, repository: repository)
             }
-            if let process = processes[agent.id] { messageDelivery.notify(process, repository: repository) }
+            if let process = processes[agent.id] {
+                messageDelivery.notify(process, repository: repository, interrupt: interrupting.contains(agent.id))
+            }
         }
     }
 
     /// Wakes a conversation's bots for a person's new message: in a group with a lead, the lead and any bot the
     /// message names at once, the others after `GroupLead.headStart`.
     public func notify(_ agents: [AgentRecord], in conversation: BotConversation, body: String,
-                       repository: WorkspaceRepository) {
+                       repository: WorkspaceRepository, interrupt: Bool = false) {
         let order = GroupLead.wakeOrder(agents, in: conversation, body: body)
-        notify(order.now, repository: repository)
+        let targets = interrupt ? GroupLead.interruptionTargets(agents, in: conversation, body: body) : []
+        notify(order.now, repository: repository, interrupting: targets)
         guard !order.later.isEmpty else { return }
         let hold = UUID()
         for agent in order.later { heldForLead[agent.id] = hold }
@@ -1455,7 +1458,7 @@ public final class AgentRuntimeCoordinator {
             // A newer message holds them again, and wakes them itself.
             let released = order.later.filter { self.heldForLead[$0.id] == hold }
             for agent in released { self.heldForLead[agent.id] = nil }
-            self.notify(released, repository: repository)
+            self.notify(released, repository: repository, interrupting: targets)
         }
     }
 

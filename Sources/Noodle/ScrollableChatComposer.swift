@@ -15,6 +15,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
     var people: [String] = []
     let completion: ComposerNameCompletion
     let submit: () -> Void
+    var submitImmediately: (() -> Void)? = nil
     var focusSidebar: (() -> Void)? = nil
     var pasteAttachments: ((NSPasteboard) -> Bool)? = nil
     /// Paste as Attachment: text becomes a file however short it is.
@@ -37,6 +38,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
     func updateNSView(_ view: ComposerScrollView, context: Context) {
         context.coordinator.parent = self
         view.editor.isEditable = isEnabled
+        view.editor.submitImmediately = isEnabled ? submitImmediately : nil
         view.editor.pasteAttachments = isEnabled ? pasteAttachments : nil
         view.editor.forcePasteAttachments = isEnabled ? forcePasteAttachments : nil
         view.editor.dropFiles = isEnabled ? dropFiles : nil
@@ -84,6 +86,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
         coordinator.parent.completion.detach()
         view.focusChanged = nil
         view.editor.delegate = nil
+        view.editor.submitImmediately = nil
         view.editor.pasteAttachments = nil
         view.editor.forcePasteAttachments = nil
         view.editor.dropFiles = nil
@@ -209,6 +212,7 @@ struct ScrollableChatComposer: NSViewRepresentable {
 }
 
 @MainActor final class ComposerTextView: NSTextView {
+    var submitImmediately: (() -> Void)?
     var focusChanged: ((Bool) -> Void)?
     var pasteAttachments: ((NSPasteboard) -> Bool)?
     var forcePasteAttachments: ((NSPasteboard) -> Bool)?
@@ -267,7 +271,21 @@ struct ScrollableChatComposer: NSViewRepresentable {
         }
         return menu
     }
+    private func handleImmediateSend(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        guard window?.firstResponder === self, !hasMarkedText(), let submitImmediately,
+              modifiers == .command || modifiers == .control,
+              event.charactersIgnoringModifiers == "\r" || event.charactersIgnoringModifiers == "\u{3}" else { return false }
+        if !event.isARepeat { submitImmediately() }
+        return true
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        handleImmediateSend(event) || super.performKeyEquivalent(with: event)
+    }
+
     override func keyDown(with event: NSEvent) {
+        if handleImmediateSend(event) { return }
         let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
         if event.charactersIgnoringModifiers?.lowercased() == "v", modifiers == .control,
            pasteAttachments?(.general) == true { return }

@@ -1384,9 +1384,22 @@ final class ChatsCacheFile: @unchecked Sendable {
     private func isNewest(_ message: LinkMessage) -> Bool { observedMessages(of: message.conversationID)?.last?.id == message.id }
 
     /// `task` is one of the bots' tasks the message is about; the Hub carries it to the bot.
+    func ownerAway() async throws -> LinkOwnerAway? {
+        guard case .ownerAway(let away) = try await pairing.request(.ownerAway) else {
+            throw LinkError("The Hub could not read Away mode.")
+        }
+        return away
+    }
+
+    func setOwnerAway(_ away: LinkOwnerAway?) async throws {
+        guard case .ownerAway = try await pairing.request(.setOwnerAway(away)) else {
+            throw LinkError("The Hub could not change Away mode.")
+        }
+    }
+
     func send(_ body: String, files: [OutgoingFile] = [], to conversation: some HubConversation,
-              task: LinkTaskReference? = nil) async throws {
-        let id = try queue(body, files: files, to: conversation, task: task)
+              task: LinkTaskReference? = nil, interrupt: Bool = false) async throws {
+        let id = try queue(body, files: files, to: conversation, task: task, interrupt: interrupt)
         await deliver(id)
     }
 
@@ -1408,9 +1421,10 @@ final class ChatsCacheFile: @unchecked Sendable {
 
     /// Shows a message at once and keeps it, files included, until it is delivered.
     private func queue(_ body: String, files: [OutgoingFile], to conversation: some HubConversation,
-                       task: LinkTaskReference? = nil) throws -> UUID {
+                       task: LinkTaskReference? = nil, interrupt: Bool = false) throws -> UUID {
         var (outgoing, attachments) = try OutgoingMessages.make(body, files: files, to: conversation.conversationID)
         outgoing.taskID = task?.id
+        outgoing.interrupt = interrupt ? true : nil
         let text = outgoing.body
         // Kept first, files included, so a message that does not go through can go later.
         for (file, attachment) in zip(files, attachments) { try keep(file.url, as: attachment) }
@@ -3897,6 +3911,9 @@ struct ChatView: View {
                 }
                 .hoverEffect(.lift)
                 .accessibilityLabel("Send")
+                .contextMenu {
+                    Button("Send Immediately") { send(interrupt: true) }
+                }
             }
         }
         .padding(.trailing, 5)
@@ -3994,7 +4011,9 @@ struct ChatView: View {
                              delete: { chats.delete(message, in: thread) })
     }
 
-    private func send() {
+    private func send() { send(interrupt: false) }
+
+    private func send(interrupt: Bool) {
         let body = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty || !files.isEmpty || !notes.isEmpty, let thread = chats.thread(threadID) else { return }
         // Waiting comments go with the message, after its files.
@@ -4005,7 +4024,7 @@ struct ChatView: View {
         problem = nil
         Task {
             do {
-                try await chats.send(body, files: sending, to: thread)
+                try await chats.send(body, files: sending, to: thread, interrupt: interrupt)
                 // The message keeps copies of its files from the start, to send again if it has to.
                 chats.annotationDrafts.discard(comments)
             } catch {

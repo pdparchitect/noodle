@@ -1488,6 +1488,64 @@ public struct WorkspaceRepository: Sendable {
         return try appendNotice("You stopped \(agent.displayName).", toAgent: agentID)
     }
 
+    public struct OwnerAway: Codable, Equatable, Sendable {
+        public let until: Date
+        public let note: String
+
+        public init(until: Date, note: String = "") {
+            self.until = until
+            self.note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        public func isActive(at now: Date = Date()) -> Bool { until > now }
+
+        public var notice: String {
+            let instruction = note.isEmpty ? "" : "\nTheir note: \(note)"
+            return "Your person is away until \(until.formatted()). Keep working. Leave tasks that need their decision waiting on them.\(instruction)"
+        }
+    }
+
+    private var ownerAwayURL: URL { rootURL.appendingPathComponent("owner-away.json") }
+
+    public func loadOwnerAway(forAgent agentID: UUID) throws -> OwnerAway? {
+        let file = storage(for: agentID).package.appendingPathComponent("owner-away.json")
+        if FileManager.default.fileExists(atPath: file.path) { return try read(OwnerAway.self, from: file) }
+        return try loadOwnerAway()
+    }
+
+    public func saveOwnerAway(_ away: OwnerAway?, forAgent agentID: UUID) throws {
+        let file = storage(for: agentID).package.appendingPathComponent("owner-away.json")
+        try saveOwnerAway(away, to: file)
+    }
+
+    public func loadOwnerAway(forUser userID: UUID) throws -> OwnerAway? {
+        let file = rootURL.appendingPathComponent("owner-away-\(userID.uuidString).json")
+        guard FileManager.default.fileExists(atPath: file.path) else { return nil }
+        return try read(OwnerAway.self, from: file)
+    }
+
+    public func saveOwnerAway(_ away: OwnerAway?, forUser userID: UUID) throws {
+        let file = rootURL.appendingPathComponent("owner-away-\(userID.uuidString).json")
+        try saveOwnerAway(away, to: file)
+    }
+
+    public func loadOwnerAway() throws -> OwnerAway? {
+        guard FileManager.default.fileExists(atPath: ownerAwayURL.path) else { return nil }
+        return try read(OwnerAway.self, from: ownerAwayURL)
+    }
+
+    public func saveOwnerAway(_ away: OwnerAway?) throws {
+        try saveOwnerAway(away, to: ownerAwayURL)
+    }
+
+    private func saveOwnerAway(_ away: OwnerAway?, to file: URL) throws {
+        if let away {
+            try write(away, to: file)
+        } else if FileManager.default.fileExists(atPath: file.path) {
+            try FileManager.default.removeItem(at: file)
+        }
+    }
+
     /// Adds the app's own line to the bot's conversation with its owner, such as a move to another harness.
     /// Nil for a bot without that conversation.
     @discardableResult
@@ -1835,7 +1893,8 @@ public struct WorkspaceRepository: Sendable {
         attachmentIDs: [UUID] = [],
         task: TaskReference? = nil,
         id: UUID = UUID(),
-        now: Date = Date()
+        now: Date = Date(),
+        interrupt: Bool = false
     ) throws -> ChatMessage {
         let text = try validatedName(body)
         guard var conversation = try loadConversations().first(where: { $0.id == conversationID }) else {
@@ -1852,6 +1911,7 @@ public struct WorkspaceRepository: Sendable {
             attachmentIDs: attachmentIDs
         )
         message.task = task
+        message.interrupt = interrupt ? true : nil
         try append(message)
         conversation.updatedAt = now
         try updateConversation(conversation)

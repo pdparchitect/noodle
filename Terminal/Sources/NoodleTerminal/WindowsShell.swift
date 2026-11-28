@@ -24,4 +24,16 @@ import WinSDK
     throw DesktopError(code == SE_ERR_NOASSOC ? "Windows has no app set to open \(name)."
                                               : "Windows could not open \(name) (error \(code)).")
 }
+@MainActor func shellReveal(_ url: URL) throws {
+    _ = comStarted
+    let path = url.withUnsafeFileSystemRepresentation { $0.map { String(cString: $0) } } ?? url.path
+    let result = "explorer.exe".withCString(encodedAs: UTF16.self) { explorer in
+        "/select,\"\(path)\"".withCString(encodedAs: UTF16.self) { arguments in
+            ShellExecuteW(nil, nil, explorer, arguments, nil, SW_SHOWNORMAL)
+        }
+    }
+    guard Int(bitPattern: result) > 32 else {
+        throw DesktopError("Windows could not show \(url.lastPathComponent) in Explorer.")
+    }
+}
 #endif

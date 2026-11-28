@@ -208,6 +208,16 @@ struct DesktopError: LocalizedError {
         #endif
     }
 
+    static func reveal(_ file: URL) throws {
+        #if canImport(AppKit)
+        NSWorkspace.shared.activateFileViewerSelecting([file])
+        #elseif os(Windows)
+        try shellReveal(file)
+        #else
+        try open(file.deletingLastPathComponent())
+        #endif
+    }
+
     static func copy(_ text: String, through console: Console) {
         #if canImport(AppKit)
         NSPasteboard.general.clearContents()

@@ -15,15 +15,16 @@ public enum PersonMessage {
     @MainActor @discardableResult
     public static func send(_ text: String, files: [ConversationAttachment] = [], voice: VoiceMessage? = nil,
                             to conversation: BotConversation, members: [AgentRecord], runtime: AgentRuntimeCoordinator?,
-                            repository: WorkspaceRepository, now: Date = Date()) throws -> ChatMessage {
+                            repository: WorkspaceRepository, now: Date = Date(), interrupt: Bool = false) throws -> ChatMessage {
         let message = try repository.sendUserMessage(
             conversationID: conversation.id,
             body: voice == nil ? body(text, files: files.count) : VoiceMessage.messageBody,
             attachmentIDs: files.map(\.id),
-            now: now
+            now: now,
+            interrupt: interrupt
         )
         let words = voice.map { $0.transcript ?? "" } ?? text.trimmingCharacters(in: .whitespacesAndNewlines)
-        runtime?.notify(members, in: conversation, body: words, repository: repository)
+        runtime?.notify(members, in: conversation, body: words, repository: repository, interrupt: interrupt)
         return message
     }
 }

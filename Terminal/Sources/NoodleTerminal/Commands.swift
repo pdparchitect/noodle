@@ -393,7 +393,13 @@ extension App {
                 case .file(let file):
                     tell("Downloading \(file.filename)…")
                     let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Noodle Terminal/\(message.id)", isDirectory: true)
-                    try Desktop.open(try await row.chats.download(file, of: message, into: folder))
+                    let downloaded = try await row.chats.download(file, of: message, into: folder)
+                    guard try DownloadedAttachment.canOpen(downloaded) else {
+                        try Desktop.reveal(downloaded)
+                        tell("This attachment can run code. Showed it in its folder.")
+                        return
+                    }
+                    try Desktop.open(downloaded)
                     tell("Opened \(file.filename).")
                 }
             } catch {

@@ -107,7 +107,7 @@ public final class MuseAgentProcess: AgentRuntimeProcess {
         self.onUnexpectedTermination = onUnexpectedTermination
         stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: .muse, extendedAccess: extendedAccess)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
-        handoff = HarnessHandoff(sessionStateURL: stateURL)
+        handoff = HarnessHandoff(sessionStateURL: stateURL, workspace: workspaceURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         if let data = try? Data(contentsOf: stateURL), let state = try? JSONDecoder().decode(State.self, from: data),
            state.sessionID == nil, state.needsHistoryRecovery == true {
