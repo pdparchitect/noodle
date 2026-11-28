@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-28
+
 ### Changed
 
 - Noodle Terminal is redesigned and much faster: typing, scrolling and opening lists respond at once and send a fraction of what they did to the terminal. One conversation fills the window, with the message field under it and a status line saying where you are, who's unread and whether the Hub is connected.
