@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- An agent's `noodle-browser mcp` connection keeps working after Noodle Browser updates: before its next call the tool restarts as the new version, on the same connection, instead of being refused as not the signed app it should be.
+
 ## [0.22.8] - 2026-11-27
 
 ### Changed
