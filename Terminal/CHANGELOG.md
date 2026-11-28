@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Noodle Terminal is redesigned and much faster: typing, scrolling and opening lists respond at once and send a fraction of what they did to the terminal. One conversation fills the window, with the message field under it and a status line saying where you are, who's unread and whether the Hub is connected.
+- Everything is a slash command now, in place of the side list, the boxes and the Control-K palette: type `/` to see them, `/` and a name to go to a bot or group, and `/help` for the full list. Up chooses a message for commands such as `/copy`, `/react`, `/open` and `/save`, and making or editing a bot or group asks one thing at a time in the message field.
+- Messages show a line between days, and links show where they go.
+
+### Removed
+
+- Bots', groups' and messages' pictures are no longer drawn in the terminal. Files are listed under their message, and `/open` opens them.
+
 ## [0.2.0] - 2026-11-27
 
 ### Added

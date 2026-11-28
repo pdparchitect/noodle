@@ -7,14 +7,14 @@ let hooks: [SwiftSetting] = [.define("NOODLE_DEV_HOOKS", .when(configuration: .d
 
 let package = Package(name: "NoodleTerminal", platforms: [.macOS("26.0")],
     products: [.executable(name: "noodle", targets: ["NoodleTerminal"])],
-    dependencies: [.package(path: "../Shared/HubLink"),
-        // Pre-1.0, so minor releases may break the API: taken one at a time.
-        .package(url: "https://github.com/SwiftTUI/swift-tui", .upToNextMinor(from: "0.20.1"))],
+    dependencies: [.package(path: "../Shared/HubLink")],
     targets: [
         .target(name: "TerminalCore", dependencies: [.product(name: "HubLink", package: "HubLink")]),
-        .executableTarget(name: "NoodleTerminal", dependencies: ["TerminalCore", .product(name: "HubLink", package: "HubLink"),
-            // The terminal-only launcher: SwiftTUI's own product also links its web host, which serves the app on a port.
-            .product(name: "SwiftTUICLI", package: "swift-tui"), .product(name: "SwiftTUIArguments", package: "swift-tui")],
+        // What the screen is drawn from that needs no terminal: keys, widths and wrapping, markdown, lists and
+        // commands, apart from the app so tests reach them on every system.
+        .target(name: "TerminalScreen", dependencies: [.product(name: "HubLink", package: "HubLink")]),
+        .executableTarget(name: "NoodleTerminal", dependencies: ["TerminalCore", "TerminalScreen", .product(name: "HubLink", package: "HubLink")],
             swiftSettings: hooks),
-        .testTarget(name: "TerminalCoreTests", dependencies: ["TerminalCore", .product(name: "HubLink", package: "HubLink")])
+        .testTarget(name: "TerminalCoreTests", dependencies: ["TerminalCore", .product(name: "HubLink", package: "HubLink")]),
+        .testTarget(name: "TerminalScreenTests", dependencies: ["TerminalScreen"])
     ], swiftLanguageModes: [.v6])

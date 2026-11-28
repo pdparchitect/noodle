@@ -7,7 +7,7 @@ Hub keeps everything and this app keeps only its pairing. It reaches the Hub thr
 made for this app.
 
 It runs on macOS and Linux. On a Mac it uses Apple's frameworks; Linux gets its own code
-only where a Mac uses them. The UI is built with SwiftTUI, which needs Swift 6.4.
+only where a Mac uses them. The UI draws itself in the terminal, with no UI framework.
 
 Terminal is versioned on its own from `VERSION` and `CHANGELOG.md` in this folder. It
 has no release yet. Do not publish releases without the user's explicit request.

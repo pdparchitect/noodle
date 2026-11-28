@@ -4,7 +4,7 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . "$PSScriptRoot/windows-common.ps1"
-# Swift 6.4, which SwiftTUI needs.
+# Swift 6.4, the same as the Linux builds.
 $version = '6.4.1'
 $installer = @{
     arm64 = @{ Suffix = '-arm64'; Sha256 = 'FAFF6A12CDAE099D76372CA971B0C83B13280AD704E1022FAA599DBE0B146E64' }
