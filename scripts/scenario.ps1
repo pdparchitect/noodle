@@ -82,46 +82,69 @@ if ($LASTEXITCODE -ne 0) { throw 'Swift could not resolve the Windows products d
 $exe = Join-Path ($bin | Select-Object -Last 1) NoodleWindows.exe
 if (!(Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Build NoodleWindows first. Expected $exe." }
 
-if ($Shots) {
-    Add-Type -AssemblyName System.Drawing
-    if (!('ScenarioCapture' -as [type])) {
+if (!('NoodleScenarioWindow' -as [type])) {
         Add-Type @'
 using System;
 using System.Runtime.InteropServices;
-public static class ScenarioCapture {
+using System.Text;
+public static class NoodleScenarioWindow {
+    private delegate bool EnumWindow(IntPtr window, IntPtr parameter);
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindow callback, IntPtr parameter);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr window, StringBuilder text, int length);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+
+    public static IntPtr Find(uint process) {
+        IntPtr result = IntPtr.Zero;
+        EnumWindows((window, parameter) => {
+            uint owner;
+            GetWindowThreadProcessId(window, out owner);
+            if (owner != process || !IsWindowVisible(window)) return true;
+            var title = new StringBuilder(256);
+            GetWindowText(window, title, title.Capacity);
+            if (title.ToString() != "Noodle") return true;
+            result = window;
+            return false;
+        }, IntPtr.Zero);
+        return result;
+    }
     [StructLayout(LayoutKind.Sequential)]
     public struct Rect { public int Left, Top, Right, Bottom; }
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out Rect rect);
 }
 '@
-    }
-    [void][ScenarioCapture]::SetProcessDPIAware()
+}
+if ($Shots) {
+    Add-Type -AssemblyName System.Drawing
+    [void][NoodleScenarioWindow]::SetProcessDPIAware()
 }
 
 $results = foreach ($fixture in $fixtures) {
     $p = $null
-    $ready = $false
+    $handle = [IntPtr]::Zero
     try {
         $arguments = @('--scenario', $fixture.Name)
         if ($Replay) { $arguments += '--replay' }
-        $p = Start-Process -FilePath $exe -ArgumentList $arguments -WorkingDirectory $root -PassThru
-        $deadline = [DateTime]::UtcNow.AddSeconds(20)
+        $p = Start-Process -FilePath $exe -ArgumentList $arguments -WorkingDirectory $root -NoNewWindow -PassThru
+        $deadline = [DateTime]::UtcNow.AddSeconds(45)
         do {
             Start-Sleep -Milliseconds 200
             $p.Refresh()
             if ($p.HasExited) { throw "App exited with code $($p.ExitCode) before opening a window." }
-        } until ($p.MainWindowHandle -ne [IntPtr]::Zero -or [DateTime]::UtcNow -ge $deadline)
-        if ($p.MainWindowHandle -eq [IntPtr]::Zero) { throw 'Timed out waiting for the app window.' }
-        $ready = $true
+            $handle = [NoodleScenarioWindow]::Find($p.Id)
+        } until ($handle -ne [IntPtr]::Zero -or [DateTime]::UtcNow -ge $deadline)
+        if ($handle -eq [IntPtr]::Zero) { throw 'Timed out waiting for the Noodle window.' }
 
         if ($Shots) {
-            $handle = $p.MainWindowHandle
-            [void][ScenarioCapture]::SetForegroundWindow($handle)
+            [void][NoodleScenarioWindow]::ShowWindow($handle, 9)
+            [void][NoodleScenarioWindow]::SetForegroundWindow($handle)
             Start-Sleep -Milliseconds 800
-            $rect = New-Object ScenarioCapture+Rect
-            if (![ScenarioCapture]::GetWindowRect($handle, [ref]$rect)) { throw 'Could not read the window bounds.' }
+            $rect = New-Object NoodleScenarioWindow+Rect
+            if (![NoodleScenarioWindow]::GetWindowRect($handle, [ref]$rect)) { throw 'Could not read the window bounds.' }
             $directory = New-Item -ItemType Directory -Force -Path (Join-Path $fixture.FullName shots-windows)
             $bitmap = [Drawing.Bitmap]::new(($rect.Right - $rect.Left), ($rect.Bottom - $rect.Top))
             try {
@@ -135,8 +158,9 @@ $results = foreach ($fixture in $fixtures) {
     } catch {
         [pscustomobject]@{ Scenario = $fixture.Name; Result = 'Failed'; Detail = $_.Exception.Message }
     } finally {
-        if (($All -or !$ready) -and $p -and !$p.HasExited) {
-            if (!$p.CloseMainWindow() -or !$p.WaitForExit(3000)) { $p.Kill(); $p.WaitForExit() }
+        if (($All -or $handle -eq [IntPtr]::Zero) -and $p -and !$p.HasExited) {
+            if ($handle -ne [IntPtr]::Zero) { [void][NoodleScenarioWindow]::PostMessage($handle, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) }
+            if (!$p.WaitForExit(3000)) { $p.Kill(); $p.WaitForExit() }
         }
         if ($p) { $p.Dispose() }
     }

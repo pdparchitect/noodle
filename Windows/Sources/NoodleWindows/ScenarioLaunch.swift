@@ -28,7 +28,7 @@ struct ScenarioLaunch {
             ?? URL(fileURLWithPath: files.currentDirectoryPath, isDirectory: true)
                 .appendingPathComponent("Scenarios", isDirectory: true)
         let scenario = try Scenario.load(from: root.appendingPathComponent(name, isDirectory: true),
-                                         preferenceKeys: nil, settingsTabs: nil)
+                                         preferenceKeys: nil, settingsTabs: nil, includesDecorativeMedia: false)
         let temporary = files.temporaryDirectory.appendingPathComponent("NoodleScenario-\(UUID())", isDirectory: true)
         let folder = temporary.appendingPathComponent("Workspace", isDirectory: true)
         try files.createDirectory(at: folder, withIntermediateDirectories: true)

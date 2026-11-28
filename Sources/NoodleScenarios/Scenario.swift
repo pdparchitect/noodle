@@ -354,7 +354,9 @@ extension Scenario {
     /// Strict: a key the model does not know is an error, so a typo cannot silently change a screenshot.
     /// `preferenceKeys` are the preferences the playing app lets a scenario set, and `settingsTabs` the settings tabs it can
     /// open in a window; nil leaves that check to an app that has them.
-    public static func load(from folder: URL, preferenceKeys: Set<String>?, settingsTabs: Set<String>?) throws -> Scenario {
+    /// Players without wallpaper or film rendering can load the fixture while omitting those assets.
+    public static func load(from folder: URL, preferenceKeys: Set<String>?, settingsTabs: Set<String>?,
+                            includesDecorativeMedia: Bool = true) throws -> Scenario {
         let file = folder.appendingPathComponent("scenario.json")
         guard let data = try? Data(contentsOf: file) else { throw ScenarioError("There is no scenario at \(file.path).") }
         var scenario: Scenario
@@ -363,6 +365,14 @@ extension Scenario {
         let unknown = ScenarioSupport.unknownKeys(in: try JSONSerialization.jsonObject(with: data),
             comparedTo: try JSONSerialization.jsonObject(with: JSONEncoder().encode(scenario)))
         guard unknown.isEmpty else { throw ScenarioError("Unknown keys in \(file.lastPathComponent): \(unknown.joined(separator: ", "))") }
+        if !includesDecorativeMedia {
+            scenario.film = nil
+            scenario.conversations = scenario.conversations?.map { entry in
+                var conversation = entry
+                conversation.background = nil
+                return conversation
+            }
+        }
         scenario.folder = folder.standardizedFileURL
         try scenario.validate(preferenceKeys: preferenceKeys, settingsTabs: settingsTabs)
         return scenario
