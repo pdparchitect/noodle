@@ -1081,5 +1081,158 @@ class TestSpeedTests(unittest.TestCase):
             self.assertIn(excluded, cached.splitlines())
 
 
+class QuickTestWorkflowTests(unittest.TestCase):
+    """quick-test.yml runs one package's matching tests on a branch, set up as CI's own job for that package."""
+    DEFAULTS = {'runner': '', 'xcode': '', 'metal': 'false', 'lfs': 'false', 'sandbox': 'false', 'coverage': 'false',
+                'scratch': '', 'fixture': 'false', 'seed': '', 'privileged': 'false', 'apt': ''}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.flow = workflow('quick-test.yml')
+        cls.jobs = cls.flow['jobs']
+        cls.release = workflow('release.yml')['jobs']
+        cls.script = next(step for step in cls.jobs['plan']['steps'] if step.get('id') == 'plan')['run']
+        cls.table = {}
+        for platform, package, settings in re.findall(r'^\s*(macos|linux|windows):([^)\s*]+)\)\s+use\b(.*?);;', cls.script, re.MULTILINE):
+            cls.table[(platform, package)] = {**cls.DEFAULTS, **dict(word.split('=', 1) for word in settings.split())}
+
+    def plan(self, package, filter='FooTests', platform='macos'):
+        with tempfile.TemporaryDirectory() as directory:
+            script, output = Path(directory) / 'plan.sh', Path(directory) / 'output'
+            script.write_text(self.script)
+            output.touch()
+            result = subprocess.run(['bash', '--noprofile', '--norc', '-eo', 'pipefail', str(script)], capture_output=True, text=True,
+                                    env={'PATH': os.environ['PATH'], 'GITHUB_OUTPUT': str(output),
+                                         'PACKAGE': package, 'FILTER': filter, 'PLATFORM': platform})
+            if result.returncode:
+                return None
+            outputs, lines = {}, iter(output.read_text().splitlines())
+            for line in lines:
+                if '<<' in line:
+                    name, delimiter = line.split('<<', 1)
+                    outputs[name] = list(itertools.takewhile(lambda value: value != delimiter, lines))
+                else:
+                    name, value = line.split('=', 1)
+                    outputs[name] = value
+            return outputs
+
+    def ci_setups(self):
+        # How CI tests each package, in the plan table's terms: the macOS and Linux jobs that run swift test
+        # (but not the macOS 27 harness job, which retests packages test-noodle and test-shared already
+        # cover), Push's Linux job, and the packages the Windows scripts test.
+        setups = {}
+        jobs = [(name, job) for name, job in self.release.items() if name.startswith('test-') and name != 'test-noodle-macos27']
+        for name, job in jobs + [('push.yml test-linux', workflow('push.yml')['jobs']['test-linux'])]:
+            runs = '\n'.join(step.get('run', '') for step in job['steps'])
+            checkout = next(step for step in job['steps'] if step.get('uses', '').startswith('actions/checkout@'))
+            container = job.get('container')
+            # Not test-noodle's later look-up of where its coverage went.
+            for command in [c for c in re.findall(r'swift test\b[^\n]*', runs) if '--show-codecov-path' not in c]:
+                package = re.search(r'--package-path (\S+)', command)
+                scratch = re.search(r'--scratch-path (\S+)', command)
+                setup = {'runner': job['runs-on'], 'lfs': str(checkout.get('with', {}).get('lfs', False)).lower(),
+                         'sandbox': str('--disable-sandbox' in command).lower(),
+                         'coverage': str('--enable-code-coverage' in command).lower(),
+                         'scratch': scratch[1] if scratch else ''}
+                if container:
+                    options = '' if isinstance(container, str) else container.get('options', '')
+                    installed = re.findall(r'apt-get install -y --no-install-recommends ([^&\n]+)', runs)
+                    setup['privileged'] = str('--privileged' in options).lower()
+                    setup['apt'] = ','.join(p for p in (installed[0].split() if installed else []) if p not in ['curl', 'ca-certificates'])
+                else:
+                    developer = re.fullmatch(r'/Applications/Xcode_(.+)\.app/Contents/Developer', job.get('env', {}).get('DEVELOPER_DIR', ''))
+                    setup['xcode'] = developer[1] if developer else ''
+                    setup['metal'] = str('xcodebuild -downloadComponent MetalToolchain' in runs).lower()
+                    setup['fixture'] = str('build-sandbox-cli-fixture.sh' in runs).lower()
+                setups[('linux' if container else 'macos', package[1] if package else '.')] = (name, setup)
+        runner = self.release['test-server-windows']['runs-on']
+        for script in sorted((ROOT / 'scripts').glob('test-*-windows.ps1')):
+            for package, scratch in re.findall(r"Path = '([^']+)'; Scratch = '([^']+)'", script.read_text()):
+                setups[('windows', package)] = (script.name, {'runner': runner, 'scratch': '.build/' + scratch})
+        return setups
+
+    def test_every_package_is_set_up_as_ci_tests_it(self):
+        setups = self.ci_setups()
+        self.assertIn(('macos', 'Computer'), setups)
+        self.assertIn(('linux', 'Server'), setups)
+        self.assertIn(('windows', 'Terminal'), setups)
+        self.assertEqual(sorted(self.table), sorted(setups))
+        for key, (source, setup) in setups.items():
+            with self.subTest(key=key, source=source):
+                self.assertEqual({name: self.table[key][name] for name in setup}, setup)
+        # The Linux job runs in the image those jobs and Noodle Push build with.
+        image = self.jobs['linux']['container']['image']
+        self.assertRegex(image, r'^swift:[\w.-]+@sha256:[0-9a-f]{64}$')
+        for name in ['test-terminal-linux', 'test-server-linux']:
+            container = self.release[name]['container']
+            self.assertEqual(container if isinstance(container, str) else container['image'], image, name)
+
+    def test_runs_only_by_hand_with_a_filter_and_reads_only(self):
+        triggers = self.flow.get('on', self.flow.get('true'))
+        self.assertEqual(list(triggers), ['workflow_dispatch'])
+        inputs = triggers['workflow_dispatch']['inputs']
+        self.assertIs(inputs['filter']['required'], True)
+        self.assertEqual(inputs['platform']['options'], ['macos', 'linux', 'windows'])
+        self.assertEqual(self.flow['permissions'], {'contents': 'read'})
+        self.assertIs(self.flow['concurrency']['cancel-in-progress'], True)
+        for name, job in self.jobs.items():
+            self.assertNotIn('permissions', job, name)
+            self.assertIn('timeout-minutes', job, name)
+            for step in job['steps']:
+                if 'uses' in step:
+                    self.assertRegex(step['uses'], r'^[\w.-]+/[\w./-]+@[0-9a-f]{40}$', name)
+                if step.get('uses', '').startswith('actions/checkout@'):
+                    self.assertIs(step['with']['persist-credentials'], False, name)
+                # Inputs reach scripts through the environment, never spliced into them.
+                self.assertNotIn('${{', step.get('run', ''), name)
+
+    def test_plan_rejects_bad_inputs_and_falls_back_for_untested_packages(self):
+        for package in ['../Computer', '/etc', 'Computer/../..', 'Shared/Hub Link', 'Computer;ls']:
+            self.assertIsNone(self.plan(package), package)
+        for filter in ['', '  ']:
+            self.assertIsNone(self.plan('Computer', filter=filter), repr(filter))
+        self.assertIsNone(self.plan('Computer', platform='freebsd'))
+        computer = self.plan('./Computer/')
+        self.assertEqual((computer['dir'], computer['slug'], computer['manifest'], computer['resolved']),
+                         ('Computer', 'Computer', 'Computer/Package.swift', 'Computer/Package.resolved'))
+        self.assertEqual((computer['runner'], computer['xcode'], computer['cache-path']), ('xcode-27', '27.2', ['.build/computer']))
+        self.assertEqual(self.plan('Computer/Bridge')['cache-path'], ['Computer/Bridge/.build'])
+        self.assertEqual(self.plan('Server', platform='linux')['privileged'], 'true')
+        self.assertEqual(self.plan('Terminal', platform='linux')['privileged'], 'false')
+        pion = self.plan('Incubator/Pion')
+        self.assertEqual((pion['slug'], pion['runner'], pion['scratch']), ('Incubator-Pion', 'macos-26', '.build/quick-Incubator-Pion'))
+        self.assertEqual(self.plan('Incubator/Pion', platform='windows')['scratch'], '.build/windows-Incubator-Pion')
+        # The root package keeps test-noodle's cache paths exactly, so main's cache of it restores.
+        for package in ['', '.']:
+            root = self.plan(package)
+            self.assertEqual((root['dir'], root['manifest'], root['fixture'], root['seed']), ('.', 'Package.swift', 'true', 'noodle-build'))
+            restore = next(step for step in self.release['test-noodle']['steps'] if step.get('id') == 'build-cache')
+            self.assertEqual(root['cache-path'], restore['with']['path'].splitlines())
+            self.assertTrue(restore['with']['key'].startswith(root['seed'] + '-${{ runner.os }}-${{ steps.toolchain.outputs.id }}-'))
+
+    def test_builds_are_cached_by_package_and_root_builds_are_left_to_main(self):
+        for name in ['macos', 'linux', 'windows']:
+            steps = self.jobs[name]['steps']
+            restore = next(i for i, step in enumerate(steps) if step.get('uses', '').startswith('actions/cache/restore@'))
+            save = next(i for i, step in enumerate(steps) if step.get('uses', '').startswith('actions/cache/save@'))
+            tests = next(i for i, step in enumerate(steps) if step.get('id') == 'tests')
+            self.assertLess(restore, tests, name)
+            self.assertLess(tests, save, name)
+            self.assertEqual(steps[restore]['id'], 'build-cache')
+            key = steps[restore]['with']['key']
+            self.assertIn('${{ steps.toolchain.outputs.id }}', key)
+            self.assertIn('${{ needs.plan.outputs.slug }}', key)
+            self.assertIn('hashFiles(needs.plan.outputs.resolved, needs.plan.outputs.manifest)', key)
+            self.assertTrue(key.startswith(steps[restore]['with']['restore-keys'].splitlines()[0]), name)
+            self.assertEqual(steps[save]['with']['path'], steps[restore]['with']['path'])
+            self.assertEqual(steps[save]['with']['key'], '${{ steps.build-cache.outputs.cache-primary-key }}')
+            guard = steps[save]['if'].removeprefix('${{').removesuffix('}}')
+            for seed, hit, outcome, saves in [('', 'false', 'success', True), ('', '', 'failure', True),
+                                              ('', 'true', 'success', False), ('', 'false', 'skipped', False),
+                                              ('noodle-build', 'false', 'success', name != 'macos')]:
+                values = {'needs.plan.outputs.seed': seed, 'steps.build-cache.outputs.cache-hit': hit, 'steps.tests.outcome': outcome}
+                self.assertEqual(condition(guard, values), saves, (name, seed, hit, outcome))
+
+
 if __name__ == '__main__':
     unittest.main()

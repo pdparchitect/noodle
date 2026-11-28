@@ -1,0 +1,361 @@
+name: Quick test
+
+# Runs the tests of one package that match a filter, on any branch, set up as the release.yml (or push.yml) job
+# that tests that package there: the same runner, Xcode, container, packages, flags and scratch path. For trying
+# a change in minutes before opening a pull request; the pull request still runs the whole pipeline.
+#
+#   gh workflow run quick-test.yml --ref my-branch -f package=Computer -f filter=MachineTests
+#   gh workflow run quick-test.yml --ref my-branch -f package=Server -f filter=PairingTests -f platform=linux
+run-name: Quick test ${{ inputs.package || '.' }} on ${{ inputs.platform }} (${{ inputs.filter }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package directory from the repository root, such as Computer, Server or Shared/HubLink ('' or '.' for the root package)
+        type: string
+        default: '.'
+      filter:
+        description: Tests to run, as swift test --filter takes them (a regular expression); required, so a whole suite never runs by accident
+        type: string
+        required: true
+      platform:
+        description: Where to run them
+        type: choice
+        options: [macos, linux, windows]
+        default: macos
+
+# Every action is pinned by commit SHA, with its release in a comment. No job needs more than reading the
+# repository; checkout keeps no credentials behind.
+permissions:
+  contents: read
+
+# One quick test of a package per branch and platform; a newer one cancels the one still running.
+concurrency:
+  group: quick-test-${{ github.ref }}-${{ inputs.platform }}-${{ inputs.package || '.' }}
+  cancel-in-progress: true
+
+jobs:
+  # Checks the inputs and picks the setup on a small Linux runner, so a typo fails in seconds, not after a Mac
+  # has been found.
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      dir: ${{ steps.plan.outputs.dir }}
+      slug: ${{ steps.plan.outputs.slug }}
+      manifest: ${{ steps.plan.outputs.manifest }}
+      resolved: ${{ steps.plan.outputs.resolved }}
+      runner: ${{ steps.plan.outputs.runner }}
+      xcode: ${{ steps.plan.outputs.xcode }}
+      metal: ${{ steps.plan.outputs.metal }}
+      lfs: ${{ steps.plan.outputs.lfs }}
+      sandbox: ${{ steps.plan.outputs.sandbox }}
+      coverage: ${{ steps.plan.outputs.coverage }}
+      scratch: ${{ steps.plan.outputs.scratch }}
+      fixture: ${{ steps.plan.outputs.fixture }}
+      seed: ${{ steps.plan.outputs.seed }}
+      privileged: ${{ steps.plan.outputs.privileged }}
+      apt: ${{ steps.plan.outputs.apt }}
+      cache-path: ${{ steps.plan.outputs.cache-path }}
+    steps:
+      - name: Choose the setup release.yml tests the package with
+        id: plan
+        env:
+          PACKAGE: ${{ inputs.package }}
+          FILTER: ${{ inputs.filter }}
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          set -euo pipefail
+          package="${PACKAGE#./}"
+          package="${package%/}"
+          if [ -z "$package" ]; then package=.; fi
+          if [[ ! "$package" =~ ^[A-Za-z0-9._/-]+$ || "$package" == /* || "/$package/" == */../* ]]; then
+            echo "::error::package must be a directory inside the repository, such as Computer or Shared/HubLink, not '$PACKAGE'."
+            exit 1
+          fi
+          if [ -z "${FILTER//[[:space:]]/}" ]; then
+            echo "::error::filter is required: a test name or regular expression for swift test --filter."
+            exit 1
+          fi
+          if [ "$package" = . ]; then slug=root; else slug="${package//\//-}"; fi
+
+          runner='' xcode='' metal=false lfs=false sandbox=false coverage=false scratch='' fixture=false seed='' privileged=false apt=''
+          use() {
+            local setting
+            for setting in "$@"; do
+              case "${setting%%=*}" in
+                runner|xcode|metal|lfs|sandbox|coverage|scratch|fixture|seed|privileged|apt) printf -v "${setting%%=*}" '%s' "${setting#*=}" ;;
+                *) echo "::error::Unknown setting $setting"; exit 1 ;;
+              esac
+            done
+          }
+          # One line per package, as the release.yml job that tests it there sets up (push.yml's for Push on
+          # Linux, scripts/test-*-windows.ps1 on Windows). Tests/ReleaseAutomation/test_workflows.py checks
+          # that they agree. xcode is the Xcode the job selects, metal its Metal toolchain download, sandbox
+          # its --disable-sandbox, fixture the root package's sandbox CLI fixture, seed the cache main saves
+          # that the run starts from, and apt the Linux packages it installs besides curl and msquic.
+          case "$PLATFORM:$package" in
+            macos:.)                    use runner=macos-26 lfs=true sandbox=true coverage=true fixture=true seed=noodle-build ;;
+            macos:Shared/Wallpaper)     use runner=macos-26 lfs=true sandbox=true scratch=.build/wallpaper ;;
+            macos:Shared/SettingsUI)    use runner=macos-26 lfs=true sandbox=true scratch=.build/settings-ui ;;
+            macos:Shared/LaunchChecks)  use runner=macos-26 lfs=true sandbox=true scratch=.build/launch-checks ;;
+            macos:Shared/HubLink)       use runner=macos-26 lfs=true sandbox=true scratch=.build/hub-link ;;
+            macos:Shared/Surface)       use runner=macos-26 lfs=true sandbox=true scratch=.build/surface ;;
+            macos:Shared/Brand)         use runner=macos-26 lfs=true sandbox=true scratch=.build/brand ;;
+            macos:Shared/ExternalTools) use runner=macos-26 lfs=true sandbox=true scratch=.build/external-tools ;;
+            macos:Shared/Patch)         use runner=macos-26 lfs=true sandbox=true scratch=.build/patch ;;
+            macos:Shared/Document)      use runner=macos-26 lfs=true sandbox=true scratch=.build/document ;;
+            macos:Push)                 use runner=macos-26 lfs=true sandbox=true scratch=.build/push ;;
+            macos:Computer/Bridge)      use runner=macos-26 sandbox=true ;;
+            macos:Applet)               use runner=macos-26 lfs=true sandbox=true scratch=.build/applet ;;
+            macos:Computer)             use runner=xcode-27 xcode=27.2 metal=true lfs=true sandbox=true scratch=.build/computer ;;
+            macos:Computer/LocalMac)    use runner=xcode-27 xcode=27.2 metal=true lfs=true sandbox=true scratch=.build/localmac ;;
+            macos:Browser)              use runner=macos-26 lfs=true sandbox=true scratch=.build/browser ;;
+            macos:Terminal)             use runner=xcode-27 xcode=27.2 sandbox=true scratch=.build/terminal ;;
+            macos:Server)               use runner=macos-26 scratch=.build/server ;;
+            linux:Terminal)             use runner=ubuntu-latest scratch=.build/terminal-linux ;;
+            linux:Shared/Surface)       use runner=ubuntu-latest privileged=true apt=libsqlite3-dev,bubblewrap scratch=.build/linux-surface ;;
+            linux:Shared/HubLink)       use runner=ubuntu-latest privileged=true apt=libsqlite3-dev,bubblewrap scratch=.build/linux-hub-link ;;
+            linux:.)                    use runner=ubuntu-latest privileged=true apt=libsqlite3-dev,bubblewrap scratch=.build/linux ;;
+            linux:Server)               use runner=ubuntu-latest privileged=true apt=libsqlite3-dev,bubblewrap scratch=.build/linux-server ;;
+            linux:Push)                 use runner=ubuntu-latest scratch=.build/push ;;
+            windows:Shared/HubLink)     use runner=windows-2025 scratch=.build/windows-hub-link ;;
+            windows:Terminal)           use runner=windows-2025 scratch=.build/terminal-windows ;;
+            windows:Shared/WindowsPOSIX) use runner=windows-2025 scratch=.build/windows-posix ;;
+            windows:Server)             use runner=windows-2025 scratch=.build/server-windows ;;
+            # Packages CI does not test on this platform get its most common setup.
+            macos:*)
+              echo "::notice::CI does not test $package on macOS; using test-shared's setup."
+              use runner=macos-26 lfs=true sandbox=true scratch=".build/quick-$slug" ;;
+            linux:*)
+              echo "::notice::CI does not test $package on Linux; using test-server-linux's setup."
+              use runner=ubuntu-latest privileged=true apt=libsqlite3-dev,bubblewrap scratch=".build/linux-$slug" ;;
+            windows:*)
+              echo "::notice::CI does not test $package on Windows; using test-server-windows's setup."
+              use runner=windows-2025 scratch=".build/windows-$slug" ;;
+            *)
+              echo "::error::Unknown platform $PLATFORM."
+              exit 1 ;;
+          esac
+
+          if [ "$package" = . ]; then manifest=Package.swift; else manifest="$package/Package.swift"; fi
+          # What the cache keeps: the scratch path, or the package's own .build when the job sets none. The
+          # root package's list is test-noodle's exactly, so main's cache of it restores here.
+          if [ "$fixture" = true ]; then
+            paths=(.build '!.build/**/*.xctest' '!.build/**/codecov' '!.build/coverage' '!.build/Sandbox CLI Tests.app')
+          elif [ -n "$scratch" ]; then
+            paths=("$scratch")
+          elif [ "$package" = . ]; then
+            paths=(.build)
+          else
+            paths=("$package/.build")
+          fi
+          {
+            echo "dir=$package"
+            echo "slug=$slug"
+            echo "manifest=$manifest"
+            echo "resolved=${manifest%.swift}.resolved"
+            for name in runner xcode metal lfs sandbox coverage scratch fixture seed privileged apt; do
+              echo "$name=${!name}"
+            done
+            echo 'cache-path<<QUICK_TEST_CACHE_PATH'
+            printf '%s\n' "${paths[@]}"
+            echo 'QUICK_TEST_CACHE_PATH'
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: ${{ steps.plan.outputs.manifest }}
+          sparse-checkout-cone-mode: false
+      - name: Require a package with tests
+        env:
+          DIR: ${{ steps.plan.outputs.dir }}
+          MANIFEST: ${{ steps.plan.outputs.manifest }}
+        run: |
+          set -euo pipefail
+          hint=''
+          case "$DIR" in
+            Hub) hint=" HubCore's tests are the root package's: -f package=. -f filter=HubCoreTests" ;;
+            Mobile) hint=' The phone app is tested on a simulator by scripts/mobile.sh test (test-mobile), not swift test.' ;;
+          esac
+          if [ ! -f "$MANIFEST" ]; then
+            echo "::error::$DIR has no Package.swift on this branch.$hint"
+            exit 1
+          fi
+          # swift test fails a package without test targets.
+          if ! grep -q '\.testTarget(' "$MANIFEST"; then
+            echo "::error::$DIR has no test targets.$hint"
+            exit 1
+          fi
+
+  macos:
+    needs: [plan]
+    if: inputs.platform == 'macos'
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          lfs: ${{ needs.plan.outputs.lfs == 'true' }}
+          persist-credentials: false
+      # The xcode-27 image defaults to Xcode 27.1, whose builds broke Pion 0.12.0's text fields; release.yml selects 27.2.
+      - name: Select Xcode ${{ needs.plan.outputs.xcode }}
+        if: needs.plan.outputs.xcode != ''
+        env:
+          XCODE: ${{ needs.plan.outputs.xcode }}
+        run: echo "DEVELOPER_DIR=/Applications/Xcode_$XCODE.app/Contents/Developer" >> "$GITHUB_ENV"
+      - name: Prepare Metal tools
+        if: needs.plan.outputs.metal == 'true'
+        run: xcodebuild -downloadComponent MetalToolchain
+      - id: toolchain
+        run: echo "id=$(swift --version 2>&1 | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      # This branch's last quick test of the package, else (for the root package) main's last full run.
+      - id: build-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ needs.plan.outputs.cache-path }}
+          key: quick-test-${{ runner.os }}-${{ steps.toolchain.outputs.id }}-${{ needs.plan.outputs.slug }}-${{ hashFiles(needs.plan.outputs.resolved, needs.plan.outputs.manifest) }}
+          restore-keys: |
+            quick-test-${{ runner.os }}-${{ steps.toolchain.outputs.id }}-${{ needs.plan.outputs.slug }}-
+            ${{ needs.plan.outputs.seed != '' && format('{0}-{1}-{2}-', needs.plan.outputs.seed, runner.os, steps.toolchain.outputs.id) || '' }}
+      - name: Build sandbox CLI fixtures without signing credentials
+        if: needs.plan.outputs.fixture == 'true'
+        run: |
+          zsh Tests/build-sandbox-cli-fixture.sh
+          echo "NOODLE_TEST_CLI_APPLICATION=$GITHUB_WORKSPACE/.build/Sandbox CLI Tests.app" >> "$GITHUB_ENV"
+      - name: Test ${{ needs.plan.outputs.dir }} matching ${{ inputs.filter }}
+        id: tests
+        env:
+          DIR: ${{ needs.plan.outputs.dir }}
+          SCRATCH: ${{ needs.plan.outputs.scratch }}
+          SANDBOX: ${{ needs.plan.outputs.sandbox }}
+          COVERAGE: ${{ needs.plan.outputs.coverage }}
+          FILTER: ${{ inputs.filter }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "$SANDBOX" = true ]; then args+=(--disable-sandbox); fi
+          if [ "$DIR" != . ]; then args+=(--package-path "$DIR"); fi
+          if [ -n "$SCRATCH" ]; then args+=(--scratch-path "$SCRATCH"); fi
+          # Built as main's cache was, so its products are reused rather than rebuilt.
+          if [ "$COVERAGE" = true ]; then args+=(--enable-code-coverage); fi
+          args+=(--filter "$FILTER")
+          set -x
+          swift test "${args[@]}"
+      # Saved after a failing run too, so the next run is warm. The root package is left to main's cache,
+      # which only main saves, so a branch never evicts what every pull request restores.
+      - name: Save the build for the next quick test
+        if: ${{ !cancelled() && needs.plan.outputs.seed == '' && steps.build-cache.outputs.cache-hit != 'true' && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ needs.plan.outputs.cache-path }}
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
+  linux:
+    needs: [plan]
+    if: inputs.platform == 'linux'
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 45
+    # The toolchain image Noodle Push builds with.
+    container:
+      image: swift:6.4.1-noble@sha256:19cbe56bdaec1918f7cf5fdeba42b9bd55bdd8a6149c9990d0e0e3a89a127d63
+      # The server's bot sandbox mounts its own /proc, which an unprivileged container forbids.
+      options: ${{ needs.plan.outputs.privileged == 'true' && '--privileged' || '' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          lfs: ${{ needs.plan.outputs.lfs == 'true' }}
+          persist-credentials: false
+      - name: Install msquic for the Hub's link and the job's other packages
+        shell: bash
+        env:
+          APT: ${{ needs.plan.outputs.apt }}
+        run: |
+          set -euo pipefail
+          read -ra extra <<< "${APT//,/ }"
+          apt-get update && apt-get install -y --no-install-recommends curl ca-certificates ${extra[@]+"${extra[@]}"}
+          curl -fsSL https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb -o /tmp/microsoft.deb
+          dpkg -i /tmp/microsoft.deb && apt-get update && apt-get install -y --no-install-recommends libmsquic
+      - id: toolchain
+        shell: bash
+        run: echo "id=$(swift --version 2>&1 | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - id: build-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ needs.plan.outputs.cache-path }}
+          key: quick-test-${{ runner.os }}-${{ steps.toolchain.outputs.id }}-${{ needs.plan.outputs.slug }}-${{ hashFiles(needs.plan.outputs.resolved, needs.plan.outputs.manifest) }}
+          restore-keys: |
+            quick-test-${{ runner.os }}-${{ steps.toolchain.outputs.id }}-${{ needs.plan.outputs.slug }}-
+      - name: Test ${{ needs.plan.outputs.dir }} matching ${{ inputs.filter }} on Linux
+        id: tests
+        shell: bash
+        env:
+          DIR: ${{ needs.plan.outputs.dir }}
+          SCRATCH: ${{ needs.plan.outputs.scratch }}
+          SANDBOX: ${{ needs.plan.outputs.sandbox }}
+          FILTER: ${{ inputs.filter }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "$SANDBOX" = true ]; then args+=(--disable-sandbox); fi
+          if [ "$DIR" != . ]; then args+=(--package-path "$DIR"); fi
+          if [ -n "$SCRATCH" ]; then args+=(--scratch-path "$SCRATCH"); fi
+          args+=(--filter "$FILTER")
+          set -x
+          swift test "${args[@]}"
+      - name: Save the build for the next quick test
+        if: ${{ !cancelled() && steps.build-cache.outputs.cache-hit != 'true' && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ needs.plan.outputs.cache-path }}
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
+  windows:
+    needs: [plan]
+    if: inputs.platform == 'windows'
+    runs-on: ${{ needs.plan.outputs.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          lfs: ${{ needs.plan.outputs.lfs == 'true' }}
+          persist-credentials: false
+      - name: Install Swift
+        shell: pwsh
+        run: ./scripts/install-swift-windows.ps1
+      - id: toolchain
+        shell: pwsh
+        run: |
+          . ./scripts/windows-common.ps1
+          $version = [Text.Encoding]::UTF8.GetBytes(((Invoke-Swift --version) -join "`n"))
+          $id = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($version)).Substring(0, 16).ToLowerInvariant()
+          "id=$id" >> $env:GITHUB_OUTPUT
+      - id: build-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ needs.plan.outputs.cache-path }}
+          key: quick-test-${{ runner.os }}-${{ steps.toolchain.outputs.id }}-${{ needs.plan.outputs.slug }}-${{ hashFiles(needs.plan.outputs.resolved, needs.plan.outputs.manifest) }}
+          restore-keys: |
+            quick-test-${{ runner.os }}-${{ steps.toolchain.outputs.id }}-${{ needs.plan.outputs.slug }}-
+      # As scripts/test-*-windows.ps1 test each of their packages, with only the matching tests run.
+      - name: Test ${{ needs.plan.outputs.dir }} matching ${{ inputs.filter }} on Windows
+        id: tests
+        shell: pwsh
+        env:
+          DIR: ${{ needs.plan.outputs.dir }}
+          SCRATCH: ${{ needs.plan.outputs.scratch }}
+          FILTER: ${{ inputs.filter }}
+        run: |
+          Set-StrictMode -Version Latest
+          . ./scripts/windows-common.ps1
+          $options = @('--package-path', (Join-Path $env:GITHUB_WORKSPACE $env:DIR), '--scratch-path', (Join-Path $env:GITHUB_WORKSPACE $env:SCRATCH)) + $SwiftWindowsFlags
+          Invoke-Swift build --build-tests @options
+          & ./scripts/fetch-msquic-windows.ps1 -Destination (Invoke-Swift build @options --show-bin-path | Select-Object -Last 1)
+          Invoke-Swift test --skip-build @options --filter $env:FILTER
+      - name: Save the build for the next quick test
+        if: ${{ !cancelled() && steps.build-cache.outputs.cache-hit != 'true' && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ needs.plan.outputs.cache-path }}
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
