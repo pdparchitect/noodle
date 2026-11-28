@@ -556,21 +556,31 @@ public enum ComputerExternalPeer {
             }
             return reply
         }
-        guard let id = request.terminalID, let terminal = windowsTerminals[id], terminal.owner == owner, terminal.computerID == session.id else {
+        return try operateShell(request, terminal: request.terminalID.flatMap { windowsTerminals[$0] },
+                                owner: owner, computerID: session.id) { windowsTerminals.removeValue(forKey: $0)?.close() }
+    }
+
+    private func operateShell(_ request: ComputerRequest, terminal: (any ProviderShell)?,
+                              owner: String, computerID: UUID, close: (UUID) -> Void) throws -> ComputerResponse {
+        guard let id = request.terminalID, let terminal, terminal.owner == owner, terminal.computerID == computerID else {
             throw ComputerBridgeError("Terminal session is unavailable or belongs to another agent.")
         }
         terminal.touched = now()
         switch request.operation {
         case .terminalRead:
             var reply = terminal.replay.read(from: request.offset ?? 0)
-            reply.terminalID = id; reply.exited = terminal.exited
+            reply.terminalID = id
+            reply.exited = terminal.exited
             return reply
         case .terminalWrite:
             guard !terminal.exited else { throw ComputerBridgeError("This shell has exited. Open a new terminal session.") }
             terminal.write(request.data ?? Data())
-        case .terminalResize: terminal.resize(columns: request.columns ?? 120, rows: request.rows ?? 30)
-        case .terminalClose: windowsTerminals.removeValue(forKey: id)?.close()
-        default: throw ComputerBridgeError("Unsupported computer operation.")
+        case .terminalResize:
+            terminal.resize(columns: request.columns ?? 120, rows: request.rows ?? 30)
+        case .terminalClose:
+            close(id)
+        default:
+            throw ComputerBridgeError("Unsupported computer operation.")
         }
         return .init()
     }
@@ -672,23 +682,8 @@ public enum ComputerExternalPeer {
             reply.terminalID = id; reply.exited = terminal.exited; reply.computerID = session.id; reply.view = "terminal"
             return reply
         }
-        guard let id = request.terminalID, let terminal = sshTerminals[id], terminal.owner == owner, terminal.computerID == session.id else {
-            throw ComputerBridgeError("Terminal session is unavailable or belongs to another agent.")
-        }
-        terminal.touched = now()
-        switch request.operation {
-        case .terminalRead:
-            var reply = terminal.replay.read(from: request.offset ?? 0)
-            reply.terminalID = id; reply.exited = terminal.exited
-            return reply
-        case .terminalWrite:
-            guard !terminal.exited else { throw ComputerBridgeError("This shell has exited. Open a new terminal session.") }
-            terminal.write(request.data ?? Data())
-        case .terminalResize: terminal.resize(columns: request.columns ?? 120, rows: request.rows ?? 30)
-        case .terminalClose: sshTerminals.removeValue(forKey: id)?.close()
-        default: throw ComputerBridgeError("Unsupported computer operation.")
-        }
-        return .init()
+        return try operateShell(request, terminal: request.terminalID.flatMap { sshTerminals[$0] },
+                                owner: owner, computerID: session.id) { sshTerminals.removeValue(forKey: $0)?.close() }
     }
 
     private func handleLocal(_ request: ComputerRequest, session: ComputerSession, store: ComputerStore, owner: String,
@@ -798,7 +793,19 @@ public enum ComputerExternalPeer {
 }
 
 /// A client's PowerShell console in Windows, with its output kept for reading back.
-@MainActor private final class WindowsProviderTerminal {
+@MainActor private protocol ProviderShell: AnyObject {
+    var computerID: UUID { get }
+    var owner: String { get }
+    var replay: TerminalReplay { get }
+    var exited: Bool { get }
+    var touched: Date { get set }
+    func write(_ data: Data)
+    func resize(columns: Int, rows: Int)
+}
+
+extension SSHProviderTerminal: ProviderShell {}
+
+@MainActor private final class WindowsProviderTerminal: ProviderShell {
     let computerID: UUID
     let owner: String
     let agent: WindowsAgent
