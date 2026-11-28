@@ -532,22 +532,13 @@ public enum ComputerExternalPeer {
             return .init(terminalID: id, offset: 0, exited: false)
         }
         if request.operation == .terminalList {
-            var reply = ComputerResponse()
-            reply.terminals = windowsTerminals.filter { $0.value.owner == owner && $0.value.computerID == session.id }
-                .sorted { $0.value.opened < $1.value.opened }
-                .map { summary($0.key, opened: $0.value.opened, used: $0.value.touched, running: nil, exited: $0.value.exited) }
-            return reply
+            return listShells(windowsTerminals, owner: owner, computerID: session.id)
         }
         if request.operation == .preview {
             let view = request.view ?? (request.terminalID == nil ? "web" : "terminal")
             var reply = ComputerResponse(); reply.computerID = session.id; reply.view = view
             if view == "terminal" {
-                let id = try ComputerPresentation.terminal(explicit: request.terminalID,
-                    active: windowsTerminals.filter { $0.value.owner == owner && $0.value.computerID == session.id && !$0.value.exited }.map(\.key))
-                guard let terminal = windowsTerminals[id], terminal.owner == owner else { throw ComputerBridgeError("Terminal session is unavailable.") }
-                terminal.touched = now()
-                reply = terminal.replay.read(from: max(0, terminal.replay.end - 8000))
-                reply.terminalID = id; reply.exited = terminal.exited; reply.computerID = session.id; reply.view = view
+                return try previewShell(request, terminals: windowsTerminals, owner: owner, computerID: session.id)
             } else {
                 reply.previewImage = await ComputerPreviewSnapshot.capture(valid: { session.windows === windows && session.phase == .running }) {
                     guard let frame = windows.lastFrame else { throw ComputerBridgeError("Windows has not drawn its screen yet.") }
@@ -558,6 +549,31 @@ public enum ComputerExternalPeer {
         }
         return try operateShell(request, terminal: request.terminalID.flatMap { windowsTerminals[$0] },
                                 owner: owner, computerID: session.id) { windowsTerminals.removeValue(forKey: $0)?.close() }
+    }
+
+    private func listShells<Shell: ProviderShell>(_ terminals: [UUID: Shell], owner: String, computerID: UUID) -> ComputerResponse {
+        var reply = ComputerResponse()
+        reply.terminals = terminals.filter { $0.value.owner == owner && $0.value.computerID == computerID }
+            .sorted { $0.value.opened < $1.value.opened }
+            .map { summary($0.key, opened: $0.value.opened, used: $0.value.touched, running: nil, exited: $0.value.exited) }
+        return reply
+    }
+
+    private func previewShell<Shell: ProviderShell>(_ request: ComputerRequest, terminals: [UUID: Shell],
+                                                    owner: String, computerID: UUID) throws -> ComputerResponse {
+        let owned = terminals.filter { $0.value.owner == owner && $0.value.computerID == computerID }
+        let id = try ComputerPresentation.terminal(explicit: request.terminalID,
+                                                   active: owned.filter { !$0.value.exited }.map(\.key))
+        guard let terminal = owned[id] else {
+            throw ComputerBridgeError("Terminal session is unavailable or belongs to another agent.")
+        }
+        terminal.touched = now()
+        var reply = terminal.replay.read(from: max(0, terminal.replay.end - 8000))
+        reply.terminalID = id
+        reply.exited = terminal.exited
+        reply.computerID = computerID
+        reply.view = "terminal"
+        return reply
     }
 
     private func operateShell(_ request: ComputerRequest, terminal: (any ProviderShell)?,
@@ -664,23 +680,10 @@ public enum ComputerExternalPeer {
         }
         if request.operation == .terminalOpen { return .init(terminalID: try await open(person: false), offset: 0, exited: false) }
         if request.operation == .terminalList {
-            var reply = ComputerResponse()
-            reply.terminals = sshTerminals.filter { $0.value.owner == owner && $0.value.computerID == session.id }
-                .sorted { $0.value.opened < $1.value.opened }
-                .map { summary($0.key, opened: $0.value.opened, used: $0.value.touched, running: nil, exited: $0.value.exited) }
-            return reply
+            return listShells(sshTerminals, owner: owner, computerID: session.id)
         }
         if request.operation == .preview {
-            var reply = ComputerResponse(); reply.computerID = session.id; reply.view = "terminal"
-            let id = try ComputerPresentation.terminal(explicit: request.terminalID,
-                active: sshTerminals.filter { $0.value.owner == owner && $0.value.computerID == session.id && !$0.value.exited }.map(\.key))
-            guard let terminal = sshTerminals[id], terminal.owner == owner, terminal.computerID == session.id else {
-                throw ComputerBridgeError("Terminal session is unavailable or belongs to another agent.")
-            }
-            terminal.touched = now()
-            reply = terminal.replay.read(from: max(0, terminal.replay.end - 8000))
-            reply.terminalID = id; reply.exited = terminal.exited; reply.computerID = session.id; reply.view = "terminal"
-            return reply
+            return try previewShell(request, terminals: sshTerminals, owner: owner, computerID: session.id)
         }
         return try operateShell(request, terminal: request.terminalID.flatMap { sshTerminals[$0] },
                                 owner: owner, computerID: session.id) { sshTerminals.removeValue(forKey: $0)?.close() }
@@ -797,6 +800,7 @@ public enum ComputerExternalPeer {
     var computerID: UUID { get }
     var owner: String { get }
     var replay: TerminalReplay { get }
+    var opened: Date { get }
     var exited: Bool { get }
     var touched: Date { get set }
     func write(_ data: Data)
