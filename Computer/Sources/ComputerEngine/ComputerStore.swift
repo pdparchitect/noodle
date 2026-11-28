@@ -92,6 +92,30 @@ public enum ComputerDisplayMode: String {
     /// Windows is running but its agent, which Terminal and Files need, is not there yet.
     @Published public var waitingForWindows = false
     var terminalConnection: (any ComputerTerminalConnection)?
+
+    public var localTerminal: LocalMacTerminalConnection? {
+        get { terminalConnection as? LocalMacTerminalConnection }
+        set {
+            if let newValue { terminalConnection = newValue }
+            else if terminalConnection is LocalMacTerminalConnection { terminalConnection = nil }
+        }
+    }
+
+    public var sshTerminal: SSHTerminalConnection? {
+        get { terminalConnection as? SSHTerminalConnection }
+        set {
+            if let newValue { terminalConnection = newValue }
+            else if terminalConnection is SSHTerminalConnection { terminalConnection = nil }
+        }
+    }
+
+    public var windowsTerminal: WindowsTerminalConnection? {
+        get { terminalConnection as? WindowsTerminalConnection }
+        set {
+            if let newValue { terminalConnection = newValue }
+            else if terminalConnection is WindowsTerminalConnection { terminalConnection = nil }
+        }
+    }
     @Published public var localMac: LocalMacComputer? {
         didSet {
             guard oldValue !== localMac else { return }
