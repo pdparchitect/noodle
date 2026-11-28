@@ -356,6 +356,19 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('github.event.workflow_run.head_sha', checkout['with']['ref'])
         self.assertIn('python3 scripts/testflight.py', json.dumps(job))
 
+    def test_website_deploys_in_a_job_after_the_one_that_uploads_it(self):
+        # GitHub lists an uploaded artifact reliably only once its job has ended; deploying from the same job
+        # sometimes finds no artifact at all.
+        jobs = workflow('website.yml')['jobs']
+        def jobs_using(action):
+            return [name for name, job in jobs.items() if any(action in (step.get('uses') or '') for step in job.get('steps', []))]
+        upload, deploy = jobs_using('actions/upload-pages-artifact'), jobs_using('actions/deploy-pages')
+        self.assertEqual(len(upload), 1)
+        self.assertEqual(len(deploy), 1)
+        self.assertNotEqual(upload, deploy)
+        needs = jobs[deploy[0]].get('needs', [])
+        self.assertIn(upload[0], [needs] if isinstance(needs, str) else needs)
+
     def test_every_server_archive_published_is_built(self):
         # The publish script refuses to run without each archive, so each needs a job that builds it.
         published = re.findall(r'Noodle-Server-[a-z0-9_-]+\.(?:zip|tar\.gz)',
