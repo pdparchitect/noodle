@@ -1,3 +1,4 @@
+#if NOODLE_DEV_HOOKS
 import Foundation
 import NoodleCore
 import NoodleScenarios
@@ -101,3 +102,4 @@ struct ScenarioLaunch {
         try? FileManager.default.removeItem(at: temporaryDirectory)
     }
 }
+#endif

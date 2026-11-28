@@ -40,6 +40,7 @@ final class MainWindow {
 
     func activate() { try? window.activate() }
 
+    #if NOODLE_DEV_HOOKS
     func setScenarioDraft(_ text: String, for id: UUID) {
         conversation.setScenarioDraft(text, for: id)
     }
@@ -47,6 +48,8 @@ final class MainWindow {
     func refreshScenario(selecting selection: UUID? = nil) {
         load(selecting: selection ?? (navigation.selectedItem as? ConversationItem)?.conversationID)
     }
+
+    #endif
 
     /// Reads the store again, as after a message is sent, which can move its conversation up the list.
     private func load(selecting selection: UUID? = nil) {

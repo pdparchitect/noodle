@@ -50,10 +50,13 @@ final class ConversationPane {
         showMessages(scrollingToEnd: true)
     }
 
+    #if NOODLE_DEV_HOOKS
     func setScenarioDraft(_ text: String, for id: UUID) {
         drafts[id].text = text
         if conversation?.id == id { composer.text = text }
     }
+
+    #endif
 
     func showProblem(_ problem: String, detail: String) {
         conversation = nil
