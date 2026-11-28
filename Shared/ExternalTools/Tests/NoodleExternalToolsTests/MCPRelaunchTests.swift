@@ -111,7 +111,8 @@ private func folder() throws -> URL {
                          resume: .init(protocolVersion: "2025-03-26", pending: try MCPRelaunch.stash(pending)))
         try output.fileHandleForWriting.close()
         let answers = output.fileHandleForReading.readDataToEndOfFile().split(separator: UInt8(ascii: "\n"))
-        let answer = try #require(try JSONSerialization.jsonObject(with: Data(try #require(answers.first))) as? [String: Any])
+        let firstAnswer = try #require(answers.first)
+        let answer = try #require(try JSONSerialization.jsonObject(with: Data(firstAnswer)) as? [String: Any])
         #expect(answer["id"] as? Int == 3)
     }
 }
