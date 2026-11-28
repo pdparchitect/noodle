@@ -147,7 +147,7 @@ private let log = Logger(subsystem: ComputerAppIdentity.subsystem, category: "Wi
         }
         let configuration = try Self.configuration(
             cpus: computer.cpuCount, memoryGiB: computer.memoryGiB, directory: directory,
-            network: setUp && computer.networkEnabled, gpu: gpu, consoles: [agent.configuration()])
+            network: setUp && computer.networkEnabled, macAddress: computer.macAddress, gpu: gpu, consoles: [agent.configuration()])
         let machine = VZVirtualMachine(configuration: configuration)
         machine.delegate = self
         self.machine = machine
@@ -232,7 +232,7 @@ private let log = Logger(subsystem: ComputerAppIdentity.subsystem, category: "Wi
         }
     }
 
-    static func configuration(cpus: Int, memoryGiB: Int, directory: URL, media: URL? = nil, network: Bool,
+    static func configuration(cpus: Int, memoryGiB: Int, directory: URL, media: URL? = nil, network: Bool, macAddress: String? = nil,
                               gpu: WindowsGPU?, consoles: [VZVirtioConsoleDeviceConfiguration]) throws -> VZVirtualMachineConfiguration {
         guard VZVirtualMachine.isSupported else { throw ComputerError("Virtualization is unavailable on this Mac.") }
         let config = VZVirtualMachineConfiguration()
@@ -258,11 +258,7 @@ private let log = Logger(subsystem: ComputerAppIdentity.subsystem, category: "Wi
             config.storageDevices.append(VZUSBMassStorageDeviceConfiguration(
                 attachment: try VZDiskImageStorageDeviceAttachment(url: media, readOnly: false)))
         }
-        if network {
-            let device = VZVirtioNetworkDeviceConfiguration()
-            device.attachment = VZNATNetworkDeviceAttachment()
-            config.networkDevices = [device]
-        }
+        config.networkDevices = WindowsNetwork.devices(enabled: network, macAddress: macAddress)
         if let gpu { config.customVirtioDevices = [try gpu.configuration()] }
         config.consoleDevices = consoles
         config.usbControllers = [VZXHCIControllerConfiguration()]
@@ -271,6 +267,18 @@ private let log = Logger(subsystem: ComputerAppIdentity.subsystem, category: "Wi
         config.entropyDevices = [VZVirtioEntropyDeviceConfiguration()]
         try config.validate()
         return config
+    }
+}
+
+/// Windows' network card. The Mac's DHCP server leases addresses by MAC, and VZ makes up a new one for a card
+/// without one at every start, so the card takes the MAC stored when the computer was made, as Linux computers' do.
+enum WindowsNetwork {
+    static func devices(enabled: Bool, macAddress: String?) -> [VZNetworkDeviceConfiguration] {
+        guard enabled else { return [] }
+        let device = VZVirtioNetworkDeviceConfiguration()
+        device.attachment = VZNATNetworkDeviceAttachment()
+        if let macAddress, let mac = VZMACAddress(string: macAddress) { device.macAddress = mac }
+        return [device]
     }
 }
 

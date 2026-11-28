@@ -108,6 +108,15 @@ final class ComputerToolProviderTests: XCTestCase {
         XCTAssertFalse(instructions.contains("skills/computer/computer"), "nothing points bots at the removed command")
     }
 
+    /// Bots are told how each kind of computer differs: its shell, its paths and what present shows.
+    func testTheSkillDescribesEveryKindOfComputer() {
+        let instructions = provider.manifest.instructions
+        for fact in ["Desktop", "Shell", "/home/agent", "Local Mac", "~/workspace", "Windows", "PowerShell", "/C/Users/", "macOS 27",
+                     "still starting", "SSH"] {
+            XCTAssertTrue(instructions.contains(fact), fact)
+        }
+    }
+
     func testTheOwnerOfATerminalIsTheCallingBotNeverAnArgument() async throws {
         transport.respond = { [terminal] _, _ in ComputerResponse(terminalID: terminal) }
         let opened = try await call("open", ["computer": mine.uuidString.lowercased(), "agentID": UUID().uuidString, "agent": UUID().uuidString])

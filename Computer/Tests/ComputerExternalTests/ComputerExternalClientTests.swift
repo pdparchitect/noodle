@@ -41,6 +41,15 @@ private func client(_ computers: [RemoteComputer], environment: [String: String]
         #expect(ComputerExternalClient.usage(for: "present") == nil)
     }
 
+    /// Help and the MCP instructions tell an agent how each kind it may be lent differs.
+    @Test func theInstructionsDescribeEveryKindOfComputer() {
+        let instructions = ComputerExternalClient.instructions
+        for fact in ["Windows", "PowerShell", "/C/Users/", "macOS 27", "still starting", "Local Mac", "SSH", "borrow"] {
+            #expect(instructions.contains(fact), "\(fact)")
+        }
+        #expect(ComputerExternalClient.usage.contains(instructions))
+    }
+
     @Test func theComputerCanBeLeftOutWhenThereIsOnlyOne() async throws {
         let calls = Calls()
         _ = try await client([dev], calls: calls).run(.start, options: [:])

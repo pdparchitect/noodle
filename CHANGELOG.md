@@ -8,6 +8,7 @@ All notable changes to Noodle are documented here, following
 
 ### Fixed
 
+- Bots' Computer instructions describe each kind of computer, Windows included: its PowerShell terminals, file paths that start with the drive letter and that it needs a minute after starting, as well as what Linux, Local Mac and SSH computers offer.
 - A row in the sidebar shows when its last message came, as its place in the list does, instead of when the group was last edited.
 
 ## [0.99.0] - 2026-11-27

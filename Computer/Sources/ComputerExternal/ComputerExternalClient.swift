@@ -18,12 +18,23 @@ public struct ComputerExternalClient: Sendable {
     }
 
     public static let instructions = """
-        Noodle Computer runs Linux computers and this Mac's own Local Mac account. This app sees only computers it created or a \
-        person lent it. Start with list; use templates and create to make one, or borrow to ask the person to lend one of theirs. \
-        Pass computer as a name or ID; it may be left out when there is only one. start a stopped computer, open a terminal, then \
-        write commands and read their output from the returned offset; close each terminal you are done with, and stop the computer when it is no longer needed. terminals lists the ones this app has open. upload and download move files between this Mac and the \
-        computer. The person is asked before this app is first allowed in, before it creates a computer, and before it borrows one. \
-        A result's idle lists computers you started and then left unused; stop each one you no longer need.
+        Noodle Computer runs Linux computers, this Mac's own Local Mac account, Windows computers and servers reached over SSH. \
+        This app sees only computers it created or a person lent it. Start with list. templates and create make a Linux computer; \
+        every other kind has to be lent, so use borrow to ask the person for one of theirs. update and delete work only on \
+        computers this app created. Pass computer as a name or ID; it may be left out when there is only one. start a stopped \
+        computer, open a terminal, then write commands and read their output from the returned offset; close each terminal you \
+        are done with, and stop the computer when it is no longer needed. terminals lists the ones this app has open. upload and \
+        download move one file between this Mac and an absolute path in the computer. The person is asked before this app is \
+        first allowed in, before it creates a computer, and before it borrows one. A result's idle lists computers you started \
+        and then left unused; stop each one you no longer need.
+
+        Linux terminals run as the agent account and start in /workspace; use sudo for administrative work. \
+        A Local Mac is a standard account on this Mac, not a virtual machine: its terminals are zsh in ~/workspace, and its \
+        transfer paths are inside the account's home, so /workspace/a.txt is ~/workspace/a.txt. Windows is experimental and \
+        needs macOS 27: its terminals are PowerShell, through ConPTY; its transfer paths start with the drive letter, so \
+        /C/Users/NAME/a.txt is C:\\Users\\NAME\\a.txt; and right after it starts, calls answer that Windows is still starting \
+        until Noodle Computer's helper inside it connects, so try again in a minute. An SSH computer's terminals are the server's own \
+        shell.
         """
 
     static func describe(_ operation: ComputerOperation) -> String {
