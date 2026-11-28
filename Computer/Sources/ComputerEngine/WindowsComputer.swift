@@ -875,7 +875,7 @@ private final class LockedData: @unchecked Sendable {
 // MARK: - Terminal and Files
 
 /// A PowerShell console in Windows, through the agent's ConPTY session.
-@MainActor public final class WindowsTerminalConnection {
+@MainActor public final class WindowsTerminalConnection: ComputerTerminalConnection {
     let agent: WindowsAgent
     let terminal: GuestTerminal
     private var channel: UInt32?

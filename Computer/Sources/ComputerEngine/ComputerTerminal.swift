@@ -5,6 +5,15 @@ import Foundation
 import SwiftTerm
 import SwiftUI
 
+@MainActor protocol ComputerTerminalConnection: AnyObject {
+    var ended: Bool { get }
+    func close()
+}
+
+extension ComputerTerminalConnection {
+    var ended: Bool { false }
+}
+
 /// Only transports bytes to a guest PTY. Never launches a shell on the Mac.
 public final class GuestTerminalIO: ReaderStream, Writer, @unchecked Sendable {
     private let input = AsyncStream<Data>.makeStream()

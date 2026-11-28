@@ -3,7 +3,7 @@ import ComputerCore
 import Foundation
 import LocalMacCore
 
-@MainActor public final class LocalMacTerminalConnection {
+@MainActor public final class LocalMacTerminalConnection: ComputerTerminalConnection {
     let runtime: LocalMacComputer
     let terminal: GuestTerminal
     var id: UUID?

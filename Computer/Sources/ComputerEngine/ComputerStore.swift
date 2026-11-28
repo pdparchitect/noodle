@@ -81,7 +81,7 @@ public enum ComputerDisplayMode: String {
         didSet {
             guard oldValue !== windowsRuntime else { return }
             fileBrowser?.disappear(); fileBrowser?.cancelTransfer(); fileBrowser = nil
-            windowsTerminal?.close(); windowsTerminal = nil
+            terminalConnection?.close(); terminalConnection = nil
             if computer.kind == .windows {
                 terminal = nil; showingTerminal = false; showingFiles = false
                 waitingForWindows = windowsRuntime != nil
@@ -91,26 +91,48 @@ public enum ComputerDisplayMode: String {
     @available(macOS 27, *) public var windows: WindowsComputer? { windowsRuntime as? WindowsComputer }
     /// Windows is running but its agent, which Terminal and Files need, is not there yet.
     @Published public var waitingForWindows = false
-    public var windowsTerminal: WindowsTerminalConnection?
+    var terminalConnection: (any ComputerTerminalConnection)?
+
+    public var localTerminal: LocalMacTerminalConnection? {
+        get { terminalConnection as? LocalMacTerminalConnection }
+        set {
+            if let newValue { terminalConnection = newValue }
+            else if terminalConnection is LocalMacTerminalConnection { terminalConnection = nil }
+        }
+    }
+
+    public var sshTerminal: SSHTerminalConnection? {
+        get { terminalConnection as? SSHTerminalConnection }
+        set {
+            if let newValue { terminalConnection = newValue }
+            else if terminalConnection is SSHTerminalConnection { terminalConnection = nil }
+        }
+    }
+
+    public var windowsTerminal: WindowsTerminalConnection? {
+        get { terminalConnection as? WindowsTerminalConnection }
+        set {
+            if let newValue { terminalConnection = newValue }
+            else if terminalConnection is WindowsTerminalConnection { terminalConnection = nil }
+        }
+    }
     @Published public var localMac: LocalMacComputer? {
         didSet {
             guard oldValue !== localMac else { return }
             // A retry replaces the runtime directly, without passing through nil.
             // Every surface tied to the old transport must be replaced with it.
             fileBrowser?.disappear(); fileBrowser?.cancelTransfer(); fileBrowser = nil
-            localTerminal?.close(); localTerminal = nil; terminal = nil
+            terminalConnection?.close(); terminalConnection = nil; terminal = nil
         }
     }
-    public var localTerminal: LocalMacTerminalConnection?
     public var sshRuntime: SSHComputer? {
         didSet {
             guard oldValue !== sshRuntime else { return }
             fileBrowser?.disappear(); fileBrowser?.cancelTransfer(); fileBrowser = nil
-            sshTerminal?.close(); sshTerminal = nil; terminal = nil
+            terminalConnection?.close(); terminalConnection = nil; terminal = nil
             if sshRuntime == nil { showingTerminal = false; showingFiles = false }
         }
     }
-    public var sshTerminal: SSHTerminalConnection?
     /// What the server asked to show the person while signing in, such as Tailscale's check link.
     @Published public var sshNotice: String?
     public var container: ContainerComputer? {
@@ -723,7 +745,7 @@ public enum ComputerDisplayMode: String {
         if let runtime = session.localMac, session.phase == .running {
             guard !session.openingTerminal else { return }
             do {
-                if mode == .terminal, session.localTerminal == nil {
+                if mode == .terminal, session.terminalConnection == nil {
                     session.openingTerminal = true
                     defer { session.openingTerminal = false }
                     let terminal = GuestTerminal()
@@ -733,7 +755,7 @@ public enum ComputerDisplayMode: String {
                         connection.close()
                         return
                     }
-                    session.localTerminal = connection; session.terminal = terminal
+                    session.terminalConnection = connection; session.terminal = terminal
                 }
                 session.showingFiles = mode == .files; session.showingTerminal = mode == .terminal
             } catch {
@@ -743,7 +765,7 @@ public enum ComputerDisplayMode: String {
         }
         if let ssh = session.sshRuntime, session.phase == .running {
             guard session.availableDisplayModes.contains(mode), !session.openingTerminal else { return }
-            if mode == .terminal, session.sshTerminal == nil || session.sshTerminal?.ended == true {
+            if mode == .terminal, session.terminalConnection == nil || session.terminalConnection?.ended == true {
                 session.openingTerminal = true
                 defer { session.openingTerminal = false }
                 do { try await openSSHTerminal(session, runtime: ssh) }
@@ -759,12 +781,12 @@ public enum ComputerDisplayMode: String {
         if #available(macOS 27, *), let windows = session.windows, session.phase == .running {
             guard session.availableDisplayModes.contains(mode) else { return }
             guard mode == .desktop || windows.agentConnected else { return }
-            if mode == .terminal, session.windowsTerminal == nil || session.windowsTerminal?.ended == true {
-                session.windowsTerminal?.close()
+            if mode == .terminal, session.terminalConnection == nil || session.terminalConnection?.ended == true {
+                session.terminalConnection?.close()
                 let terminal = GuestTerminal()
                 let connection = WindowsTerminalConnection(agent: windows.agent, terminal: terminal)
                 connection.start()
-                session.windowsTerminal = connection
+                session.terminalConnection = connection
                 session.terminal = terminal
             }
             session.showingFiles = mode == .files
@@ -876,12 +898,12 @@ public enum ComputerDisplayMode: String {
     }
 
     private func openSSHTerminal(_ session: ComputerSession, runtime: SSHComputer) async throws {
-        session.sshTerminal?.close()
+        session.terminalConnection?.close()
         let terminal = GuestTerminal()
         let connection = SSHTerminalConnection(connection: runtime.connection, terminal: terminal)
         try await connection.start()
         guard session.sshRuntime === runtime else { connection.close(); return }
-        session.sshTerminal = connection
+        session.terminalConnection = connection
         session.terminal = terminal
     }
 
