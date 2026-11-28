@@ -29,6 +29,7 @@ let package = Package(
             dependencies: [
                 "WinUI", "WinAppSDK", "UWP", "WindowsFoundation",
                 .product(name: "NoodleCore", package: "Noodle"),
+                .product(name: "NoodleScenarios", package: "Noodle"),
                 .product(name: "NoodleRuntime", package: "Noodle"),
                 .product(name: "HubLink", package: "HubLink"),
             ],

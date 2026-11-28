@@ -50,6 +50,11 @@ final class ConversationPane {
         showMessages(scrollingToEnd: true)
     }
 
+    func setScenarioDraft(_ text: String, for id: UUID) {
+        drafts[id].text = text
+        if conversation?.id == id { composer.text = text }
+    }
+
     func showProblem(_ problem: String, detail: String) {
         conversation = nil
         title.text = problem

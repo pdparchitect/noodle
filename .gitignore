@@ -51,3 +51,4 @@ Incubator/Rook/Derived/
 Incubator/Rook/Scenarios/*/shots/
 Incubator/Rook/Scenarios/*/recordings/
 Incubator/Rook/Scenarios/.cache/
+/Scenarios/*/shots-windows/
