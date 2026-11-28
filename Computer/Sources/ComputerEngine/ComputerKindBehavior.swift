@@ -1,21 +1,21 @@
 import ComputerCore
 import Foundation
 
-public struct ComputerCapabilities: Equatable, Sendable {
+public struct ComputerResourceCapabilities: Equatable, Sendable {
     public let resourceEditing: Bool
     public let diskGrowth: Bool
 }
 
 protocol ComputerKindBehavior {
-    var capabilities: ComputerCapabilities { get }
+    var capabilities: ComputerResourceCapabilities { get }
     func growDisk(in directory: URL, to gibibytes: Int) throws
 }
 
 private struct FixedDiskBehavior: ComputerKindBehavior {
-    let capabilities: ComputerCapabilities
+    let capabilities: ComputerResourceCapabilities
 
     init(resourceEditing: Bool) {
-        capabilities = ComputerCapabilities(resourceEditing: resourceEditing, diskGrowth: false)
+        capabilities = ComputerResourceCapabilities(resourceEditing: resourceEditing, diskGrowth: false)
     }
 
     func growDisk(in directory: URL, to gibibytes: Int) throws {
@@ -32,5 +32,5 @@ extension ComputerKind {
         }
     }
 
-    public var capabilities: ComputerCapabilities { behavior.capabilities }
+    public var capabilities: ComputerResourceCapabilities { behavior.capabilities }
 }

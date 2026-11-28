@@ -1113,7 +1113,7 @@ private final class ResultBox: @unchecked Sendable {
 }
 
 struct WindowsKindBehavior: ComputerKindBehavior {
-    let capabilities = ComputerCapabilities(resourceEditing: true, diskGrowth: true)
+    let capabilities = ComputerResourceCapabilities(resourceEditing: true, diskGrowth: true)
 
     func growDisk(in directory: URL, to gibibytes: Int) throws {
         // The guest extends its own file system when it next starts.
