@@ -27,7 +27,7 @@ import NIOCore
 }
 
 /// The terminal shown in the window: a login shell on the server.
-@MainActor public final class SSHTerminalConnection {
+@MainActor public final class SSHTerminalConnection: ComputerTerminalConnection {
     let terminal: GuestTerminal
     private let connection: SSHConnection
     private var channel: Channel?
