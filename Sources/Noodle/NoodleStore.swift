@@ -181,6 +181,31 @@ final class NoodleStore {
     var spaceBeingDeleted: CustomSpace?
     private(set) var backgrounds: [UUID: ConversationBackground] = [:]
     var errorMessage: String?
+    private(set) var ownerAway: WorkspaceRepository.OwnerAway?
+
+    func setOwnerAway(_ away: WorkspaceRepository.OwnerAway?, sync: Bool = true) {
+        guard ownerAway != away else { return }
+        do {
+            try repository.saveOwnerAway(away)
+            ownerAway = away
+            if sync {
+                let state = away.map { LinkOwnerAway(until: $0.until, note: $0.note) }
+                Task {
+                    for mirror in hubMirrors {
+                        do { try await mirror.setOwnerAway(state) }
+                        catch { errorMessage = error.localizedDescription }
+                    }
+                }
+            }
+            let notice = away?.notice ?? "Your person is back."
+            for agent in agents where agent.archivedAt == nil && runsHere(agent.id) {
+                do { try repository.appendNotice(notice, toAgent: agent.id) }
+                catch { errorMessage = error.localizedDescription }
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
     /// A link the error alert offers beside OK, while `errorMessage` is still the message it belongs to.
     var errorLink: ErrorLink?
     /// Bots whose folders could not be loaded, such as ones made by an older version. They do not
@@ -2107,7 +2132,7 @@ final class NoodleStore {
         sendDraft(to: selectedConversationID)
     }
 
-    func sendDraft(to conversationID: UUID) {
+    func sendDraft(to conversationID: UUID, interrupt: Bool = false) {
         guard let conversation = conversations.first(where: { $0.id == conversationID }) else { return }
         guard canSendDraft(to: conversationID) else { return }
         let body = draft(for: conversationID).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2115,7 +2140,8 @@ final class NoodleStore {
 
         do {
             let message = try PersonMessage.send(body, files: pendingAttachments, to: conversation,
-                                                 members: participants(for: conversation), runtime: runtime, repository: repository)
+                                                 members: participants(for: conversation), runtime: runtime, repository: repository,
+                                                 interrupt: interrupt)
             markConversationRead(conversation.id)
             messagesByConversation[conversation.id, default: []].append(message)
 
@@ -2870,6 +2896,9 @@ final class NoodleStore {
     func startMonitoring() {
         guard transcriptRefreshTask == nil else { return }
         noodletAnnotations.listen()
+        do { ownerAway = try repository.loadOwnerAway() }
+        catch { errorMessage = error.localizedDescription }
+        if ownerAway?.isActive() == false { setOwnerAway(nil) }
         startAgents()
         transcriptRefreshTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
@@ -2882,6 +2911,12 @@ final class NoodleStore {
                 self.runtime.reconcile(agents: self.agents, repository: self.repository)
                 self.runtime.checkHeartbeats()
                 self.budgets.checkExpired()
+                if let saved = try? self.repository.loadOwnerAway() {
+                    if self.ownerAway != saved { self.ownerAway = saved }
+                    if !saved.isActive() { self.setOwnerAway(nil, sync: false) }
+                } else if self.ownerAway != nil {
+                    self.ownerAway = nil
+                }
                 self.applySuspensions()
                 self.runtime.checkWakes(repository: self.repository)
                 self.runtime.checkSessionCleanup(repository: self.repository)

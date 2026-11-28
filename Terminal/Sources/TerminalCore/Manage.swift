@@ -252,6 +252,7 @@ extension HubChats {
         let destination = Self.freeName(for: attachment.filename, in: folder)
         do {
             try await pairing.download(attachment, from: message.conversationID, to: destination)
+            try DownloadedAttachment.mark(destination)
         } catch {
             try? FileManager.default.removeItem(at: destination)
             throw error

@@ -756,7 +756,8 @@ import os
             return .messageMatches(try await hubBots().searchMessages(search, for: try user(key)))
         case .send(let message):
             return .message(try hubBots().send(message.body, id: message.id, attachmentIDs: message.attachmentIDs,
-                                               taskID: message.taskID, in: message.conversationID, for: try user(key)))
+                                               taskID: message.taskID, in: message.conversationID, for: try user(key),
+                                               interrupt: message.interrupt == true))
         case .upload(let conversationID, let attachment, let offset, let data):
             // Refused at the first piece, before any of the file is kept.
             try checkUploadSize(attachment.byteCount)
@@ -790,6 +791,11 @@ import os
         case .setNotifications(let change):
             try hubBots().setNotifications(change.notifications, conversation: change.conversationID, for: try user(key))
             return .done
+        case .ownerAway:
+            return .ownerAway(try hubBots().ownerAway(for: user(key)))
+        case .setOwnerAway(let away):
+            try hubBots().setOwnerAway(away, for: user(key))
+            return .ownerAway(try hubBots().ownerAway(for: user(key)))
         case .setGroupNotifications(let level):
             try hubBots().setGroupNotifications(level, for: try user(key))
             return .status(status(for: try paired(key)))

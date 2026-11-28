@@ -19,6 +19,12 @@ public enum GroupLead {
         return (now, later)
     }
 
+    public static func interruptionTargets(_ agents: [AgentRecord], in conversation: BotConversation,
+                                           body: String) -> Set<UUID> {
+        if conversation.kind == .group { return mentioned(in: body, among: agents) }
+        return Set(agents.map(\.id))
+    }
+
     /// The bots the text names as @Name, the whole name followed by anything but a letter or digit.
     public static func mentioned(in text: String, among agents: [AgentRecord]) -> Set<UUID> {
         Set(agents.filter { agent in

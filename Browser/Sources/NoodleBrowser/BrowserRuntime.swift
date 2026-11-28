@@ -622,8 +622,16 @@ import WebKit
             var original = stat(); _ = fstat(source, &original)
             var info = stat()
             guard fstat(destination, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
-                  !(original.st_dev == info.st_dev && original.st_ino == info.st_ino),
-                  ftruncate(destination, 0) == 0 else { throw BrowserError("Choose a writable regular file.") }
+                  !(original.st_dev == info.st_dev && original.st_ino == info.st_ino) else {
+                throw BrowserError("Choose a writable regular file.")
+            }
+            let timestamp = String(Int(Date().timeIntervalSince1970), radix: 16)
+            let quarantine = Array("0001;\(timestamp);Noodle Browser;".utf8)
+            let result = quarantine.withUnsafeBytes {
+                fsetxattr(destination, "com.apple.quarantine", $0.baseAddress, $0.count, 0, XATTR_CREATE)
+            }
+            if result != 0, errno != EEXIST { throw BrowserError("Could not mark the file as a download.") }
+            guard ftruncate(destination, 0) == 0 else { throw BrowserError("Choose a writable regular file.") }
             _ = try BrowserTransferFiles.copy(source: source, destination: destination)
         }.value
     }

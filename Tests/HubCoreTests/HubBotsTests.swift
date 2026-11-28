@@ -69,6 +69,24 @@ import XCTest
         return bot
     }
 
+    func testAwayModeIsScopedToThePairedOwnerAndTheirBots() async throws {
+        let f = try await fixture()
+        let other = try f.hub.access.addUser(named: "Grace")
+        let bot = try await createBot(f)
+        let state = LinkOwnerAway(until: Date().addingTimeInterval(3_600), note: "Back after lunch")
+        guard case .ownerAway(let saved) = try await f.device.request(.setOwnerAway(state)) else {
+            return XCTFail("Expected Away mode state")
+        }
+        XCTAssertEqual(saved?.note, state.note)
+        XCTAssertEqual(try f.hub.repository.loadOwnerAway(forAgent: bot.id)?.note, state.note)
+        XCTAssertNil(try f.hub.bots.ownerAway(for: other))
+        let read = try await f.device.request(.ownerAway)
+        XCTAssertEqual(read, .ownerAway(saved))
+        let cleared = try await f.device.request(.setOwnerAway(nil))
+        XCTAssertEqual(cleared, .ownerAway(nil))
+        XCTAssertNil(try f.hub.repository.loadOwnerAway(forAgent: bot.id))
+    }
+
     func testABotIsCreatedOnTheHubForItsUser() async throws {
         let f = try await fixture()
         let bot = try await createBot(f)

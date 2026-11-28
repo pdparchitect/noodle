@@ -29,6 +29,21 @@ final class AgentCallTests: XCTestCase {
         return ""
     }
 
+    func testAwayStatePersistsAndRefusesCallsUntilItsDeadline() throws {
+        let bot = try repository.createAgent(named: "Theo", harnessIdentifier: HarnessProvider.codex.rawValue).agent
+        let until = date.addingTimeInterval(3600)
+        let away = WorkspaceRepository.OwnerAway(until: until, note: "  Back soon  ")
+        try repository.saveOwnerAway(away)
+        XCTAssertEqual(try repository.loadOwnerAway(), away)
+        XCTAssertEqual(away.note, "Back soon")
+        XCTAssertTrue(refusal {
+            try repository.requestCall(agentID: bot.id, reason: "Test call", now: self.date)
+        }.contains("Your person is away"))
+        XCTAssertNoThrow(try repository.requestCall(agentID: bot.id, reason: "Test call", now: until))
+        try repository.saveOwnerAway(nil)
+        XCTAssertNil(try repository.loadOwnerAway())
+    }
+
     func testABotWhoseHarnessTakesCallsCallsItsPersonFromItsOwnConversation() throws {
         let made = try repository.createAgent(named: "Theo", harnessIdentifier: HarnessProvider.codex.rawValue)
         let result = messenger(made.agent, "--call", "--reason", "The release build is failing")

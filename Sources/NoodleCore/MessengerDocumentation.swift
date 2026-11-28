@@ -279,6 +279,7 @@ public enum MessengerDocumentation {
         ("createdAt", "Creation timestamp."),
         ("delivery", "Storage/UI status, not a separate message type: saved, queued, delivered, failed."),
         ("attachmentIDs", "Optional UUIDs linked to conversation-owned files or link bookmarks."),
+        ("interrupt", "Optional flag set when the person asks for immediate delivery."),
         ("reactions", "Optional stored reactions with id, author, emoji and createdAt."),
         ("reactionChanges", "Optional stored change log with id, conversationID, messageID, sequence, author, emoji, removed and createdAt."),
         ("task", "Optional task the user wrote this message about: id, agentID (the bot that owns it) and title. If you own it, read the message as feedback on that task and move it on with --update-task; otherwise it is context."),

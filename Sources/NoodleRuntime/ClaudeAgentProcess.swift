@@ -86,7 +86,7 @@ public final class ClaudeAgentProcess: AgentRuntimeProcess {
         let stateURL = AgentStorageLayout(workspace: workspaceURL).sessionState(provider: .claudeCode, extendedAccess: extendedAccess)
         sessionState = ClaudeSessionState(url: stateURL)
         turnRecovery = AgentTurnRecovery(sessionStateURL: stateURL)
-        handoff = HarnessHandoff(sessionStateURL: stateURL)
+        handoff = HarnessHandoff(sessionStateURL: stateURL, workspace: workspaceURL)
         recoveryPending = recoverInterruptedWork || turnRecovery.hasUnfinishedTurn
         snapshot = AgentRuntimeSnapshot(agentID: agent.id, phase: .offline, detail: "Not started")
     }

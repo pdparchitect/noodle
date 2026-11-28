@@ -296,7 +296,7 @@ struct EditComputerView: View {
           store.rename(session, name: name, description: description, appearance: appearance,
                        resizesDesktop: session.computer.resizesWithWindow ? resizesDesktop : nil)
           let computer = session.computer
-          if ![.localMac, .ssh].contains(computer.kind),
+          if computer.kind.capabilities.resourceEditing,
              (cpus, memory, disk, network) != (computer.cpuCount, computer.memoryGiB, computer.diskGiB, computer.networkEnabled) {
             do { try store.changeResources(session, cpus: cpus, memoryGiB: memory, diskGiB: disk, networkEnabled: network) }
             catch { store.error = error.localizedDescription }
@@ -361,7 +361,7 @@ struct EditComputerView: View {
                 LabeledContent("Memory", value: "\(session.computer.memoryGiB) GB")
               }
               Divider()
-              if editable && session.computer.kind == .windows {
+              if editable && session.computer.kind.capabilities.diskGrowth {
                 ComputerResourceRow("Disk capacity", value: $disk, unit: "GB",
                   range: session.computer.diskGiB...max(512, session.computer.diskGiB), step: 4)
                   .help("Can grow but not shrink. Windows uses the new space when it next starts.")

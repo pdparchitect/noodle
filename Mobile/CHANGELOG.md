@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Press and hold Send to choose **Send Immediately**. In a group, this applies to the bots you mention.
+
 ## [0.61.2] - 2026-11-27
 
 ### Changed

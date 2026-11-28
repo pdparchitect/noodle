@@ -59,6 +59,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     /// Following bots that something else runs, as Noodle does its own.
     private var watching = false
     private var loop: Task<Void, Never>?
+    private var nextAwayExpiryCheck = Date.distantPast
     /// Runs after a device made, changed or deleted a bot or group, for whatever runs the bots.
     public var onBotsEdited: (() -> Void)?
     /// Where the device that hosts a bot is told that one of its conversations changed.
@@ -466,6 +467,10 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
             if let profile = draft.profile { try repository.updateAgentHarnessProfile(created.agent, profile: profile) }
             if let voice = provider.validVoice(draft.voice) { try repository.updateAgentVoice(created.agent, voice: voice) }
             if draft.imageGeneration { try imageGeneration?.assign(true, to: created.agent.id) }
+            if !access.isPersonal, let away = try repository.loadOwnerAway(forUser: user.id), away.isActive() {
+                try repository.saveOwnerAway(away, forAgent: created.agent.id)
+                try repository.appendNotice(away.notice, toAgent: created.agent.id)
+            }
             access.setOwner(user, ofBot: created.agent.id)
         } catch {
             try? repository.deleteAgent(created.agent)
@@ -984,7 +989,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
 
     /// `taskID` names a task of one of the conversation's bots that the message is about.
     public func send(_ body: String, id: UUID, attachmentIDs: [UUID] = [], taskID: UUID? = nil, in conversationID: UUID,
-                     for user: HubUser) throws -> LinkMessage {
+                     for user: HubUser, interrupt: Bool = false) throws -> LinkMessage {
         let (conversation, bots) = try ownedConversation(conversationID, by: user)
         let files = try attachments(in: conversationID)
         if let existing = try repository.loadMessages(conversationID: conversationID).first(where: { $0.id == id }) {
@@ -1013,7 +1018,9 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
         let message = try repository.sendUserMessage(conversationID: conversationID, body: body,
                                                      attachmentIDs: attachmentIDs, task: task, id: id)
         // As on a Mac: a group's lead, and anyone named, hears it first.
-        if running || watching { runtime.notify(reached, in: conversation, body: body, repository: repository) }
+        if running || watching {
+            runtime.notify(reached, in: conversation, body: body, repository: repository, interrupt: interrupt)
+        }
         // The bot reads it from its inbox; the call hears about it here.
         if let call = calls[conversationID] {
             runtime.sendToVoiceCall(agentID: call.agentID, VoiceCallDocumentation.typedMessage(
@@ -1452,7 +1459,43 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     }
 
     /// Tells owners about conversations whose messages changed since the last check.
+    public func ownerAway(for user: HubUser) throws -> LinkOwnerAway? {
+        let stored = try access.isPersonal ? repository.loadOwnerAway() : repository.loadOwnerAway(forUser: user.id)
+        guard let stored, stored.isActive() else { return nil }
+        return LinkOwnerAway(until: stored.until, note: stored.note)
+    }
+
+    public func setOwnerAway(_ requested: LinkOwnerAway?, for user: HubUser) throws {
+        let away = requested.map { WorkspaceRepository.OwnerAway(until: $0.until, note: $0.note) }
+        if let away {
+            guard away.isActive(), away.note.count <= 2_000 else {
+                throw LinkError("Choose a future end time and a note of at most 2,000 characters.")
+            }
+        }
+        let previous = try access.isPersonal ? repository.loadOwnerAway() : repository.loadOwnerAway(forUser: user.id)
+        guard previous != away else { return }
+        if access.isPersonal { try repository.saveOwnerAway(away) }
+        else { try repository.saveOwnerAway(away, forUser: user.id) }
+        let notice = away?.notice ?? "Your person is back."
+        for agent in try repository.loadAgents() where agent.archivedAt == nil && access.owner(ofBot: agent.id) == user.id {
+            if !access.isPersonal { try repository.saveOwnerAway(away, forAgent: agent.id) }
+            try repository.appendNotice(notice, toAgent: agent.id)
+        }
+        checkForChanges()
+    }
+
+    private func expireOwnerAway() {
+        guard !access.isPersonal, Date() >= nextAwayExpiryCheck else { return }
+        nextAwayExpiryCheck = Date().addingTimeInterval(5)
+        for user in access.users {
+            if let away = try? repository.loadOwnerAway(forUser: user.id), !away.isActive() {
+                try? setOwnerAway(nil, for: user)
+            }
+        }
+    }
+
     public func checkForChanges() {
+        expireOwnerAway()
         guard let agents = try? repository.loadAgents(), let conversations = try? repository.loadConversations() else { return }
         let owned = owned(conversations, among: agents)
         let transcripts = transcripts, effectsChanged = effectsChanged
@@ -1465,6 +1508,7 @@ public struct HubUnlentModel: Identifiable, Hashable, Sendable {
     /// The same check for the loops, which read the files off the main actor. A check made
     /// meanwhile wins; this one is left to the next pass.
     public func checkForChangesInBackground() async {
+        expireOwnerAway()
         let repository = repository, checks = checks
         guard let (agents, conversations) = try? await Task.detached(priority: .utility, operation: {
             (try repository.loadAgents(), try repository.loadConversations())

@@ -719,6 +719,12 @@ import Observation
     }
 
     /// Sends messages written here that the Hub does not have yet.
+    public func setOwnerAway(_ away: LinkOwnerAway?) async throws {
+        guard case .ownerAway = try await pairing.request(.setOwnerAway(away)) else {
+            throw LinkError("The Hub could not change Away mode.")
+        }
+    }
+
     public func pushPending() async {
         do {
             try await sendPending()
@@ -1058,7 +1064,7 @@ import Observation
                 }
                 let sent = (message.attachmentIDs ?? []).filter { files[$0]?.url == nil }
                 _ = try await pairing.request(.send(LinkOutgoingMessage(conversationID: thread.remote, id: message.id, body: message.body,
-                                                    attachmentIDs: sent, taskID: message.task?.id)))
+                                                    attachmentIDs: sent, taskID: message.task?.id, interrupt: message.interrupt)))
                 acknowledged.insert(message.id)
             }
         }

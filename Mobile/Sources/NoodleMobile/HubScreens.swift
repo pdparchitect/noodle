@@ -1130,6 +1130,11 @@ struct SettingsView: View {
     @AppStorage(ScreenControlHaptics.key) private var haptics = false
     @State private var noodlets = NoodletGrants().all
     @State private var downloaded: Int64?
+    @State private var away: LinkOwnerAway?
+    @State private var awayHours = 8
+    @State private var awayNote = ""
+    @State private var awayProblem: String?
+    @State private var changingAway = false
 
     var body: some View {
         NavigationStack {
@@ -1171,6 +1176,34 @@ struct SettingsView: View {
                     Text("Long Messages")
                 } footer: {
                     Text((MessageTextLayout(rawValue: textLayout) ?? .standard).explanation)
+                }
+                if !chats.isEmpty {
+                    Section("Away Mode") {
+                        if let away, away.until > Date() {
+                            LabeledContent("Away until", value: away.until.formatted(date: .abbreviated, time: .shortened))
+                            Button("I’m Back") { changeAway(nil) }
+                        } else {
+                            Picker("Duration", selection: $awayHours) {
+                                ForEach([1, 4, 8, 12], id: \.self) { hours in
+                                    Text(hours == 1 ? "1 hour" : "\(hours) hours").tag(hours)
+                                }
+                            }
+                            TextField("Note for your bots", text: $awayNote)
+                            Button("Set Away") {
+                                changeAway(.init(until: Date().addingTimeInterval(TimeInterval(awayHours * 3600)), note: awayNote))
+                            }
+                            .disabled(awayNote.count > 2_000)
+                        }
+                        if let awayProblem { Text(awayProblem).foregroundStyle(.secondary) }
+                    }
+                    .disabled(changingAway)
+                    .task {
+                        for chat in chats {
+                            if let state = try? await chat.ownerAway() {
+                                if state.until > (away?.until ?? .distantPast) { away = state }
+                            }
+                        }
+                    }
                 }
                 // Every joined Hub that knows Mentions only takes the same choice; the first one shows it.
                 let mentioning = chats.filter(\.notifiesMentions)
@@ -1232,6 +1265,20 @@ struct SettingsView: View {
 }
 
 extension SettingsView {
+    private func changeAway(_ state: LinkOwnerAway?) {
+        changingAway = true
+        awayProblem = nil
+        Task {
+            defer { changingAway = false }
+            var successes = 0
+            for hub in chats {
+                do { try await hub.setOwnerAway(state); successes += 1 }
+                catch { awayProblem = error.localizedDescription }
+            }
+            if successes > 0 { away = state }
+        }
+    }
+
     fileprivate func setGroupNotifications(_ level: LinkNotifications, on chats: [HubChats]) {
         for hub in chats where hub.groupNotifications != level {
             Task {
