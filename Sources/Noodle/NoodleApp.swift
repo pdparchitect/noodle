@@ -198,7 +198,6 @@ struct NoodleApp: App {
                     store.stop(agentID: agent.id)
                 }
             })
-            AwayCommands(store: store)
             SpaceCommands(store: store)
             CompanionAppCommands(store: store)
             #if NOODLE_DEV_HOOKS

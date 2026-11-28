@@ -99,6 +99,7 @@ struct SpaceCommands: Commands {
     let store: NoodleStore
 
     var body: some Commands {
+        AwayCommands(store: store)
         // Nothing to choose until a Hub is joined or a space made; a conversation's menu makes the first.
         let choices = store.spaceChoices
         if choices.count > 1 {
